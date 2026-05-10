@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Background -->
+  <rect width="64" height="64" fill="#000000"/>
+  <!-- Body -->
+  <ellipse cx="30" cy="32" rx="20" ry="14" fill="#c9a227"/>
+  <!-- Tail fin -->
+  <polygon points="48,32 58,22 58,42" fill="#c9a227"/>
+  <polygon points="48,32 58,22 58,42" fill="#a6841e" opacity="0.4"/>
+  <!-- Tail notch -->
+  <polygon points="56,28 58,32 56,36" fill="#000000"/>
+  <!-- Metal plate lines on body -->
+  <line x1="18" y1="24" x2="18" y2="40" stroke="#a6841e" stroke-width="0.8" opacity="0.5"/>
+  <line x1="26" y1="20" x2="26" y2="44" stroke="#a6841e" stroke-width="0.8" opacity="0.5"/>
+  <line x1="34" y1="20" x2="34" y2="44" stroke="#a6841e" stroke-width="0.8" opacity="0.5"/>
+  <line x1="42" y1="24" x2="42" y2="40" stroke="#a6841e" stroke-width="0.8" opacity="0.5"/>
+  <!-- Rivets -->
+  <circle cx="22" cy="26" r="1" fill="#a6841e"/>
+  <circle cx="22" cy="38" r="1" fill="#a6841e"/>
+  <circle cx="30" cy="23" r="1" fill="#a6841e"/>
+  <circle cx="30" cy="41" r="1" fill="#a6841e"/>
+  <circle cx="38" cy="26" r="1" fill="#a6841e"/>
+  <circle cx="38" cy="38" r="1" fill="#a6841e"/>
+  <!-- Eye socket -->
+  <circle cx="18" cy="30" r="5" fill="#000000" stroke="#a6841e" stroke-width="1"/>
+  <!-- Eye glow -->
+  <circle cx="18" cy="30" r="3" fill="#ff4444"/>
+  <circle cx="17" cy="29" r="1" fill="#ff8888" opacity="0.8"/>
+  <!-- Antenna -->
+  <line x1="14" y1="22" x2="10" y2="14" stroke="#a6841e" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="10" cy="13" r="2" fill="#ff4444" opacity="0.8"/>
+  <!-- Dorsal fin (mechanical) -->
+  <polygon points="24,18 30,10 36,18" fill="#a6841e" stroke="#c9a227" stroke-width="0.5"/>
+  <line x1="28" y1="17" x2="29" y2="12" stroke="#c9a227" stroke-width="0.5" opacity="0.6"/>
+  <line x1="32" y1="17" x2="31" y2="12" stroke="#c9a227" stroke-width="0.5" opacity="0.6"/>
+  <!-- Bottom fin -->
+  <polygon points="26,46 30,52 34,46" fill="#a6841e"/>
+  <!-- Mouth line -->
+  <path d="M10,33 Q14,36 18,34" stroke="#1a1714" stroke-width="1" fill="none"/>
+  <!-- Bubbles -->
+  <circle cx="6" cy="26" r="1.5" fill="none" stroke="#d4cbb8" stroke-width="0.5" opacity="0.5"/>
+  <circle cx="4" cy="20" r="1" fill="none" stroke="#d4cbb8" stroke-width="0.5" opacity="0.4"/>
+</svg>

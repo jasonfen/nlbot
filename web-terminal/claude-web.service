@@ -1,0 +1,19 @@
+# Substitute <USER> and <VAULT> for your actual values before installing.
+# Then: sudo cp this file to /etc/systemd/system/<botname>-web.service
+[Unit]
+Description=Web Terminal
+After=network.target claude-code.service
+
+[Service]
+Type=simple
+User=<USER>
+WorkingDirectory=<VAULT>/web-terminal
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=10
+Environment=HOME=/home/<USER>
+Environment=LANG=C.utf8
+Environment=VAULT_DIR=<VAULT>
+
+[Install]
+WantedBy=multi-user.target

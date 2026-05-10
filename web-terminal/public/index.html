@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Claude Terminal</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Fenbot">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="theme-color" content="#12100e">
+  <link rel="stylesheet" href="xterm/xterm.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="terminal-page">
+  <div id="terminal-container"></div>
+  <div class="toolbar">
+    <button id="scroll-up" class="tool-btn" tabindex="-1" title="Scroll up">&#9650;</button>
+    <button id="scroll-down" class="tool-btn" tabindex="-1" title="Scroll down">&#9660;</button>
+    <button id="scroll-bottom" class="tool-btn" tabindex="-1" title="Jump to bottom">&#8600;</button>
+    <label class="tool-btn" tabindex="-1" title="Upload file">
+      <input type="file" id="file-input" hidden>
+      &#128206;
+    </label>
+    <button id="esc-btn" class="tool-btn" tabindex="-1" title="Send Escape">Esc</button>
+    <button id="copy-btn" class="tool-btn" tabindex="-1" title="Copy selection">&#x2398;</button>
+    <button id="logout-btn" class="tool-btn" tabindex="-1" title="Logout">&#x23FB;</button>
+  </div>
+  <script src="xterm/xterm.js"></script>
+  <script src="xterm/xterm-addon-fit.js"></script>
+  <script src="xterm/xterm-addon-unicode11.js"></script>
+  <script src="xterm/xterm-addon-clipboard.js"></script>
+  <script src="client.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+  </script>
+</body>
+</html>

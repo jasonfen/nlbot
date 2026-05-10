@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Claude Terminal</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Fenbot">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="theme-color" content="#000000">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #000;
+      color: #d4cbb8;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100dvh;
+    }
+    .login {
+      width: 300px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 24px;
+    }
+    .login img {
+      width: 80px;
+      height: 80px;
+      filter: drop-shadow(0 0 20px rgba(201, 162, 39, 0.3));
+    }
+    .login form {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .login input {
+      width: 100%;
+      padding: 14px 16px;
+      background: #111;
+      border: 1px solid #222;
+      border-radius: 8px;
+      color: #d4cbb8;
+      font-size: 1rem;
+      transition: border-color 0.2s;
+    }
+    .login input:focus {
+      outline: none;
+      border-color: #c9a227;
+    }
+    .login input::placeholder {
+      color: #555;
+    }
+    .login button {
+      width: 100%;
+      padding: 14px;
+      background: #c9a227;
+      color: #000;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .login button:hover {
+      opacity: 0.9;
+    }
+    .error {
+      color: #cc4444;
+      text-align: center;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="login">
+    <img src="favicon.svg" alt="">
+    <form id="login-form">
+      <input type="text" id="username" name="username" placeholder="Username" autocomplete="username" required>
+      <input type="password" id="password" name="password" placeholder="Password" autocomplete="current-password" required>
+      <button type="submit">Connect</button>
+      <p id="error" class="error" hidden>Invalid credentials</p>
+    </form>
+  </div>
+  <script>
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err = document.getElementById('error');
+      err.hidden = true;
+      const basePath = window.location.pathname.replace(/login\.html.*$/, '');
+      const res = await fetch(basePath + 'api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: document.getElementById('username').value,
+          password: document.getElementById('password').value
+        })
+      });
+      if (res.ok) {
+        window.location.href = basePath;
+      } else {
+        err.hidden = false;
+      }
+    });
+  </script>
+</body>
+</html>
