@@ -4,6 +4,12 @@ You'll want a way to look at the running tmux session from your phone or another
 
 This is the *third* thing you reach for, after Telegram (for messaging) and SilverBullet (for the vault). When you actually want to *see* what Claude is doing or type into the live session, this is the interface.
 
+> **What the bot does automatically vs. what needs your hands**
+>
+> Web shell is baseline config (not optional). During Step 7 of bot-driven setup, the bot runs `npm install`, generates `WEB_SESSION_SECRET` + `WEB_UI_PASSWORD`, writes `.env`, installs `<BOT_NAME>-web.service`, and exposes it via `sudo tailscale serve --https=8443`. The credentials land in `setup-state.md` Values block — **write them down somewhere recoverable, they aren't recoverable later.** The bot posts a BLOCKER reminding you of this.
+>
+> If you're doing the assisting-CC fallback flow (Steps 5–9 by hand), the commands below are what you run yourself.
+
 ## Architecture
 
 ```

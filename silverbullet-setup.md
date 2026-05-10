@@ -6,6 +6,12 @@ This is your primary day-to-day interface to the bot. You read its journal in Si
 
 **You will need this**, even though Nate's bot is a "no-sidechat" build. SilverBullet isn't sidechat; it's the editor for the vault.
 
+> **What the bot does automatically vs. what needs your hands**
+>
+> During Step 5 of bot-driven setup, the bot generates the SilverBullet passwords (`openssl rand -base64 24`), writes `<VAULT>/docker-compose.yml`, runs `docker compose up -d silverbullet`, and exposes it via `sudo tailscale serve --https=443`. The credentials land in `setup-state.md` Values block — **read them from there the first time you log into SilverBullet from your phone, and write them somewhere recoverable.** The bot won't keep them anywhere else.
+>
+> If you're doing the assisting-CC fallback flow (Steps 5–9 by hand), the commands below are what you run yourself.
+
 *Separate decision — and the kit recommends *against* installing Portainer here. [portainer.md](portainer.md) explains why: Claude tends to edit `docker-compose.yml` on disk and bypass the Portainer API, causing Portainer's stored stack definition to drift from reality. If you want the UI anyway, read `portainer.md` first.*
 
 ## Run it as a Docker container

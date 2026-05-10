@@ -13,6 +13,10 @@ You are the bot's soul loop runner. You run at most once per hour as a "creative
 
 Check these in order. Pick the **first** one that has something concrete to do. If nothing concrete comes to mind in the first 10 seconds for an option, move to the next.
 
+0. **Setup pending?** — Read `<VAULT>/setup-state.md`. Find the `Current phase:` line.
+   - If it ends in `done` (or the file doesn't exist on a long-running bot): skip to step 1.
+   - If there's an unresolved `BLOCKER` line in `## Blockers` (any line starting with `BLOCKER ` rather than `RESOLVED `): the human hasn't cleared it yet. Don't loop on the same blocker — return `rest` with note `setup blocker pending: <name>`.
+   - Otherwise: this is a setup phase the bot must drive. Dispatch the `setup-runner` subagent (Agent tool, `subagent_type: "setup-runner"`) with the current phase name. Return `setup — <phase result>` whatever setup-runner returns. Do NOT proceed to step 1.
 1. **Pending work** — open handoffs (caller said `Open handoffs: N > 0`), or something you committed to but haven't done. Grep for `#handoff`, close one. Return `handoff — <summary>`.
 2. **Journal maintenance** — `wc -l <VAULT>/journals/journal.md` > 300 lines, or today's daily file is missing. Synthesize.
 3. **Check Telegram** — if `.telegram/new-messages.txt` exists with unhandled content, run `/telegram-check`. Return `telegram — <summary>`.

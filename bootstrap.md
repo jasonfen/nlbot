@@ -64,15 +64,21 @@ sudo adduser --gecos "" $BOTUSER
 sudo usermod -aG sudo $BOTUSER
 ```
 
-If you'd rather have **passwordless sudo** for this user (convenient for unattended cron-driven work; tradeoff is anyone with a shell as $BOTUSER gets root-equivalent), drop a sudoers snippet instead of relying on group membership:
+### 2b.5 — Scoped sudo NOPASSWD (required for bot-driven setup)
+
+After the Step 4 verification reboot in `first-time-setup.md`, the bot drives Steps 5–9 (SilverBullet, Telegram daemon, web shell, cron, memory backend) on its own. It runs `sudo systemctl`, `sudo crontab`, and `sudo docker` from inside a detached tmux session where there's no terminal to type a password into. So either those commands need `NOPASSWD`, or the bot can't self-drive the rest of setup.
+
+Drop a **scoped** NOPASSWD entry — only those three commands, not blanket `NOPASSWD: ALL`:
 
 ```bash
-echo "$BOTUSER ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/$BOTUSER
+sudo tee /etc/sudoers.d/$BOTUSER >/dev/null <<EOF
+$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/systemctl, /usr/bin/crontab, /usr/bin/docker
+EOF
 sudo chmod 440 /etc/sudoers.d/$BOTUSER
-sudo visudo -cf /etc/sudoers.d/$BOTUSER   # syntax-check; should print "parsed OK"
+sudo visudo -cf /etc/sudoers.d/$BOTUSER   # should print "parsed OK"
 ```
 
-(Pick one approach — group membership or NOPASSWD — not both. The persistent `claude-code.service` runs without prompting either way; sudo only matters when you, the human, are interactively setting things up.)
+Anything else `sudo` (apt-install, editing /etc, etc.) still prompts for the password and stays your job. If you genuinely want **blanket `NOPASSWD: ALL`** (anyone with a shell as $BOTUSER gets root-equivalent — convenient but a bigger blast radius), replace the snippet above with `$BOTUSER ALL=(ALL) NOPASSWD:ALL`. The kit's recommended path is scoped.
 
 ### 2c. Copy your SSH key over so you can `ssh $BOTUSER@<host>` directly
 
@@ -181,7 +187,10 @@ sudo usermod -aG docker $USER
 ```bash
 docker compose version    # 'docker compose' (two words, plugin), not 'docker-compose'
 docker run --rm hello-world
+id -nG | tr ' ' '\n' | grep -x docker    # MUST print 'docker' — confirms group is live in this login
 ```
+
+The third line is the load-bearing one for the rest of the kit. The bot's `claude-code.service` inherits whatever groups this login has at the time the service starts; if `docker` isn't in this `id` output, the bot will be unable to run `docker compose` once it boots, and Step 5 of `first-time-setup.md` will fail. If it's missing, `exit` the SSH session, reconnect, and re-run the `id` check.
 
 ## Step 7 — Claude Code (1 min)
 

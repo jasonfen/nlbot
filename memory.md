@@ -9,9 +9,15 @@ Both are patterns, not products. This kit ships **memorious** (semantic recall) 
 
 The rest of this doc walks through both: how to set up the bundled implementations, plus what the swap-out points look like if you outgrow them.
 
-## You don't need this on day one
+> **What the bot does automatically vs. what needs your hands**
+>
+> During Step 9 of bot-driven setup, the bot installs memorious-mcp itself (`claude mcp add ...` and verifies it shows up in `claude mcp list`). You don't run any of the commands in this doc by hand for the standard install — they're here for reference, troubleshooting, and the swap-out paths if you want a different backend.
+>
+> The bot will *not* register a memory backend that doesn't already have its prerequisites met (Python 3.12+, `uv` if needed). Those come from `bootstrap.md`. If Step 9 fails, the bot posts a BLOCKER pointing you here.
 
-For the first month while you have <30 journal entries, plain `grep -r "keyword" journals/` is fine. Vector memory becomes essential around week 3 when grep starts missing things you know are in there but can't remember the exact words for. Add memorious then, not before.
+## When grep is enough
+
+For the first month while you have <30 journal entries, plain `grep -r "keyword" journals/` is fine — and the kit installs memorious anyway because adding it later is a hassle and the cost of "I don't need it yet" is essentially zero RAM. If you really want a grep-only setup, see the "Skip the memory backend entirely" subsection at the bottom of this doc.
 
 ## Installation (5 minutes)
 
@@ -260,6 +266,14 @@ The other half of this doc. Different problem, different tool.
 - **Just journal manually.** If you're disciplined about writing in the journal yourself, you don't need a secretary at all. The bot still gets the value (it reads the journal); you just lose the automation.
 
 None of these are wrong. The bundled secretary subagent is what fenbot uses because the in-process approach is the cheapest way to get a real Claude reading the actual context. Pick what fits your style.
+
+---
+
+## Skip the memory backend entirely
+
+If you genuinely want grep-only with no MCP memory backend at all, edit `setup-state.md` Current phase from `step-9-memory` to `done` before the bot reaches it (or after, if you change your mind later). The bot will skip the install and transition to operational mode without memorious registered. You can always add it back later by setting Current phase to `step-9-memory` and running `/setup` from the bot's tmux pane.
+
+The bot's CLAUDE-nate.md instructs it to fall back to `grep` if `recall()` isn't available, so a memorious-less bot still works — you just lose the semantic search layer.
 
 ---
 

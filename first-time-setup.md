@@ -122,7 +122,68 @@ systemctl status claude-code.service     # active (running)
 tmux attach -t claude                    # back in the session
 ```
 
-## Step 5 — Set up SilverBullet (the vault editor) (5 min)
+## After the reboot — bot-driven setup (Steps 5–9)
+
+After the Step 4 verification reboot, `claude-code.service` brings the bot online and the bot itself drives the rest of setup. The kit's `setup-runner` subagent reads `setup-state.md` Current phase on every soul-loop, executes the next phase, advances state, and posts progress to the journal. You can watch via `tmux attach -t claude` (and later via Telegram, once Step 6 finishes).
+
+**Total elapsed:** ~5–10 minutes until you get a "Setup complete" Telegram message.
+
+### What the bot does
+
+| Phase | What runs |
+|---|---|
+| `step-5-silverbullet` | Generates SB_USER_PASSWORD + SB_AUTH_TOKEN (`openssl rand`), writes `docker-compose.yml`, `docker compose up -d`, `sudo tailscale serve --https=443`. |
+| `step-6-telegram-daemon` | Copies `tg-bot.py` + `tg-post.sh` into `.telegram/`, drops the systemd unit, posts a BLOCKER asking for BotFather token. |
+| `step-6-telegram-creds-blocker` | **Waits on you.** See "What you still do" below. |
+| `step-6-telegram-activate` | Enables + starts `telegram-bot.service`, sends a test message round-trip. |
+| `step-7-web-shell` | `npm install`, generates `WEB_SESSION_SECRET` + `WEB_UI_PASSWORD`, writes `.env`, installs `<BOT_NAME>-web.service`, `sudo tailscale serve --https=8443`. |
+| `step-8-cron` | Installs the four crontab entries (soul-loop / wake-up / midnight-maintenance) for the bot's unix user. |
+| `step-9-memory` | Installs memorious-mcp as the baseline memory backend. |
+| `done` | Bot transitions to operational mode. |
+
+Each phase is **idempotent** — re-running is safe if anything mid-fails. The bot's soul-loop will keep retrying until the phase succeeds or hits a blocker.
+
+### What you still do
+
+The bot writes `BLOCKER <name>: <instruction>` lines in `setup-state.md` `## Blockers` whenever it needs you. The soul-loop stops dispatching setup-runner until you remove (or `RESOLVED <name>:` the BLOCKER). Expected blockers:
+
+1. **`BLOCKER telegram-botfather`** — happens during `step-6-telegram-daemon`. Open Telegram, message `@BotFather`, `/newbot`, save the token. DM your new bot once. Visit `https://api.telegram.org/bot<TOKEN>/getUpdates` and find your `chat.id`. Paste `TG_BOT_TOKEN`, `TG_BOT_USERNAME` (`@<name>_bot`), and `TG_CHAT_ID` into `setup-state.md` Values. Remove the BLOCKER line.
+
+2. **`BLOCKER web-shell-credentials`** — informational, doesn't block progress. The bot generated a username + password for the web shell; write them down somewhere recoverable before continuing.
+
+3. **`BLOCKER tailscale-cert`** *(may not appear)* — Tailscale's first `serve --https` triggers a cert provisioning. If Tailscale needs interactive approval, the bot will pause here.
+
+### Watching it happen
+
+```bash
+tmux attach -t claude          # see the bot working in real time
+# ctrl+b then d to detach (don't kill it)
+
+# Or, just read the journal as the bot writes it:
+tail -f <VAULT>/journals/journal.md
+```
+
+Once Step 6 completes, all further progress reports go to your Telegram.
+
+### If something fails
+
+The bot's setup is idempotent. If a phase fails:
+
+```bash
+tmux attach -t claude
+# read the journal: tail -50 <VAULT>/journals/journal.md
+# read the state: cat <VAULT>/setup-state.md | grep -A5 'Current phase\|Blockers'
+```
+
+Fix whatever broke (usually a missing prereq from bootstrap.md — `docker` group not active, sudo NOPASSWD wrong), then either wait for the next soul-loop fire or run `/setup` manually from the tmux pane to force a retry.
+
+---
+
+## Reference: detailed Step 5–9 instructions (assisting-CC fallback)
+
+The bot-driven flow above is the default. If you'd rather drive Steps 5–9 yourself or via the assisting CC instance (the `setup-orchestrator.md` flow before Step 4), the detailed instructions for each step follow.
+
+### Step 5 detail — SilverBullet (the vault editor)
 
 This is your daily interface to the bot's brain. Walked through fully in [silverbullet-setup.md](silverbullet-setup.md). The condensed version:
 
@@ -138,9 +199,7 @@ This is your daily interface to the bot's brain. Walked through fully in [silver
 
 You can now read `journals/journal.md` from your phone and leave handoff tasks (`- [ ] do X #handoff`) for the bot.
 
-*Aware-of-but-recommended-against: [Portainer](portainer.md) is a popular browser Docker UI, but it doesn't play well with a Claude-managed bot — Claude edits `docker-compose.yml` directly via `docker compose up -d`, which causes Portainer's stack definition to drift from reality. If you want a UI for log tails specifically, [web-shell.md](web-shell.md) plus `docker compose logs -f` covers the same ground without the source-of-truth conflict. See [portainer.md](portainer.md) for the full reasoning.*
-
-## Step 6 — Set up Telegram (10 min)
+### Step 6 detail — Telegram
 
 Walked through end-to-end in [telegram-integration.md](telegram-integration.md). The condensed version:
 
@@ -151,28 +210,22 @@ Walked through end-to-end in [telegram-integration.md](telegram-integration.md).
 5. Drop `/etc/systemd/system/telegram-bot.service` (template in [telegram-integration.md](telegram-integration.md)). Enable and start.
 6. DM your bot something — anything. `journalctl -u telegram-bot -f` should show the message arrive. The file `.telegram/new-messages.txt` should appear in your vault.
 
-You won't see Claude reply yet — we haven't wired the heartbeat that nudges it.
+### Step 7 detail — Web shell
 
-## Step 7 — Optional: browser access (10 min)
-
-Skip if you only need Telegram + SilverBullet. Add later if you find yourself wanting to *see* the live tmux session from your phone or another laptop. The web shell is a small Node.js server that attaches to your `claude` tmux session and renders it through xterm.js in the browser, login-protected and Tailscale-only.
-
-Walked through end-to-end in [web-shell.md](web-shell.md). The condensed version:
+The web shell is a small Node.js server that attaches to your `claude` tmux session and renders it through xterm.js in the browser, login-protected and Tailscale-only. Walked through end-to-end in [web-shell.md](web-shell.md). The condensed version:
 
 1. Copy `web-terminal/` into `~/natebot/web-terminal/`.
 2. `cd web-terminal && npm install`.
 3. Create `.env` with `PORT=3000`, `SESSION_SECRET=<random>`, `UI_USERNAME=nate`, `UI_PASSWORD=<random>`.
 4. Drop `/etc/systemd/system/<BOT_NAME>-web.service` (template in the doc). Enable and start.
-5. `sudo tailscale serve --bg --https=443 http://127.0.0.1:3000`.
-6. Visit `https://<host>.<tailnet>.ts.net`, log in, watch Claude type.
+5. `sudo tailscale serve --bg --https=8443 http://127.0.0.1:3000`.
+6. Visit `https://<host>.<tailnet>.ts.net:8443`, log in, watch Claude type.
 
 On iOS, "Add to Home Screen" makes it behave like a native app (PWA manifest is included).
 
-## Step 8 — Cron the heartbeat (5 min)
+### Step 8 detail — Cron the heartbeat
 
-⚠ **Do this AFTER the verification reboot from Step 4 — not before.** If cron fires before the tmux session exists, `inject-prompt.sh` will silently noop and you'll think it's broken.
-
-Copy the runtime cron files into the vault:
+⚠ **Do this AFTER the verification reboot from Step 4 — not before.** If cron fires before the tmux session exists, `inject-prompt.sh` will silently noop.
 
 ```bash
 mkdir -p ~/natebot/cron-prompts
@@ -184,21 +237,18 @@ chmod +x ~/natebot/cron-prompts/inject-prompt.sh
 Then `crontab -e`:
 
 ```cron
-# 10-min heartbeat during active hours
 */10 7-23 * * * <VAULT>/cron-prompts/inject-prompt.sh /soul-loop
-
-# Morning wake-up (weekdays — adjust to your schedule)
 30 7 * * 1-5 <VAULT>/cron-prompts/inject-prompt.sh /wake-up
-
-# Midnight sync
 5 0 * * * <VAULT>/cron-prompts/inject-prompt.sh /midnight-maintenance
 ```
 
-Save. Within 10 minutes you should see soul-loop fires landing in `cron-prompts/job-log.md`. Now DM your bot — Claude should respond within a minute or two.
+Within 10 minutes you should see soul-loop fires in `cron-prompts/job-log.md`.
 
-## Step 9 — Optional: vector memory (5 min)
+### Step 9 detail — Vector memory (memorious-mcp baseline)
 
-You don't need this on day one. Add it in week 2–3 when grep starts feeling clunky. Setup is one command, walked through in [memory.md](memory.md). That doc also covers the secretary note-capture pattern (the cron-driven background note-taker) — useful once your conversations get long enough that you'd appreciate Claude writing the journal for you.
+Installed by default during bot-driven setup. Walked through in [memory.md](memory.md). The doc covers the secretary note-capture pattern (cron-driven background note-taker) — useful once your conversations get long enough that you'd appreciate Claude writing the journal for you. If you want to *skip* the memory layer entirely (grep-only), see the bottom of `memory.md`.
+
+*Aware-of-but-recommended-against: [Portainer](portainer.md) is a popular browser Docker UI, but it doesn't play well with a Claude-managed bot — Claude edits `docker-compose.yml` directly via `docker compose up -d`, which causes Portainer's stack definition to drift from reality. See [portainer.md](portainer.md) for the full reasoning.*
 
 ## What "done" looks like
 

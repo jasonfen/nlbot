@@ -134,21 +134,25 @@ If `setup-state.md` exists when you start, do this:
 
 The state file is the single source of truth for "where are we." If it disagrees with reality, reality wins, and you update the file.
 
-## When you're done
+## When your job ends
 
-Setup is complete when all of these pass:
+**Your scope is Phase 0 + Steps 1–4 of `first-time-setup.md`.** After the Step 4 verification reboot, `claude-code.service` is up and the bot itself takes over Steps 5–9 via its own `setup-runner` subagent.
 
-- `systemctl status claude-code.service` is `active (running)`
-- `tmux attach -t claude` shows a live Claude Code session
-- The vault directory has `identity.md`, `user-profile.md`, `CLAUDE.md`, `journals/journal.md`, `inbox.md`, and a `.claude/` config dir
-- Telegram: DM-ing the bot causes a message to land in `.telegram/new-messages.txt` within a few seconds
-- SilverBullet: `https://<host>.<tailnet>.ts.net` shows the vault contents
-- Cron: `crontab -l` shows the four entries; `cat <VAULT>/cron-prompts/job-log.md` shows recent fires
-- The bot has written its first journal entry (forced by running `/wake-up` manually if needed)
+Your handoff checklist when you stop:
 
-Then mark `setup-state.md` Current phase as `done`, move the last In-progress to Done, and **write a final journal entry** in `<VAULT>/journals/journal.md` summarizing what got installed and any quirks Nate should know about.
+- `setup-state.md` has all Phase 0 Values populated.
+- `setup-state.md` Current phase reads `pre-step-5` (or further along if you went past Step 4 manually).
+- `systemctl status claude-code.service` is `active (running)` after the reboot.
+- `tmux attach -t claude` shows the bot in its first soul-loop.
+- The vault directory has `identity.md`, `user-profile.md`, `CLAUDE.md`, `journals/journal.md`, `inbox.md`, and a `.claude/` config dir (renamed from `dot-claude/`) — all placeholder substitutions applied.
 
-After that, you (the assisting CC instance) are no longer needed — the bot's own CC instance running under `claude-code.service` takes over. Nate can `exit` you.
+Tell Nate: *"Bot is online. It'll drive Steps 5–9 itself over the next ~5–10 minutes. Watch via `tmux attach -t claude` or wait for the Telegram setup-complete message. You'll need to do the BotFather conversation when the bot posts a BLOCKER about it. See `first-time-setup.md` 'After the reboot — bot-driven setup' for what to expect."*
+
+Then `exit` the assisting-CC session.
+
+### Power-user fallback: drive Steps 5–9 yourself
+
+If you (the assisting CC) or Nate prefer to drive Steps 5–9 manually instead of letting the bot self-drive — e.g., because something in the bot's setup-runner is broken, or because you want to walk it together — the detailed instructions are preserved in `first-time-setup.md` under "Reference: detailed Step 5–9 instructions (assisting-CC fallback)." You can run those by hand; just keep `setup-state.md` Current phase synchronized as you go so the bot doesn't try to redo what you've already done.
 
 ## State file skeleton
 

@@ -10,13 +10,14 @@ If you have no idea what any of that means, start with **[INTRO-FOR-HUMANS.md](I
 
 ## Read order
 
-0. [bootstrap.md](bootstrap.md) — pre-flight prereqs to run on a fresh EC2 (or any clean Linux box) **before** Claude Code is installed. Skip this if your machine already has Node 20, Docker, tmux, and Claude Code.
+0. [bootstrap.md](bootstrap.md) — pre-flight prereqs to run on a fresh EC2 (or any clean Linux box) **before** Claude Code is installed. Skip this if your machine already has Node 20, Docker, tmux, scoped sudo NOPASSWD, and Claude Code.
 1. [INTRO-FOR-HUMANS.md](INTRO-FOR-HUMANS.md) — what you're getting into.
-2. [first-time-setup.md](first-time-setup.md) — the 30-minute walkthrough.
-3. [setup-orchestrator.md](setup-orchestrator.md) — read this **first** if a Claude Code instance is helping you install the kit. It targets that assistant, not you.
-4. **Core reference** (read when the corresponding setup step calls for it): [persistence-and-hardware.md](persistence-and-hardware.md), [silverbullet-setup.md](silverbullet-setup.md), [telegram-integration.md](telegram-integration.md), [memory.md](memory.md).
-5. **Optional add-ons**: [web-shell.md](web-shell.md) — browser access to the bot's tmux session, recommended-if-you-want-mobile-access.
-6. **Read-but-don't-install-by-default**: [portainer.md](portainer.md) — the docs explain why a Claude-managed bot has specific friction with Portainer's stack-definition model. Skim before deciding.
+2. [first-time-setup.md](first-time-setup.md) — the walkthrough. Steps 1–4 are human + (optional) assisting-CC. After Step 4's reboot, **the bot drives Steps 5–9 itself.**
+3. [setup-orchestrator.md](setup-orchestrator.md) — read this **first** if a Claude Code instance is helping you with Steps 1–4. Phase 0 (placeholder collection) and Steps 1–4 only; Steps 5–9 belong to the bot after the reboot.
+4. **Core reference** (each is now bot-executed during Steps 5–9; you read them only if you want to know what the bot is doing): [persistence-and-hardware.md](persistence-and-hardware.md), [silverbullet-setup.md](silverbullet-setup.md), [telegram-integration.md](telegram-integration.md), [web-shell.md](web-shell.md), [memory.md](memory.md).
+5. **Read-but-don't-install-by-default**: [portainer.md](portainer.md) — explains why a Claude-managed bot has specific friction with Portainer's stack-definition model. Skim before deciding.
+
+**TL;DR of the setup flow:** you walk `bootstrap.md` end-to-end on a fresh box (~15 min), then `first-time-setup.md` Steps 1–4 (~15 min, ending in a reboot). The bot wakes up, drives Steps 5–9 itself (~5–10 min), and pings your Telegram when it's done. You handle BotFather mid-flow when the bot asks. Total: ~30–40 min of your attention.
 
 ## What's bundled
 

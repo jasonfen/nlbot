@@ -9,6 +9,14 @@ export LC_ALL=C.utf8
 # Cover both per-user (npm install without sudo) and global-install paths
 export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:$PATH"
 
+# Verify the prereqs the bot needs to self-drive Steps 5-9 of setup
+# (docker group active, scoped sudo NOPASSWD entries, tailscale up, claude
+# binary resolvable). Fail loud here rather than silently at Step 5.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -x "$SCRIPT_DIR/setup-bootstrap.sh" ]; then
+  "$SCRIPT_DIR/setup-bootstrap.sh" || exit 1
+fi
+
 # Resolve the actual claude binary location. Works for `sudo npm install -g`
 # (typically /usr/bin/claude or /usr/local/bin/claude) and for per-user
 # `npm install --prefix ~/.local` (~/.local/bin/claude).

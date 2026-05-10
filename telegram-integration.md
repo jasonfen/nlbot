@@ -2,6 +2,12 @@
 
 How Nate's bot talks to him over Telegram. Mirrors the proven fenbot setup: one Python daemon, async messaging, a single whitelisted chat.
 
+> **What the bot does automatically vs. what needs your hands**
+>
+> During Step 6 of bot-driven setup, the bot installs the daemon (`tg-bot.py` + `tg-post.sh` + systemd unit) and then posts a BLOCKER asking you to do the BotFather conversation (token + chat ID — irreducible interactive moment on your phone). Once you paste those into `setup-state.md` and clear the BLOCKER, the bot finishes activation on the next soul-loop heartbeat — enables the service and sends a test message round-trip.
+>
+> If you're doing the assisting-CC fallback flow (Steps 5–9 by hand), the commands below are what you run yourself.
+
 ## What this gives you
 
 - **Outbound:** Claude writes a message to `.telegram/message.txt` and the daemon posts it to your chat. No interruption, no special tooling — just `Write` to a file.
