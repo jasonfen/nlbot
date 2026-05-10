@@ -242,6 +242,17 @@ echo "glyphs:     ❯ ─ ┌    (these should render as actual symbols)"
 
 If everything reports cleanly and the glyphs show, you're done with bootstrap.
 
+### Where am I? (run the state probe)
+
+The kit includes `runtime/setup-status.sh` — a read-only probe that reports your bootstrap and setup progress against a checklist of everything the bot will need. **You can run this at any point during bootstrap or first-time-setup**, including mid-flow, to see exactly what's done and what the next manual step is:
+
+```bash
+BOT_NAME=nlbot bash <kit-clone>/runtime/setup-status.sh
+# (substitute your chosen bot name; defaults to your current $USER if unset)
+```
+
+In PRE-SETUP mode (you don't have a vault yet), the script probes system packages, the bot user, group memberships, ssh keys, and prints a "Next manual step:" line pointing at the right doc/step. In POST-SETUP mode (after the Step 4 reboot, when the bot is running), it adds per-phase reality checks and compares to `setup-state.md`. Use it whenever you want a sanity check.
+
 ---
 
 ## What's next

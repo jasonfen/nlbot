@@ -11,6 +11,16 @@ A 30-minute path from "I want one of these" to "it's running and I'm talking to 
 - A Telegram account with a phone (to talk to BotFather).
 - About 30 minutes of focused time. You can stretch it over a weekend; nothing here is time-pressured.
 
+### Where am I? (sanity check)
+
+At any point — including right now, before you've started — you can run the kit's state probe to see what's installed, what's missing, and which manual step to do next:
+
+```bash
+BOT_NAME=<your-bot-name> bash <kit-clone>/runtime/setup-status.sh
+```
+
+It runs read-only and prints a column-aligned report of system prereqs, bot-user state, vault state, and (after the Step 4 reboot) bot-driven phase progress. Each missing item shows you the doc + step that addresses it. **You can re-run it any time you're unsure where you are.**
+
 ## Step 1 — Install Claude Code + prereqs (5 min)
 
 On the Linux box, follow the official install: <https://claude.com/download>. Then log in once interactively:

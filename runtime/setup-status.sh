@@ -1,20 +1,29 @@
 #!/bin/bash
 # setup-status.sh — probe the actual state of every setup phase on this box,
-# compare to setup-state.md Current phase, recommend the next step.
+# compare to setup-state.md Current phase (if it exists), recommend the next step.
 #
-# Use this when:
-#   - You want a snapshot of what's actually installed/running.
-#   - setup-state.md looks out of sync with reality (manual edit, crashed
-#     mid-phase, you moved the vault to a new box).
-#   - You just want to know "where am I in setup" without reading the file.
+# Two modes:
+#   PRE-SETUP   — no <VAULT>/setup-state.md yet. Probes system prereqs +
+#                 bootstrap.md / first-time-setup.md Steps 1–4 progress.
+#                 Use this while you're still manually working through
+#                 bootstrap.md.
+#   POST-SETUP  — <VAULT>/setup-state.md exists. Probes everything above
+#                 plus per-phase reality (containers, services, cron, MCP)
+#                 and compares to Current phase.
 #
 # Exit codes:
 #   0 — state-file and reality agree (or setup is `done`).
 #   1 — discrepancy or pending work; recommendation printed.
-#   2 — can't read setup-state.md (no vault detected).
+#   2 — script can't determine vault location (only happens if you set
+#       VAULT explicitly to a bogus path).
 #
 # The script is read-only — never edits setup-state.md. The recommendation
 # is for the human (or the setup-runner subagent) to apply.
+#
+# Useful invocations:
+#   bash runtime/setup-status.sh                    # auto-detect vault from script location
+#   BOT_NAME=nlbot bash runtime/setup-status.sh     # tell the script who the bot user will be (pre-setup)
+#   VAULT=/home/nlbot/nlbot bash runtime/setup-status.sh  # explicit vault path
 
 set -u
 
@@ -22,31 +31,35 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VAULT="${VAULT_DIR:-${VAULT:-$(cd "$SCRIPT_DIR/.." && pwd)}}"
 SETUP_STATE="$VAULT/setup-state.md"
 
-if [ ! -f "$SETUP_STATE" ]; then
-  echo "setup-status: $SETUP_STATE not found." >&2
-  echo "  Set VAULT=/path/to/vault or run this script from inside the vault." >&2
-  exit 2
-fi
-
 # --- Helpers -----------------------------------------------------------------
 
 state_value() {
   # Pull a value from setup-state.md: state_value BOT_NAME → "nlbot"
+  [ -f "$SETUP_STATE" ] || return
   grep "^- \*\*$1\*\*:" "$SETUP_STATE" 2>/dev/null \
     | sed 's/^[^:]*: *//; s/ *<!--.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' \
     | head -1
 }
 
 declared_phase() {
+  [ -f "$SETUP_STATE" ] || return
   grep '^Current phase:' "$SETUP_STATE" | head -1 | sed 's/^Current phase: *//; s/[[:space:]]*$//'
 }
 
-BOT_NAME=$(state_value BOT_NAME)
+# Resolve BOT_NAME. Order: env override → setup-state.md Values → $USER fallback.
+BOT_NAME="${BOT_NAME:-$(state_value BOT_NAME)}"
 BOT_NAME=${BOT_NAME:-$USER}
 DECLARED=$(declared_phase)
-DECLARED=${DECLARED:-phase-0}
+DECLARED=${DECLARED:-}
 
-# Use colors only if stdout is a TTY
+# Detect mode
+if [ -f "$SETUP_STATE" ]; then
+  MODE="POST-SETUP"
+else
+  MODE="PRE-SETUP"
+fi
+
+# Colors only if stdout is a TTY
 if [ -t 1 ]; then
   G=$'\033[32m'; R=$'\033[31m'; Y=$'\033[33m'; B=$'\033[1m'; N=$'\033[0m'
 else
@@ -60,174 +73,319 @@ warn() { printf "  [%s!%s] %-38s %s\n" "$Y" "$N" "$1" "${2:-}"; }
 # --- Header ------------------------------------------------------------------
 
 echo "${B}=== nlbot setup state probe ===${N}"
+echo "Mode:             $MODE"
 echo "Probed at:        $(date '+%Y-%m-%d %H:%M:%S')"
-echo "Vault:            $VAULT"
-echo "Bot user:         $BOT_NAME"
-echo "Declared phase:   $DECLARED"
+echo "Running as:       $USER"
+echo "Bot user:         $BOT_NAME${MODE:+ }"
+echo "Vault path:       $VAULT${MODE:+ }"
+[ "$MODE" = "POST-SETUP" ] && echo "Declared phase:   ${DECLARED:-(unset)}"
 echo
 
-# --- Prerequisites -----------------------------------------------------------
+# --- System prerequisites (always probed) ------------------------------------
 
-echo "${B}Prerequisites${N}"
-if id -nG | tr ' ' '\n' | grep -qx docker; then
-  pass "docker group active" "(in current login)"
-else
-  fail "docker group NOT active" "(log out/in or restart claude-code.service)"
-fi
-for cmd in /usr/bin/systemctl /usr/bin/crontab /usr/bin/docker; do
-  short=$(basename "$cmd")
-  if sudo -n "$cmd" --version >/dev/null 2>&1; then
-    pass "sudo NOPASSWD $short"
-  else
-    fail "sudo NOPASSWD $short" "(see first-time-setup.md Step 4 final action)"
-  fi
-done
+echo "${B}System prerequisites${N}"
 if command -v tmux >/dev/null 2>&1; then
   pass "tmux installed" "($(tmux -V))"
 else
-  fail "tmux installed" "(apt install tmux)"
+  fail "tmux installed" "(bootstrap.md Step 3)"
 fi
 if command -v claude >/dev/null 2>&1; then
-  pass "claude in PATH" "($(command -v claude))"
+  pass "Claude Code installed" "($(command -v claude))"
 else
-  fail "claude in PATH" "(sudo npm install -g @anthropic-ai/claude-code)"
+  fail "Claude Code installed" "(bootstrap.md Step 7: sudo npm install -g @anthropic-ai/claude-code)"
+fi
+if command -v node >/dev/null 2>&1; then
+  NV=$(node --version 2>/dev/null)
+  NMAJ=$(echo "$NV" | sed 's/^v\([0-9]*\).*/\1/')
+  if [ "${NMAJ:-0}" -ge 20 ]; then
+    pass "Node 20+ installed" "($NV)"
+  else
+    fail "Node 20+ installed" "(found $NV; need v20 or newer)"
+  fi
+else
+  fail "Node 20+ installed" "(bootstrap.md Step 4)"
+fi
+if command -v docker >/dev/null 2>&1; then
+  if docker compose version >/dev/null 2>&1; then
+    pass "Docker + compose plugin" "($(docker --version | cut -d, -f1))"
+  else
+    fail "Docker compose plugin" "(legacy docker-compose? need 'docker compose' subcommand)"
+  fi
+else
+  fail "Docker installed" "(bootstrap.md Step 5)"
 fi
 if command -v tailscale >/dev/null 2>&1; then
   if tailscale status >/dev/null 2>&1; then
     HN=$(tailscale status --json 2>/dev/null | grep -oE '"HostName"[^,]*' | head -1 | cut -d'"' -f4)
-    pass "tailscale up" "(${HN:-logged in})"
+    pass "Tailscale up" "(${HN:-logged in})"
   else
-    fail "tailscale up" "(sudo tailscale up)"
+    fail "Tailscale up" "(sudo tailscale up)"
   fi
 else
-  fail "tailscale installed" ""
+  fail "Tailscale installed" "(handled outside the kit; install before bootstrap.md)"
+fi
+if locale 2>/dev/null | grep -q 'C\.UTF-8\|en_US\.UTF-8'; then
+  pass "UTF-8 locale active" "($(locale | grep ^LANG | head -1))"
+else
+  warn "UTF-8 locale" "(check 'locale' output; needed for glyph rendering in tmux)"
 fi
 echo
 
-# --- Phases ------------------------------------------------------------------
+# --- Bot user prerequisites (probed by name) ---------------------------------
 
-echo "${B}Phases${N}"
-REACHED="phase-0"
+echo "${B}Bot user ($BOT_NAME)${N}"
+if getent passwd "$BOT_NAME" >/dev/null 2>&1; then
+  HOMEDIR=$(getent passwd "$BOT_NAME" | cut -d: -f6)
+  pass "user exists" "(home: $HOMEDIR)"
 
-# pre-step-5: vault + claude-code.service + tmux session + dot-claude
-pre_vault=fail; [ -d "$VAULT" ] && [ -f "$VAULT/CLAUDE.md" ] && [ -d "$VAULT/.claude" ] && pre_vault=ok
-pre_service=fail; systemctl is-active claude-code.service >/dev/null 2>&1 && pre_service=ok
-pre_tmux=fail; tmux has-session -t claude 2>/dev/null && pre_tmux=ok
-if [ "$pre_vault" = ok ] && [ "$pre_service" = ok ] && [ "$pre_tmux" = ok ]; then
-  pass "pre-step-5" "vault+service+tmux all up"
-  REACHED="pre-step-5"
-else
-  fail "pre-step-5" "vault=$pre_vault service=$pre_service tmux=$pre_tmux"
-fi
-
-# step-5-silverbullet
-sb_ok=fail
-if [ -f "$VAULT/docker-compose.yml" ] && docker compose -f "$VAULT/docker-compose.yml" ps silverbullet 2>/dev/null | grep -q running; then
-  sb_ok=ok
-fi
-if [ "$sb_ok" = ok ]; then
-  if sudo -n tailscale serve status 2>/dev/null | grep -q 3001; then
-    pass "step-5-silverbullet" "container running; tailscale serve on 443→3001"
+  # Group memberships — check from outside since we may not be that user
+  BOT_GROUPS=$(id -nG "$BOT_NAME" 2>/dev/null | tr ' ' '\n')
+  if echo "$BOT_GROUPS" | grep -qx sudo; then
+    pass "in sudo group"
   else
-    warn "step-5-silverbullet" "container running but no tailscale serve to 3001"
+    fail "in sudo group" "(sudo usermod -aG sudo $BOT_NAME)"
   fi
-  REACHED="step-5-silverbullet"
-else
-  fail "step-5-silverbullet" "container not running"
-fi
-
-# step-6-telegram-daemon (systemd unit installed)
-tg_unit=fail; [ -f /etc/systemd/system/telegram-bot.service ] && tg_unit=ok
-if [ "$tg_unit" = ok ]; then
-  pass "step-6-telegram-daemon" "systemd unit installed"
-  REACHED="step-6-telegram-daemon"
-  # creds populated in setup-state.md?
-  tg_token=$(state_value TG_BOT_TOKEN)
-  if [ -n "$tg_token" ]; then
-    pass "step-6-telegram-creds" "TG_BOT_TOKEN populated in setup-state.md"
-    REACHED="step-6-telegram-creds-resolved"
+  if echo "$BOT_GROUPS" | grep -qx docker; then
+    pass "in docker group"
+    # If we're running AS the bot, also verify the group is live in this login
+    if [ "$USER" = "$BOT_NAME" ]; then
+      if id -nG | tr ' ' '\n' | grep -qx docker; then
+        pass "docker group active in login" "(current session)"
+      else
+        fail "docker group NOT active in login" "(log out and back in)"
+      fi
+    fi
   else
-    warn "step-6-telegram-creds" "BLOCKER pending: BotFather token missing"
+    fail "in docker group" "(sudo usermod -aG docker $BOT_NAME)"
   fi
-  # service active?
-  if systemctl is-active telegram-bot.service >/dev/null 2>&1; then
-    pass "step-6-telegram-activate" "telegram-bot.service active"
-    REACHED="step-6-telegram-activate"
+
+  # SSH key
+  if [ -f "$HOMEDIR/.ssh/authorized_keys" ]; then
+    pass "ssh authorized_keys present"
   else
-    fail "step-6-telegram-activate" "service inactive"
+    warn "ssh authorized_keys" "(bootstrap.md Step 2c — only matters if you want direct SSH as $BOT_NAME)"
+  fi
+
+  # Scoped NOPASSWD
+  if [ -f "/etc/sudoers.d/$BOT_NAME" ]; then
+    if sudo -n test -r "/etc/sudoers.d/$BOT_NAME" 2>/dev/null || [ -r "/etc/sudoers.d/$BOT_NAME" ]; then
+      if grep -q 'NOPASSWD.*systemctl.*crontab.*docker' "/etc/sudoers.d/$BOT_NAME" 2>/dev/null \
+         || grep -q 'NOPASSWD: */usr/bin/systemctl, */usr/bin/crontab, */usr/bin/docker' "/etc/sudoers.d/$BOT_NAME" 2>/dev/null \
+         || grep -q 'NOPASSWD:ALL' "/etc/sudoers.d/$BOT_NAME" 2>/dev/null; then
+        pass "scoped NOPASSWD sudoers" "(/etc/sudoers.d/$BOT_NAME)"
+      else
+        warn "scoped NOPASSWD sudoers" "(file exists but doesn't match expected pattern; verify with visudo -cf)"
+      fi
+    else
+      warn "scoped NOPASSWD sudoers" "(file exists but can't read it from $USER)"
+    fi
+  else
+    warn "scoped NOPASSWD sudoers" "(grant in first-time-setup.md Step 4 'Final action' — this is the LAST step before reboot, not now)"
   fi
 else
-  fail "step-6-telegram-daemon" "no systemd unit"
+  fail "user exists" "(bootstrap.md Step 2 — sudo adduser $BOT_NAME)"
 fi
-
-# step-7-web-shell
-if systemctl is-active "${BOT_NAME}-web.service" >/dev/null 2>&1; then
-  pass "step-7-web-shell" "${BOT_NAME}-web.service active"
-  REACHED="step-7-web-shell"
-else
-  fail "step-7-web-shell" "${BOT_NAME}-web.service not active"
-fi
-
-# step-8-cron
-if sudo -n crontab -u "$BOT_NAME" -l 2>/dev/null | grep -q inject-prompt.sh; then
-  pass "step-8-cron" "heartbeat entries installed"
-  REACHED="step-8-cron"
-else
-  fail "step-8-cron" "no inject-prompt.sh in crontab"
-fi
-
-# step-9-memory
-if command -v claude >/dev/null 2>&1 && claude mcp list 2>/dev/null | grep -q memorious; then
-  pass "step-9-memory" "memorious-mcp registered"
-  REACHED="step-9-memory"
-elif command -v claude >/dev/null 2>&1 && claude mcp list 2>/dev/null | grep -qi memor; then
-  warn "step-9-memory" "non-memorious memory backend registered (treating as done)"
-  REACHED="step-9-memory"
-else
-  fail "step-9-memory" "no memory backend registered"
-fi
-
 echo
 
-# --- Recommendation ----------------------------------------------------------
+# --- Vault and bot service ---------------------------------------------------
+
+echo "${B}Vault and bot service${N}"
+if [ -d "$VAULT" ]; then
+  pass "vault directory exists" "($VAULT)"
+  if [ -f "$VAULT/CLAUDE.md" ]; then
+    pass "CLAUDE.md present"
+  else
+    fail "CLAUDE.md present" "(first-time-setup.md Step 2)"
+  fi
+  if [ -d "$VAULT/.claude" ]; then
+    pass ".claude/ dir present" "(renamed from dot-claude/)"
+  else
+    fail ".claude/ dir present" "(first-time-setup.md Step 2 — the dot-claude → .claude rename)"
+  fi
+  if [ -f "$VAULT/identity.md" ] && [ -f "$VAULT/user-profile.md" ]; then
+    pass "identity.md + user-profile.md present"
+  else
+    fail "identity.md + user-profile.md" "(first-time-setup.md Step 2)"
+  fi
+else
+  fail "vault directory exists" "(not yet — first-time-setup.md Step 2 creates it)"
+fi
+if [ -f /etc/systemd/system/claude-code.service ]; then
+  pass "claude-code.service unit installed"
+  if systemctl is-active claude-code.service >/dev/null 2>&1; then
+    pass "claude-code.service active"
+  else
+    fail "claude-code.service active" "(first-time-setup.md Step 4: sudo systemctl enable --now claude-code.service)"
+  fi
+else
+  fail "claude-code.service unit" "(first-time-setup.md Step 4)"
+fi
+if tmux has-session -t claude 2>/dev/null; then
+  pass "tmux session 'claude' running"
+elif sudo -n -u "$BOT_NAME" tmux has-session -t claude 2>/dev/null; then
+  pass "tmux session 'claude' running (as $BOT_NAME)"
+else
+  fail "tmux session 'claude'" "(starts when claude-code.service runs)"
+fi
+echo
+
+# --- POST-SETUP only: phases ------------------------------------------------
+
+REACHED=""
+if [ "$MODE" = "POST-SETUP" ]; then
+  echo "${B}Bot-driven setup phases${N}"
+
+  # step-5-silverbullet
+  if [ -f "$VAULT/docker-compose.yml" ] && docker compose -f "$VAULT/docker-compose.yml" ps silverbullet 2>/dev/null | grep -q running; then
+    if sudo -n tailscale serve status 2>/dev/null | grep -q 3001; then
+      pass "step-5-silverbullet" "container + tailscale serve"
+    else
+      warn "step-5-silverbullet" "container running but no tailscale serve to 3001"
+    fi
+    REACHED="step-5-silverbullet"
+  else
+    fail "step-5-silverbullet" "container not running"
+  fi
+
+  # step-6 trio
+  if [ -f /etc/systemd/system/telegram-bot.service ]; then
+    pass "step-6-telegram-daemon" "systemd unit installed"
+    REACHED="step-6-telegram-daemon"
+    if [ -n "$(state_value TG_BOT_TOKEN)" ]; then
+      pass "step-6-telegram-creds" "TG_BOT_TOKEN populated"
+      REACHED="step-6-telegram-creds-resolved"
+    else
+      warn "step-6-telegram-creds" "BLOCKER pending: BotFather token"
+    fi
+    if systemctl is-active telegram-bot.service >/dev/null 2>&1; then
+      pass "step-6-telegram-activate" "service active"
+      REACHED="step-6-telegram-activate"
+    else
+      fail "step-6-telegram-activate" "service inactive"
+    fi
+  else
+    fail "step-6-telegram-daemon" "no systemd unit"
+  fi
+
+  # step-7-web-shell
+  if systemctl is-active "${BOT_NAME}-web.service" >/dev/null 2>&1; then
+    pass "step-7-web-shell" "${BOT_NAME}-web.service active"
+    REACHED="step-7-web-shell"
+  else
+    fail "step-7-web-shell" "${BOT_NAME}-web.service not active"
+  fi
+
+  # step-8-cron
+  if sudo -n crontab -u "$BOT_NAME" -l 2>/dev/null | grep -q inject-prompt.sh; then
+    pass "step-8-cron" "heartbeat entries installed"
+    REACHED="step-8-cron"
+  else
+    fail "step-8-cron" "no inject-prompt.sh in crontab"
+  fi
+
+  # step-9-memory
+  if command -v claude >/dev/null 2>&1 && claude mcp list 2>/dev/null | grep -q memorious; then
+    pass "step-9-memory" "memorious-mcp registered"
+    REACHED="step-9-memory"
+  elif command -v claude >/dev/null 2>&1 && claude mcp list 2>/dev/null | grep -qi memor; then
+    warn "step-9-memory" "non-memorious memory backend (treating as done)"
+    REACHED="step-9-memory"
+  else
+    fail "step-9-memory" "no memory backend"
+  fi
+  echo
+fi
+
+# --- Recommendation ---------------------------------------------------------
 
 echo "${B}=== Recommendation ===${N}"
-echo "setup-state.md says:  Current phase: $DECLARED"
-echo "Reality reached:      $REACHED"
 
-# If everything probed as done, recommend `done` regardless of declared phase
+# Detect bootstrap progress for pre-bot recommendation
+NEED_BOOTSTRAP=""
+if ! command -v claude >/dev/null 2>&1; then NEED_BOOTSTRAP="bootstrap.md Step 7 (install Claude Code)"; fi
+if [ -z "$NEED_BOOTSTRAP" ] && ! getent passwd "$BOT_NAME" >/dev/null 2>&1; then
+  NEED_BOOTSTRAP="bootstrap.md Step 2 (create bot user '$BOT_NAME')"
+fi
+if [ -z "$NEED_BOOTSTRAP" ] && ! command -v docker >/dev/null 2>&1; then
+  NEED_BOOTSTRAP="bootstrap.md Step 5 (Docker)"
+fi
+if [ -z "$NEED_BOOTSTRAP" ] && command -v tailscale >/dev/null && ! tailscale status >/dev/null 2>&1; then
+  NEED_BOOTSTRAP="Tailscale: 'sudo tailscale up'"
+fi
+NEED_FIRSTTIME=""
+if [ -z "$NEED_BOOTSTRAP" ] && [ ! -d "$VAULT" -o ! -f "$VAULT/CLAUDE.md" ]; then
+  NEED_FIRSTTIME="first-time-setup.md Step 2 (drop in the vault)"
+fi
+if [ -z "$NEED_BOOTSTRAP$NEED_FIRSTTIME" ] && [ ! -f /etc/systemd/system/claude-code.service ]; then
+  NEED_FIRSTTIME="first-time-setup.md Step 4 (install claude-code.service)"
+fi
+if [ -z "$NEED_BOOTSTRAP$NEED_FIRSTTIME" ] && ! systemctl is-active claude-code.service >/dev/null 2>&1; then
+  NEED_FIRSTTIME="first-time-setup.md Step 4 (enable + start the service, reboot)"
+fi
+if [ -z "$NEED_BOOTSTRAP$NEED_FIRSTTIME" ] && [ ! -f "/etc/sudoers.d/$BOT_NAME" ]; then
+  NEED_FIRSTTIME="first-time-setup.md Step 4 final action (scoped NOPASSWD sudoers — last step before reboot)"
+fi
+
+if [ -n "$NEED_BOOTSTRAP" ]; then
+  echo "Mode:                 PRE-SETUP (still in bootstrap.md)"
+  echo "Next manual step:     $NEED_BOOTSTRAP"
+  echo
+  echo "${Y}You're not at the bot-driven phase yet. Complete bootstrap.md, then first-time-setup.md Steps 1–4, then the bot wakes up and finishes Steps 5–9 itself.${N}"
+  exit 1
+fi
+if [ -n "$NEED_FIRSTTIME" ]; then
+  echo "Mode:                 PRE-SETUP (in first-time-setup.md Steps 1–4)"
+  echo "Next manual step:     $NEED_FIRSTTIME"
+  echo
+  echo "${Y}Once the service is active and you've rebooted, the bot wakes up and drives Steps 5–9 itself.${N}"
+  exit 1
+fi
+
+# At this point bootstrap is done and first-time-setup Steps 1–4 are done.
+# If we're in POST-SETUP mode, recommend based on phase reached.
+if [ "$MODE" = "PRE-SETUP" ]; then
+  echo "Mode:                 PRE-SETUP (but ready for first bot wake-up)"
+  echo "All system prereqs and vault/service look good. The bot should be running."
+  echo "Next: check 'tmux attach -t claude' and verify the bot is in its first soul-loop."
+  exit 1
+fi
+
+# POST-SETUP recommendation
+echo "Mode:                 POST-SETUP"
+echo "setup-state.md says:  Current phase: ${DECLARED:-(unset)}"
+echo "Reality reached:      ${REACHED:-phase-0}"
+echo
+
+# All-done case
 if [ "$REACHED" = "step-9-memory" ] && \
    systemctl is-active "${BOT_NAME}-web.service" >/dev/null 2>&1 && \
    sudo -n crontab -u "$BOT_NAME" -l 2>/dev/null | grep -q inject-prompt.sh; then
   if [ "$DECLARED" = "done" ]; then
-    echo
     echo "${G}✓ Aligned. Setup is complete; no action needed.${N}"
     exit 0
   else
-    echo
-    echo "Reality shows all phases complete. Recommend setting Current phase to 'done'."
+    echo "${Y}Reality shows all phases complete. Recommend setting Current phase to 'done'.${N}"
     exit 1
   fi
 fi
 
-# Otherwise compute next-phase suggestion based on what's actually done
-case "$REACHED" in
-  "phase-0")                          NEXT="pre-step-5" ;;
-  "pre-step-5")                       NEXT="step-5-silverbullet" ;;
+# Compute next-phase suggestion
+case "${REACHED:-phase-0}" in
+  "phase-0"|"")                       NEXT="step-5-silverbullet" ;;
   "step-5-silverbullet")              NEXT="step-6-telegram-daemon" ;;
   "step-6-telegram-daemon")           NEXT="step-6-telegram-creds-blocker" ;;
   "step-6-telegram-creds-resolved")   NEXT="step-6-telegram-activate" ;;
   "step-6-telegram-activate")         NEXT="step-7-web-shell" ;;
   "step-7-web-shell")                 NEXT="step-8-cron" ;;
   "step-8-cron")                      NEXT="step-9-memory" ;;
-  *)                                  NEXT="$REACHED" ;;
+  *)                                  NEXT="${REACHED}" ;;
 esac
 
 echo "Recommended next:     $NEXT"
 echo
 
 if [ "$DECLARED" = "$NEXT" ]; then
-  echo "${G}✓ Declared phase matches the next-to-run phase. Run /setup (or wait for next soul-loop) to execute it.${N}"
+  echo "${G}✓ Declared phase matches next-to-run. Run /setup (or wait for next soul-loop) to execute.${N}"
 else
   echo "${Y}! Declared phase ($DECLARED) doesn't match reality ($NEXT).${N}"
   echo "  To resync: edit $SETUP_STATE → 'Current phase: $NEXT' → run /setup."
