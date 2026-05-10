@@ -190,12 +190,20 @@ Once Step 6 completes, all further progress reports go to your Telegram.
 The bot's setup is idempotent. If a phase fails:
 
 ```bash
-tmux attach -t claude
-# read the journal: tail -50 <VAULT>/journals/journal.md
-# read the state: cat <VAULT>/setup-state.md | grep -A5 'Current phase\|Blockers'
+# Reality check: what's actually running vs. what setup-state.md claims?
+<VAULT>/runtime/setup-status.sh
 ```
 
-Fix whatever broke (usually a missing prereq from bootstrap.md — `docker` group not active, sudo NOPASSWD wrong), then either wait for the next soul-loop fire or run `/setup` manually from the tmux pane to force a retry.
+This probes every phase (docker container, systemd service, crontab entry, MCP registration) and prints a recommendation: "declared phase X, reality reached Y, run /setup to advance." Run it from any shell — it's read-only.
+
+Then watch the live session if needed:
+
+```bash
+tmux attach -t claude
+tail -50 <VAULT>/journals/journal.md
+```
+
+Common causes of phase failures are usually a missing prereq from bootstrap.md (docker group not active in this login, sudo NOPASSWD entry wrong or missing for the bot user — covered in [bootstrap.md](bootstrap.md) Step 5 and first-time-setup.md Step 4's final action). Fix the underlying issue, then either wait for the next soul-loop fire or run `/setup` manually from the tmux pane to force a retry. The bot's setup-runner re-reads `setup-status.sh` at the start of every dispatch and trusts reality over the state file, so re-running is always safe.
 
 ---
 

@@ -11,9 +11,14 @@ You are **NOT** the soul-loop runner. The soul-loop dispatches you when `setup-s
 
 ## Read first
 
-1. `<VAULT>/setup-state.md` — the Values block has Phase 0 answers (BOT_NAME, USER_NAME, VAULT path, CANARY_PHRASE, USER_ROLE, etc.). The `Current phase:` line tells you which step to run. The `## Blockers` block tells you whether the human still owes input.
-2. The setup phase reference table at the top of `setup-state.md`.
-3. **Only when you're about to execute a specific phase**, read its detail doc:
+1. **Run `<VAULT>/runtime/setup-status.sh`** as your first action. It's a read-only probe that reports:
+   - Prereqs (docker group active, NOPASSWD entries working, tmux/claude/tailscale present).
+   - Per-phase reality (which containers are running, which services are active, which crontab entries exist).
+   - A recommendation block: declared phase vs. reality-reached phase, with the next phase to execute.
+   - If the script's recommendation disagrees with `setup-state.md` Current phase — **trust the script**. Reality wins. Update `setup-state.md` Current phase to match the script's "Recommended next", then proceed.
+2. `<VAULT>/setup-state.md` — the Values block has Phase 0 answers (BOT_NAME, USER_NAME, VAULT path, CANARY_PHRASE, USER_ROLE, etc.). The `Current phase:` line tells you which step to run. The `## Blockers` block tells you whether the human still owes input.
+3. The setup phase reference table at the top of `setup-state.md`.
+4. **Only when you're about to execute a specific phase**, read its detail doc:
    - `step-5-silverbullet` → `<VAULT>/silverbullet-setup.md` (or kit-clone equivalent)
    - `step-6-telegram-daemon` → `<VAULT>/telegram-integration.md`
    - `step-7-web-shell` → `<VAULT>/web-shell.md`

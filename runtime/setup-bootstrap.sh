@@ -64,5 +64,18 @@ if [ "$FAIL" -ne 0 ]; then
   exit 1
 fi
 
-echo "[setup-bootstrap] All prereqs OK. Bot can self-drive Steps 5-9." >&2
+echo "[setup-bootstrap] All prereqs OK." >&2
+
+# Optional: print a one-line state summary using setup-status.sh
+# (skip if the script isn't present or setup-state.md doesn't exist)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STATUS_SCRIPT="$SCRIPT_DIR/setup-status.sh"
+if [ -x "$STATUS_SCRIPT" ]; then
+  STATUS_OUT=$("$STATUS_SCRIPT" 2>/dev/null | grep -E '^(Declared phase:|Reality reached:|Recommended next:|✓ Aligned|! Declared)' || true)
+  if [ -n "$STATUS_OUT" ]; then
+    echo "[setup-bootstrap] State summary:" >&2
+    echo "$STATUS_OUT" | sed 's/^/  /' >&2
+  fi
+fi
+
 exit 0
