@@ -1,8 +1,14 @@
-# Portainer (optional Docker UI)
+# Portainer — optional Docker UI
 
-A browser interface for the Docker containers you're already running (SilverBullet, plus anything else you add later). It runs as a container itself, lets you tail logs, exec into a shell, restart, inspect networks, all the things you'd otherwise use `docker compose logs`, `docker exec`, `docker ps` for from a terminal.
+> **This is a decision, not a default.** The kit's "happy path" runs without Portainer. Read this only if you're considering it.
 
-Optional. Skip if you're comfortable with the Docker CLI; add it the first time you wish you could just click "View Logs" on a container from your phone.
+A browser interface for the Docker containers you're already running (SilverBullet, plus anything else you add later). It runs as a container itself, lets you tail logs, exec into a shell, restart, inspect networks — all the things you'd otherwise use `docker compose logs`, `docker exec`, `docker ps` for from a terminal.
+
+**Reasonable answers to "should I install this":**
+
+- *No, skip it* — if you're comfortable with the Docker CLI from SSH or [web-shell](web-shell.md). This is the default. You give up nothing the bot needs.
+- *Yes, install it* — if your day-to-day involves checking on the bot from your phone, you don't want to drop into SSH for routine "is SilverBullet still up?" checks, and you accept that another container will have `docker.sock` access.
+- *Add later* — totally fine. It drops into the existing `docker-compose.yml` cleanly; you don't need to plan for it at setup time.
 
 ## What you're trading
 
