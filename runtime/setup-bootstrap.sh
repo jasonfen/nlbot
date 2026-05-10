@@ -25,8 +25,12 @@ fi
 for cmd in /usr/bin/systemctl /usr/bin/crontab /usr/bin/docker; do
   if ! sudo -n "$cmd" --version >/dev/null 2>&1; then
     echo "[setup-bootstrap] WARN: 'sudo -n $cmd' failed (no NOPASSWD entry?)" >&2
-    echo "  Fix: see bootstrap.md Step 2b. /etc/sudoers.d/$USER should contain:" >&2
+    echo "  Fix: see first-time-setup.md Step 4 'Final action: grant the bot scoped sudo NOPASSWD'." >&2
+    echo "  Quick fix from a shell with normal sudo:" >&2
+    echo "    sudo tee /etc/sudoers.d/$USER >/dev/null <<EOF" >&2
     echo "    $USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl, /usr/bin/crontab, /usr/bin/docker" >&2
+    echo "    EOF" >&2
+    echo "    sudo chmod 440 /etc/sudoers.d/$USER" >&2
     FAIL=1
   fi
 done

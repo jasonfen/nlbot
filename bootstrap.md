@@ -64,21 +64,7 @@ sudo adduser --gecos "" $BOTUSER
 sudo usermod -aG sudo $BOTUSER
 ```
 
-### 2b.5 — Scoped sudo NOPASSWD (required for bot-driven setup)
-
-After the Step 4 verification reboot in `first-time-setup.md`, the bot drives Steps 5–9 (SilverBullet, Telegram daemon, web shell, cron, memory backend) on its own. It runs `sudo systemctl`, `sudo crontab`, and `sudo docker` from inside a detached tmux session where there's no terminal to type a password into. So either those commands need `NOPASSWD`, or the bot can't self-drive the rest of setup.
-
-Drop a **scoped** NOPASSWD entry — only those three commands, not blanket `NOPASSWD: ALL`:
-
-```bash
-sudo tee /etc/sudoers.d/$BOTUSER >/dev/null <<EOF
-$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/systemctl, /usr/bin/crontab, /usr/bin/docker
-EOF
-sudo chmod 440 /etc/sudoers.d/$BOTUSER
-sudo visudo -cf /etc/sudoers.d/$BOTUSER   # should print "parsed OK"
-```
-
-Anything else `sudo` (apt-install, editing /etc, etc.) still prompts for the password and stays your job. If you genuinely want **blanket `NOPASSWD: ALL`** (anyone with a shell as $BOTUSER gets root-equivalent — convenient but a bigger blast radius), replace the snippet above with `$BOTUSER ALL=(ALL) NOPASSWD:ALL`. The kit's recommended path is scoped.
+> **Note:** Bot-driven setup (Steps 5–9 of `first-time-setup.md`) requires scoped `NOPASSWD` sudo for `systemctl`, `crontab`, and `docker` so the bot can run them from inside a detached tmux session where there's no terminal to type a password into. **You'll grant that as the very last action of `first-time-setup.md` Step 4 — right before the verification reboot, after you've confirmed everything else works.** Don't grant it here. Doing it last means you've got a working setup to fall back on with normal password-prompted sudo if anything goes sideways.
 
 ### 2c. Copy your SSH key over so you can `ssh $BOTUSER@<host>` directly
 

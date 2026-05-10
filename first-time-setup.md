@@ -115,6 +115,26 @@ tmux attach -t claude           # see Claude Code running
 # detach with ctrl+b then d (don't kill it)
 ```
 
+### Final action: grant the bot scoped sudo NOPASSWD (then reboot)
+
+This is the privilege grant that lets the bot drive Steps 5–9 from inside the detached tmux session (where there's no terminal for sudo to prompt against). **Do this only after the steps above all worked** — by this point you have a working `claude-code.service`, a verified tmux session, and everything else from bootstrap.md sane. The NOPASSWD entry is the "I'm ready to hand the keys over" gate.
+
+```bash
+# Substitute $BOTUSER with your bot's unix username (the one from bootstrap.md Step 2)
+sudo tee /etc/sudoers.d/$BOTUSER >/dev/null <<EOF
+$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/systemctl, /usr/bin/crontab, /usr/bin/docker
+EOF
+sudo chmod 440 /etc/sudoers.d/$BOTUSER
+sudo visudo -cf /etc/sudoers.d/$BOTUSER     # should print "parsed OK"
+
+# Verify the bot user can actually use it
+sudo -u $BOTUSER sudo -n /usr/bin/systemctl --version > /dev/null && echo "NOPASSWD OK" || echo "NOPASSWD FAILED"
+```
+
+Anything outside `systemctl / crontab / docker` still prompts for the password and stays your job. If something feels off here, **don't reboot yet** — debug first. If you want to undo: `sudo rm /etc/sudoers.d/$BOTUSER`. If you'd rather grant blanket `NOPASSWD: ALL` instead of scoped (bigger blast radius if the bot ever runs amok), substitute `NOPASSWD: ALL` for the comma-list above. The kit's recommended path is scoped.
+
+### Reboot
+
 **Reboot the box now and verify it comes back up.** This is non-negotiable — verify the persistence works before you start trusting it. After the reboot:
 
 ```bash
