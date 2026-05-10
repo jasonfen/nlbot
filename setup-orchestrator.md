@@ -16,8 +16,64 @@ In this exact order:
 
 The other docs (`persistence-and-hardware.md`, `silverbullet-setup.md`, `telegram-integration.md`, `web-shell.md`, `memory.md`, `CLAUDE-nate.md`) are reference material. Read each one when its corresponding setup step calls for it.
 
+## Phase 0 — Collect placeholder values upfront
+
+Before running any setup step, sit with Nate for ~5 minutes and gather the values you'll need throughout the install. The kit's templates have `[bracket]` and `<angle>` placeholders that get substituted in many places — collecting them once at the start beats interrupting Nate twelve times mid-setup.
+
+**How to do this:** ask each question conversationally. When Nate gives an answer, store it in `setup-state.md` under a `## Values` block (see updated skeleton below). As you walk through `first-time-setup.md`, apply each value via the `Edit` tool to every file that references the corresponding placeholder. Don't ask Nate to grep and edit by hand — that's what you're for.
+
+### Values to collect at Phase 0 (no external dependencies)
+
+| Variable | Placeholder pattern | Where it's used | Question to ask |
+|---|---|---|---|
+| `BOT_NAME` | `[Your Bot's Name]` | `CLAUDE-nate.md` heading; reference throughout | "What name do you want this bot to go by? (Lowercase preferred — it'll also be the system username and the directory name.)" |
+| `USER_NAME` | `[Nate]`, `[Nate's]` | `CLAUDE-nate.md` body | "What should the bot call you?" |
+| `VAULT` | `<VAULT>` | `dot-claude/agents/*.md`, `dot-claude/commands/*.md`, `web-terminal/claude-web.service` | "Where do you want the vault directory? Default: `/home/$BOT_NAME/$BOT_NAME`" — derive automatically. |
+| `OS_USER` | `<USER>` (in `claude-web.service`) | systemd unit `User=` | Same as `BOT_NAME` from Step 2 of bootstrap.md. |
+| `CANARY_PHRASE` | `[CHOOSE YOUR CANARY PHRASE]`, `[YOUR CANARY PHRASE]` | `templates/identity.md`, `templates/soul-loop.md` | "Pick a memorable phrase the bot will use as an orientation anchor — anything 3–7 words. Examples: 'the lighthouse keeper waves at midnight', 'flat earth society for ants', 'green socks blue keyboard'." |
+| `IDLE_PREFS` | `[reading/coding/writing/exploring]` | `templates/identity.md` | "What does the bot prefer to do during idle time? Pick one or write your own." |
+| `CREATIVE_OUTPUT` | `[poems/stories/technical docs/music reviews]` | `templates/identity.md` | "What does the bot write when it has something to say?" |
+| `COMM_STYLE` | `[direct/gentle/playful/formal]` | `templates/identity.md` | "How should the bot talk to you?" |
+| `VALUES_CARES_ABOUT` | `[quality/speed/creativity/accuracy]` | `templates/identity.md` | "What should the bot prioritize?" |
+| `USER_ROLE` | (free-form) | `templates/user-profile.md` "Who I am" section | "What do you do? What are you working on?" |
+| `USER_HOBBIES` | (free-form) | `templates/user-profile.md` "Hobbies" | "What do you do for fun?" |
+| `USER_HOURS` | (free-form) | `templates/user-profile.md` "When I work" | "Roughly when are you usually online? Helps the bot pick its idle moments." |
+| `USER_PREFS` | (free-form) | `CLAUDE-nate.md` line "[Nate: Fill this in...]"; `templates/user-profile.md` "Anything else" | "Any non-negotiable preferences? Things you definitely don't want, or strong yes-do-this-always rules?" |
+
+### Values to collect just-in-time (require external action first)
+
+These you can't know up front; capture them when their setup step runs and store them in the same `Values` block.
+
+| Variable | Captured at | How |
+|---|---|---|
+| `TG_BOT_TOKEN` | Step 6 — Telegram | After Nate runs `/newbot` with `@BotFather`, paste the token. |
+| `TG_BOT_USERNAME` | Step 6 — Telegram | The `@<botname>_bot` handle BotFather assigns. |
+| `TG_CHAT_ID` | Step 6 — Telegram | After Nate DMs the bot once, fetch from `https://api.telegram.org/bot$TG_BOT_TOKEN/getUpdates`, grep `chat.id`. |
+| `SB_USER_PASSWORD` | Step 5 — SilverBullet | `openssl rand -base64 24` — generate, store, confirm with Nate. |
+| `SB_AUTH_TOKEN` | Step 5 — SilverBullet | `openssl rand -base64 24` — generate, store. |
+| `TAILSCALE_HOSTNAME` | Step 5 — SilverBullet (first Tailscale serve) | `tailscale status --json \| jq -r .Self.HostName` — auto-detect, confirm. |
+| `WEB_SESSION_SECRET` | Step 7 — Web shell (optional) | `openssl rand -hex 32` — generate, store. |
+| `WEB_UI_USERNAME` | Step 7 — Web shell | "What username for the web shell login?" Default: `BOT_NAME`. |
+| `WEB_UI_PASSWORD` | Step 7 — Web shell | `openssl rand -base64 24` — generate, show to Nate, store in `Values`, confirm he wrote it down. |
+
+### How to apply collected values
+
+For each file with placeholders, use the `Edit` tool with `replace_all: true` to substitute every occurrence at once. Example for `BOT_NAME`:
+
+```
+Edit /home/$BOT_NAME/$BOT_NAME/CLAUDE.md
+old_string: [Your Bot's Name]
+new_string: <whatever Nate said>
+replace_all: true
+```
+
+Repeat for `[Nate]` → `USER_NAME`, `<VAULT>` → vault path, etc. Confirm via grep after substitution that no `[bracket]` or `<angle>` placeholders remain (except the legitimate ones — backticked code blocks like `<TOKEN>` in URLs aren't placeholders to fill).
+
+When you're done with each file, add a one-line note in `setup-state.md` `## Notes`: "Filled placeholders in `CLAUDE.md`, `identity.md`, `soul-loop.md`."
+
 ## How to behave
 
+- **Don't make Nate fill in placeholders manually.** Do Phase 0 first (see above), store collected values in `setup-state.md`, then apply them with the `Edit` tool as you walk through each step. Nate should never have to grep for `[Your Bot's Name]` and edit a file in vim.
 - **Pause for human input** at: secret generation, password choice, BotFather token paste, Tailscale auth, sudo prompts, anything that requires Nate's eyes or typing on his own keyboard. Show him the exact command, wait for him to run it, then read the output.
 - **Update `setup-state.md` after each substantive step.** Move items Pending → In-progress → Done. Note timestamps and any unexpected output. This is the difference between a setup that survives an interruption and one that doesn't.
 - **Verify each step.** `first-time-setup.md` includes verification commands at the end of most steps (`tmux ls`, `systemctl status …`, `journalctl -u …`). Don't move on until the verification passes. If it fails, log the failure to `setup-state.md` Blockers and ask Nate.
@@ -82,16 +138,45 @@ If `setup-state.md` doesn't exist yet, create it with this content:
 
 Started: <YYYY-MM-DD HH:MM>
 Last updated: <YYYY-MM-DD HH:MM>
-Current phase: prereqs
+Current phase: phase-0
+
+## Values
+
+### Collected at Phase 0 (upfront)
+- BOT_NAME:
+- USER_NAME:
+- VAULT:                     # default /home/$BOT_NAME/$BOT_NAME
+- OS_USER:                   # same as $BOT_NAME
+- CANARY_PHRASE:
+- IDLE_PREFS:
+- CREATIVE_OUTPUT:
+- COMM_STYLE:
+- VALUES_CARES_ABOUT:
+- USER_ROLE:
+- USER_HOBBIES:
+- USER_HOURS:
+- USER_PREFS:
+
+### Collected just-in-time
+- TG_BOT_TOKEN:              # step 6 (Telegram)
+- TG_BOT_USERNAME:           # step 6
+- TG_CHAT_ID:                # step 6
+- SB_USER_PASSWORD:          # step 5 (SilverBullet) — generate openssl rand -base64 24
+- SB_AUTH_TOKEN:             # step 5 — generate openssl rand -base64 24
+- TAILSCALE_HOSTNAME:        # step 5 — derive from `tailscale status`
+- WEB_SESSION_SECRET:        # step 7 (Web shell, optional) — openssl rand -hex 32
+- WEB_UI_USERNAME:           # step 7 (default $BOT_NAME)
+- WEB_UI_PASSWORD:           # step 7 — openssl rand -base64 24
 
 ## Done
 (none yet)
 
 ## In-progress
-- prereqs check (Claude Code, Docker, Node 20+ if doing web shell, Tailscale)
+- Phase 0 — collect placeholder values (see "Values" above)
 
 ## Pending
-- vault directory + identity.md (canary phrase) + user-profile.md
+- prereqs check (Claude Code, Docker, Node 20+ if doing web shell, Tailscale)
+- vault directory + apply BOT_NAME/USER_NAME/CANARY_PHRASE/etc to all template files
 - CLAUDE.md from CLAUDE-nate.md template
 - keybindings disable (~/.claude/keybindings.json)
 - runtime files copied to vault (.claude/, runtime scripts)
