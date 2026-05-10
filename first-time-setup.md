@@ -73,6 +73,25 @@ Edit `~/.claude/keybindings.json`:
 
 Skip this and you'll discover why on day three. See [persistence-and-hardware.md](persistence-and-hardware.md) for the story.
 
+> ### ⚠ Heads-up: two `.claude/` directories
+>
+> By this point in setup you have **two distinct `.claude/` directories** doing different things. People confuse them; this is the most common kit-bring-up footgun after the locale issue.
+>
+> | Path | Scope | What it holds |
+> |---|---|---|
+> | `~/.claude/` (your `$HOME`) | Global — applies to every Claude Code session you start as this unix user | `keybindings.json` (the file you just edited), `settings.json`, `mcp.json`, `projects/<encoded-cwd>/` (history), and any agents/commands/hooks you want available everywhere |
+> | `~/<bot-name>/.claude/` (inside the vault, the renamed `dot-claude/` from Step 2) | Project — applies **only** when Claude Code is launched with the vault as its CWD | The kit's `agents/*.md` (soul-loop-runner, secretary, etc.) and `commands/*.md` (`/soul-loop`, `/secretary`, …) |
+>
+> Three specific things that bite:
+>
+> 1. **Forgetting the `dot-claude` → `.claude` rename in Step 2.** If you copied it as `dot-claude/` instead of `.claude/`, Claude Code won't find the project agents or slash commands and they'll silently do nothing — `/soul-loop` will just return "unknown command." Verify: `ls -d ~/<bot-name>/.claude` should show the directory.
+>
+> 2. **Editing the wrong `.claude/`.** Want a slash command everywhere? Edit `~/.claude/commands/`. Want one only in this vault? Edit `~/<bot-name>/.claude/commands/`. Both directories accept the same kinds of files; the difference is scope.
+>
+> 3. **Project config wins on merge.** If both directories contain `agents/secretary.md`, the vault's version overrides the global one when Claude Code is running with the vault as CWD. If you ever wonder "why isn't my edit taking effect," you might be editing the loser.
+>
+> Also worth knowing: `~/.claude/projects/<encoded-cwd>/` stores per-CWD session history. If you ever move the vault (`mv ~/oldname ~/newname`), the bot's "recent sessions" go orphaned and a fresh project entry is created under the new path. The journal and the bot itself are unaffected — only `claude --continue`'s memory of "what was I doing in that other directory" resets.
+
 ## Step 4 — Wire up persistence (10 min)
 
 Copy the runtime scripts from this kit into the vault, then drop the systemd unit:
