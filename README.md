@@ -10,6 +10,7 @@ If you have no idea what any of that means, start with **[INTRO-FOR-HUMANS.md](I
 
 ## Read order
 
+0. [bootstrap.md](bootstrap.md) — pre-flight prereqs to run on a fresh EC2 (or any clean Linux box) **before** Claude Code is installed. Skip this if your machine already has Node 20, Docker, tmux, and Claude Code.
 1. [INTRO-FOR-HUMANS.md](INTRO-FOR-HUMANS.md) — what you're getting into.
 2. [first-time-setup.md](first-time-setup.md) — the 30-minute walkthrough.
 3. [setup-orchestrator.md](setup-orchestrator.md) — read this **first** if a Claude Code instance is helping you install the kit. It targets that assistant, not you.
