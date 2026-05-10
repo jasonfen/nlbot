@@ -79,14 +79,20 @@ npm --version
 For SilverBullet (the vault editor). Skip only if you're certain you don't want SilverBullet.
 
 ```bash
-# Install Docker Engine via the official repo
+# Detect OS family — Docker has separate repos for ubuntu vs debian.
+# (Common gotcha: a Debian box like AWS's Debian-13/'trixie' AMI will fail
+# against the ubuntu URL with a 404 on /Release.)
+. /etc/os-release
+DOCKER_OS=$ID                # 'debian' or 'ubuntu'
+DOCKER_CODENAME=$VERSION_CODENAME
+
 sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
-  sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+curl -fsSL https://download.docker.com/linux/$DOCKER_OS/gpg | \
+  sudo gpg --dearmor --yes -o /etc/apt/keyrings/docker.gpg
 sudo chmod a+r /etc/apt/keyrings/docker.gpg
 
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-  https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" | \
+  https://download.docker.com/linux/$DOCKER_OS $DOCKER_CODENAME stable" | \
   sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
 sudo apt update
@@ -95,6 +101,8 @@ sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin d
 # Add yourself to the docker group so you don't need sudo for `docker`
 sudo usermod -aG docker $USER
 ```
+
+**If apt update fails with `404 Not Found` on the Docker Release file**, your codename probably isn't supported by Docker yet (rare, only happens on bleeding-edge releases). Check what's available at <https://download.docker.com/linux/debian/dists/> or <https://download.docker.com/linux/ubuntu/dists/> and substitute the nearest stable codename for `$DOCKER_CODENAME`.
 
 **Log out and back in** for the group change to take effect, then verify:
 
