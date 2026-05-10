@@ -11,7 +11,7 @@ This is your primary day-to-day interface to the bot. You read its journal in Si
 The official image is `ghcr.io/silverbulletmd/silverbullet:latest`. The simplest setup is `docker compose`:
 
 ```yaml
-# /home/nate/natebot/docker-compose.yml
+# <VAULT>/docker-compose.yml
 services:
   silverbullet:
     image: ghcr.io/silverbulletmd/silverbullet:latest
@@ -20,7 +20,7 @@ services:
       - SB_USER=nate:<long-random-password>           # basic auth for the web UI
       - SB_AUTH_TOKEN=<long-random-token>             # sync token (different from password)
     volumes:
-      - /home/nate/natebot:/space                     # the vault root
+      - <VAULT>:/space                     # the vault root
     ports:
       - "127.0.0.1:3001:3000"                         # bind to localhost only
 ```
@@ -30,7 +30,7 @@ Generate the password and token with `openssl rand -base64 24` (do it twice, the
 Bring it up:
 
 ```bash
-cd /home/nate/natebot
+cd <VAULT>
 docker compose up -d
 docker compose logs -f silverbullet     # verify clean start
 ```

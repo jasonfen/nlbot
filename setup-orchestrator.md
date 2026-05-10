@@ -58,18 +58,37 @@ These you can't know up front; capture them when their setup step runs and store
 
 ### How to apply collected values
 
-For each file with placeholders, use the `Edit` tool with `replace_all: true` to substitute every occurrence at once. Example for `BOT_NAME`:
+For each file copied into the vault, use the `Edit` tool with `replace_all: true` to substitute every placeholder. Run substitutions in this order:
 
+| Find (old_string) | Replace with | Files affected |
+|---|---|---|
+| `[Your Bot's Name]` | `$BOT_NAME` | `CLAUDE.md` |
+| `[Nate's]` | `$USER_NAME's` | `CLAUDE.md` |
+| `[Nate]` | `$USER_NAME` | `CLAUDE.md` |
+| `[Nate: Fill this in. ...]` (whole bracketed block) | the answer Nate gave to USER_PREFS | `CLAUDE.md` |
+| `[CHOOSE YOUR CANARY PHRASE]` | `$CANARY_PHRASE` | `identity.md` |
+| `[YOUR CANARY PHRASE]` | `$CANARY_PHRASE` | `soul-loop.md` |
+| `[reading/coding/writing/exploring]` | `$IDLE_PREFS` | `identity.md` |
+| `[poems/stories/technical docs/music reviews]` | `$CREATIVE_OUTPUT` | `identity.md` |
+| `[direct/gentle/playful/formal]` | `$COMM_STYLE` | `identity.md` |
+| `[quality/speed/creativity/accuracy]` | `$VALUES_CARES_ABOUT` | `identity.md` |
+| `<BOT_NAME>` | `$BOT_NAME` | `runtime/start-claude.sh` (after copying), systemd unit examples in `persistence-and-hardware.md` if cribbing from there, `web-shell.md` if doing the web shell |
+| `<USER>` | `$BOT_NAME` | `web-terminal/claude-web.service` |
+| `<VAULT>` | full vault path (e.g. `/home/nlbot/nlbot`) | `dot-claude/agents/*.md`, `dot-claude/commands/*.md`, `runtime/start-claude.sh`, `web-terminal/claude-web.service`, the docker-compose.yml you write for SilverBullet, the cron entries from Step 8 of `first-time-setup.md` |
+| `~/natebot` (literal in narrative examples) | `~/$BOT_NAME` or `$VAULT` | `first-time-setup.md`, `silverbullet-setup.md`, `telegram-integration.md`, `web-shell.md` — but **only** in commands you're about to run; you don't need to rewrite the source docs in place |
+
+After each substitution batch, confirm with `grep`:
+
+```bash
+# Should return no [bracket] or stray <USER>/<VAULT>/<BOT_NAME> in the vault
+grep -rE '\[Your Bot|\[Nate\]|\[CHOOSE YOUR|<USER>|<VAULT>|<BOT_NAME>' $VAULT/ \
+  --include='*.md' --include='*.service' --include='*.sh' \
+  | grep -v '\[ \]'   # ignore unchecked checkboxes
 ```
-Edit /home/$BOT_NAME/$BOT_NAME/CLAUDE.md
-old_string: [Your Bot's Name]
-new_string: <whatever Nate said>
-replace_all: true
-```
 
-Repeat for `[Nate]` → `USER_NAME`, `<VAULT>` → vault path, etc. Confirm via grep after substitution that no `[bracket]` or `<angle>` placeholders remain (except the legitimate ones — backticked code blocks like `<TOKEN>` in URLs aren't placeholders to fill).
+(Some `<bracket>` patterns are legitimate code — e.g. `https://api.telegram.org/bot<TOKEN>/...` is a URL placeholder Nate fills with his real token at Step 6, not a kit placeholder. Use judgment.)
 
-When you're done with each file, add a one-line note in `setup-state.md` `## Notes`: "Filled placeholders in `CLAUDE.md`, `identity.md`, `soul-loop.md`."
+After each file, add a one-line note in `setup-state.md` `## Notes`: "Filled placeholders in `CLAUDE.md`, `identity.md`, `soul-loop.md`."
 
 ## How to behave
 

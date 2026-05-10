@@ -52,7 +52,7 @@ About 130 lines of server code, ~100 lines of HTML+CSS, and a few `<script>` tag
 
 ```json
 {
-  "name": "natebot-web-terminal",
+  "name": "<BOT_NAME>-web-terminal",
   "version": "1.0.0",
   "private": true,
   "scripts": { "start": "node server.js" },
@@ -78,7 +78,7 @@ About 130 lines of server code, ~100 lines of HTML+CSS, and a few `<script>` tag
 ```
 PORT=3000
 SESSION_SECRET=<openssl rand -base64 48>
-UI_USERNAME=nate
+UI_USERNAME=<BOT_NAME>
 UI_PASSWORD=<a real password — `openssl rand -base64 24`>
 ```
 
@@ -147,7 +147,7 @@ wss.on('connection', (ws) => {
   const shell = pty.spawn('tmux', ['attach', '-t', 'claude'], {
     name: 'xterm-256color',
     cols: 120, rows: 40,
-    cwd: '/home/nate/natebot',
+    cwd: '<VAULT>',
     env: { ...process.env, LANG: 'C.utf8' }
   });
   shell.onData((data) => ws.readyState === ws.OPEN && ws.send(data));
@@ -262,19 +262,19 @@ Self-contained, no build step:
 ## systemd unit
 
 ```ini
-# /etc/systemd/system/natebot-web.service
+# /etc/systemd/system/<BOT_NAME>-web.service
 [Unit]
 Description=Natebot Web Terminal
 After=network.target claude-code.service
 
 [Service]
 Type=simple
-User=nate
-WorkingDirectory=/home/nate/natebot/web-terminal
+User=<BOT_NAME>
+WorkingDirectory=<VAULT>/web-terminal
 ExecStart=/usr/bin/node server.js
 Restart=on-failure
 RestartSec=10
-Environment=HOME=/home/nate
+Environment=HOME=/home/<BOT_NAME>
 Environment=LANG=C.utf8
 
 [Install]
@@ -283,8 +283,8 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now natebot-web.service
-journalctl -u natebot-web -f       # tail logs
+sudo systemctl enable --now <BOT_NAME>-web.service
+journalctl -u <BOT_NAME>-web -f       # tail logs
 ```
 
 ## Tailscale exposure
@@ -295,7 +295,7 @@ Same pattern as SilverBullet:
 sudo tailscale serve --bg --https=443 http://127.0.0.1:3000
 ```
 
-Now reachable at `https://natebot.<your-tailnet>.ts.net`. Add it to your phone's home screen (Safari "Add to Home Screen" picks up the manifest and apple-touch-icon and treats it like a native app — fullscreen, dark status bar, the whole bit).
+Now reachable at `https://<host>.<your-tailnet>.ts.net`. Add it to your phone's home screen (Safari "Add to Home Screen" picks up the manifest and apple-touch-icon and treats it like a native app — fullscreen, dark status bar, the whole bit).
 
 ## Security model
 
@@ -320,7 +320,7 @@ If you don't care about any of the above, `ttyd -p 3000 -c nate:<password> tmux 
 
 ## Troubleshooting
 
-- **"WebSocket connection failed"** — auth issue. Check `journalctl -u natebot-web` for the 401, verify `.env` username/password match what you typed.
+- **"WebSocket connection failed"** — auth issue. Check `journalctl -u <BOT_NAME>-web` for the 401, verify `.env` username/password match what you typed.
 - **"tmux session not found"** — the claude-code.service isn't running. `systemctl status claude-code`. If it's down, the web shell will keep retrying connect attempts until it comes back.
-- **Garbled characters** — your `LANG` is wrong. Make sure both `claude-code.service` and `natebot-web.service` set `LANG=C.utf8` in their `Environment=` blocks.
+- **Garbled characters** — your `LANG` is wrong. Make sure both `claude-code.service` and `<BOT_NAME>-web.service` set `LANG=C.utf8` in their `Environment=` blocks.
 - **Mobile keyboard hides input** — known iOS Safari quirk; client.js has a workaround. If you typed it from scratch and skipped that, copy the `addEventListener('focusin', ...)` block from the bundled `client.js`.

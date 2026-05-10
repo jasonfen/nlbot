@@ -36,7 +36,7 @@ A working bot is three long-running services on the host, plus an optional fourt
 1. **`claude-code.service`** — the Claude Code tmux session. Detailed below.
 2. **`telegram-bot.service`** — the Python daemon that send/receives Telegram messages. Setup in [telegram-integration.md](telegram-integration.md).
 3. **`docker-compose@<vault>.service`** *(or run `docker compose up -d` and let `restart: unless-stopped` handle it)* — runs the SilverBullet container, your editor for the vault. Setup in [silverbullet-setup.md](silverbullet-setup.md).
-4. *(optional)* **`natebot-web.service`** — small Node.js server that attaches to the same tmux pane and pipes the terminal through xterm.js for browser access. Setup in [web-shell.md](web-shell.md). Skip this if you only ever interact through Telegram + SilverBullet; add it the first time you wish you could see the live session from your phone.
+4. *(optional)* **`<BOT_NAME>-web.service`** — small Node.js server that attaches to the same tmux pane and pipes the terminal through xterm.js for browser access. Setup in [web-shell.md](web-shell.md). Skip this if you only ever interact through Telegram + SilverBullet; add it the first time you wish you could see the live session from your phone.
 
 All four are independently restartable. None depend on the others. If Claude crashes, SilverBullet keeps running; if the web shell hangs, Telegram is unaffected.
 
@@ -51,8 +51,8 @@ Wants=network-online.target
 
 [Service]
 Type=forking
-User=nate
-ExecStart=/home/nate/<vault>/start-claude.sh
+User=<BOT_NAME>
+ExecStart=<VAULT>/start-claude.sh
 ExecStop=/usr/bin/tmux kill-session -t claude
 Restart=on-failure
 RestartSec=5
@@ -78,10 +78,10 @@ export PATH="$HOME/.local/bin:$PATH"
 # --continue, NOT --resume main
 # (--resume can drop you in the Ink session-picker TUI, which doesn't
 #  respond to `tmux send-keys` — the boot then hangs)
-tmux new-session -d -s claude -c /home/nate/<vault> \
-  /home/nate/.local/bin/claude --permission-mode bypassPermissions --continue
+tmux new-session -d -s claude -c <VAULT> \
+  claude --permission-mode bypassPermissions --continue
 
-tmux select-pane -t claude:0.0 -T "natebot"
+tmux select-pane -t claude:0.0 -T "<BOT_NAME>"
 ```
 
 Two flags, one weekend of pain to find them. **Use both. Don't substitute.**
@@ -112,8 +112,8 @@ For a multi-tenant or production deployment, you'd want the alternative — a gr
 
 ### What this means in practice
 
-- **Pick a dedicated user.** `useradd -m nate-bot` if you want it isolated from your own login.
-- **Set the vault dir owner accordingly.** `chown -R nate-bot:nate-bot /home/nate-bot/natebot`.
+- **Pick a dedicated user.** the bot user (created in [bootstrap.md](bootstrap.md) Step 2) if you want it isolated from your own login.
+- **Set the vault dir owner accordingly.** `chown -R <BOT_NAME>:<BOT_NAME> <VAULT>`.
 - **Don't run anything else as that user.** Then the user account *is* the bot's sandbox.
 - **Watch the journal periodically.** Bot-driven file writes and shell commands all show up there if Claude does its job (and the soul-loop is set up to journal real actions).
 
@@ -161,13 +161,13 @@ The right way: system cron entries that fire a small shell script which writes a
 
 ```cron
 # Heartbeat every 10 min during active hours
-*/10 8-23 * * * /home/nate/<vault>/cron-prompts/inject-prompt.sh /soul-loop
+*/10 8-23 * * * <VAULT>/cron-prompts/inject-prompt.sh /soul-loop
 
 # Morning wake-up, weekdays
-0 7 * * 1-5 /home/nate/<vault>/cron-prompts/inject-prompt.sh /wake-up
+0 7 * * 1-5 <VAULT>/cron-prompts/inject-prompt.sh /wake-up
 
 # Midnight journal sync
-5 0 * * * /home/nate/<vault>/cron-prompts/inject-prompt.sh /midnight-maintenance
+5 0 * * * <VAULT>/cron-prompts/inject-prompt.sh /midnight-maintenance
 ```
 
 `inject-prompt.sh` is one small script — about 20 lines — that finds the tmux pane and types the command. Copy it from this kit; don't reinvent it.

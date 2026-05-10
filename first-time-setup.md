@@ -41,8 +41,9 @@ Pick a directory name. The convention here is the bot's name + lowercase: `~/nat
 mkdir -p ~/natebot/journals ~/natebot/handoffs
 cd ~/natebot
 
-# Substitute /path/to/kit with wherever you cloned this repo
-KIT=/path/to/nate-bot-kit
+# If you ran bootstrap.md Step 9, you're already in the cloned repo:
+KIT=$(pwd)
+# Otherwise: KIT=/wherever/you/cloned/nlbot
 
 cp $KIT/CLAUDE-nate.md       CLAUDE.md
 cp -r $KIT/templates         templates
@@ -140,7 +141,7 @@ Walked through end-to-end in [web-shell.md](web-shell.md). The condensed version
 1. Copy `web-terminal/` into `~/natebot/web-terminal/`.
 2. `cd web-terminal && npm install`.
 3. Create `.env` with `PORT=3000`, `SESSION_SECRET=<random>`, `UI_USERNAME=nate`, `UI_PASSWORD=<random>`.
-4. Drop `/etc/systemd/system/natebot-web.service` (template in the doc). Enable and start.
+4. Drop `/etc/systemd/system/<BOT_NAME>-web.service` (template in the doc). Enable and start.
 5. `sudo tailscale serve --bg --https=443 http://127.0.0.1:3000`.
 6. Visit `https://<host>.<tailnet>.ts.net`, log in, watch Claude type.
 
@@ -163,13 +164,13 @@ Then `crontab -e`:
 
 ```cron
 # 10-min heartbeat during active hours
-*/10 7-23 * * * /home/nate/natebot/cron-prompts/inject-prompt.sh /soul-loop
+*/10 7-23 * * * <VAULT>/cron-prompts/inject-prompt.sh /soul-loop
 
 # Morning wake-up (weekdays — adjust to your schedule)
-30 7 * * 1-5 /home/nate/natebot/cron-prompts/inject-prompt.sh /wake-up
+30 7 * * 1-5 <VAULT>/cron-prompts/inject-prompt.sh /wake-up
 
 # Midnight sync
-5 0 * * * /home/nate/natebot/cron-prompts/inject-prompt.sh /midnight-maintenance
+5 0 * * * <VAULT>/cron-prompts/inject-prompt.sh /midnight-maintenance
 ```
 
 Save. Within 10 minutes you should see soul-loop fires landing in `cron-prompts/job-log.md`. Now DM your bot — Claude should respond within a minute or two.
