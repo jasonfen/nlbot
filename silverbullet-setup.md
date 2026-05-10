@@ -6,7 +6,7 @@ This is your primary day-to-day interface to the bot. You read its journal in Si
 
 **You will need this**, even though Nate's bot is a "no-sidechat" build. SilverBullet isn't sidechat; it's the editor for the vault.
 
-*Separate decision (defer or skip): [Portainer](portainer.md) is an optional browser UI for managing Docker containers. It slots into the same `docker-compose.yml`, but is **not** required to run the bot — most one-person setups run without it. Don't install it just because you're reading this; read `portainer.md` first.*
+*Separate decision — and the kit recommends *against* installing Portainer here. [portainer.md](portainer.md) explains why: Claude tends to edit `docker-compose.yml` on disk and bypass the Portainer API, causing Portainer's stored stack definition to drift from reality. If you want the UI anyway, read `portainer.md` first.*
 
 ## Run it as a Docker container
 

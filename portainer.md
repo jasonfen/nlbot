@@ -1,14 +1,36 @@
 # Portainer — optional Docker UI
 
-> **This is a decision, not a default.** The kit's "happy path" runs without Portainer. Read this only if you're considering it.
+> **Decision, not default — and the kit recommends *against* it for most one-person Claude-managed bots.** The "happy path" runs without Portainer. The next section explains why a Claude-managed bot has a specific friction with Portainer that doesn't apply to a human-driven Docker host.
 
 A browser interface for the Docker containers you're already running (SilverBullet, plus anything else you add later). It runs as a container itself, lets you tail logs, exec into a shell, restart, inspect networks — all the things you'd otherwise use `docker compose logs`, `docker exec`, `docker ps` for from a terminal.
 
 **Reasonable answers to "should I install this":**
 
-- *No, skip it* — if you're comfortable with the Docker CLI from SSH or [web-shell](web-shell.md). This is the default. You give up nothing the bot needs.
-- *Yes, install it* — if your day-to-day involves checking on the bot from your phone, you don't want to drop into SSH for routine "is SilverBullet still up?" checks, and you accept that another container will have `docker.sock` access.
-- *Add later* — totally fine. It drops into the existing `docker-compose.yml` cleanly; you don't need to plan for it at setup time.
+- *No, skip it* — if you're comfortable with the Docker CLI from SSH or [web-shell](web-shell.md). **This is the recommended default for a Claude-managed bot** (see the next section for why). You give up nothing the bot needs.
+- *Yes, but in read-only / "look, don't touch" mode* — Portainer for log tails, exec, restart, dashboards. Stack changes (add a service, change env, change image) happen via `docker compose` on disk, not the UI. This is the most workable combination if you want the UI at all.
+- *Yes, as the source of truth for stacks* — only if you commit to running every stack change through the Portainer API and stop letting Claude edit `docker-compose.yml` directly. Higher discipline cost; not recommended for one-person setups.
+- *Add later* — totally fine. It drops into the existing `docker-compose.yml` cleanly.
+
+## Why this might be a poor fit for a Claude-managed bot
+
+Portainer wants to be the source of truth for the stacks it manages. It stores stack definitions in its own database and assumes you'll edit them through the UI or its API. The Docker CLI doesn't know about Portainer; Portainer figures out CLI-driven changes only by re-reading container state after the fact.
+
+That's exactly the disagreement waiting to happen here:
+
+1. You ask Claude to update the SilverBullet stack — say, bump the image tag or add a new service.
+2. Claude does the obvious thing: edits `<VAULT>/docker-compose.yml` on disk, runs `docker compose up -d`. Containers update.
+3. Portainer's UI still shows the **old** stack definition (the one stored in its DB the last time the stack was deployed via the UI or its API), even though the actual containers reflect Claude's edit. Stack state on disk and stack state in Portainer's DB have diverged.
+4. The next time you click "Update the stack" in Portainer, it re-deploys the old definition — undoing Claude's edit.
+
+The clean fix is to tell Claude to use the Portainer API (`PUT /api/stacks/{id}` with the new compose content, then `POST .../update`). In practice **Claude routinely forgets** — `docker compose` is the obvious tool, the API is the "you have to remember to use this" tool. Even with a strong note in `CLAUDE.md`, the drift returns the moment a soul-loop or `/wake-up` cycle decides to "fix something" with the closer-to-hand command.
+
+The honest mitigations are:
+
+- **Recommended:** don't install Portainer. Use `docker compose logs/restart/exec` from web-shell or SSH. The dashboards are nice but not load-bearing.
+- **Workable:** install Portainer for *observation only*. Make Claude understand (via `CLAUDE.md` rule) that stack changes go on disk and the UI's "Update the stack" button is off-limits. Treat the UI's stack-definition view as a stale cache.
+- **Disciplined but fragile:** make Portainer the source of truth. Pin every stack-changing operation Claude does to the Portainer API. Document this hard in `CLAUDE.md`. Expect periodic drift incidents anyway because Claude defaults to the CLI when it forgets the constraint, and you'll need to reconcile.
+
+The kit's recommendation is the first option. If you want a UI for log tails specifically, the [web-shell](web-shell.md) plus `tmux attach -t claude` plus `docker compose logs -f` gives you most of the same observability without the source-of-truth conflict.
 
 ## What you're trading
 

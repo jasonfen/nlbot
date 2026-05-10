@@ -15,7 +15,8 @@ If you have no idea what any of that means, start with **[INTRO-FOR-HUMANS.md](I
 2. [first-time-setup.md](first-time-setup.md) — the 30-minute walkthrough.
 3. [setup-orchestrator.md](setup-orchestrator.md) — read this **first** if a Claude Code instance is helping you install the kit. It targets that assistant, not you.
 4. **Core reference** (read when the corresponding setup step calls for it): [persistence-and-hardware.md](persistence-and-hardware.md), [silverbullet-setup.md](silverbullet-setup.md), [telegram-integration.md](telegram-integration.md), [memory.md](memory.md).
-5. **Optional add-ons** (decide whether you want them — none required for a working bot): [web-shell.md](web-shell.md) (browser access to the bot's tmux session), [portainer.md](portainer.md) (browser UI for managing your Docker containers).
+5. **Optional add-ons**: [web-shell.md](web-shell.md) — browser access to the bot's tmux session, recommended-if-you-want-mobile-access.
+6. **Read-but-don't-install-by-default**: [portainer.md](portainer.md) — the docs explain why a Claude-managed bot has specific friction with Portainer's stack-definition model. Skim before deciding.
 
 ## What's bundled
 
