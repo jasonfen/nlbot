@@ -138,7 +138,7 @@ This is your daily interface to the bot's brain. Walked through fully in [silver
 
 You can now read `journals/journal.md` from your phone and leave handoff tasks (`- [ ] do X #handoff`) for the bot.
 
-*An optional add-on you can decide on later: [Portainer](portainer.md) is a browser UI for managing your Docker containers (tail logs, restart, exec from your phone). Lives in the same `docker-compose.yml` as SilverBullet. Tradeoff: another running container with `docker.sock` access. Most one-person bots are fine without it — `docker compose logs/restart/exec` from a terminal covers the same ground. Read [portainer.md](portainer.md) if/when you want it.*
+*Aware-of-but-recommended-against: [Portainer](portainer.md) is a popular browser Docker UI, but it doesn't play well with a Claude-managed bot — Claude edits `docker-compose.yml` directly via `docker compose up -d`, which causes Portainer's stack definition to drift from reality. If you want a UI for log tails specifically, [web-shell.md](web-shell.md) plus `docker compose logs -f` covers the same ground without the source-of-truth conflict. See [portainer.md](portainer.md) for the full reasoning.*
 
 ## Step 6 — Set up Telegram (10 min)
 
