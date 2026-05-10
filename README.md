@@ -14,7 +14,7 @@ If you have no idea what any of that means, start with **[INTRO-FOR-HUMANS.md](I
 1. [INTRO-FOR-HUMANS.md](INTRO-FOR-HUMANS.md) — what you're getting into.
 2. [first-time-setup.md](first-time-setup.md) — the 30-minute walkthrough.
 3. [setup-orchestrator.md](setup-orchestrator.md) — read this **first** if a Claude Code instance is helping you install the kit. It targets that assistant, not you.
-4. The rest are reference: [persistence-and-hardware.md](persistence-and-hardware.md), [silverbullet-setup.md](silverbullet-setup.md), [telegram-integration.md](telegram-integration.md), [web-shell.md](web-shell.md), [memory.md](memory.md).
+4. The rest are reference: [persistence-and-hardware.md](persistence-and-hardware.md), [silverbullet-setup.md](silverbullet-setup.md), [telegram-integration.md](telegram-integration.md), [web-shell.md](web-shell.md), [portainer.md](portainer.md), [memory.md](memory.md).
 
 ## What's bundled
 

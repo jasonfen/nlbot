@@ -6,6 +6,8 @@ This is your primary day-to-day interface to the bot. You read its journal in Si
 
 **You will need this**, even though Nate's bot is a "no-sidechat" build. SilverBullet isn't sidechat; it's the editor for the vault.
 
+*Optional companion: [Portainer](portainer.md) — a browser UI for managing the Docker containers SilverBullet (and anything else you add) runs in. Slots into the same `docker-compose.yml`. Skip unless you want point-and-click "tail logs / restart container" without SSH.*
+
 ## Run it as a Docker container
 
 The official image is `ghcr.io/silverbulletmd/silverbullet:latest`. The simplest setup is `docker compose`:
