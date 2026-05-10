@@ -5,11 +5,11 @@ A pre-flight checklist for a fresh EC2 (or any clean Debian/Ubuntu box). This co
 ## Assumptions
 
 - Ubuntu 22.04+ or Debian 12+. (Amazon Linux works too with `dnf` substituted for `apt`; flag in your head.)
-- You're SSH'd in as `ubuntu` (or another sudoer). Root works but isn't recommended.
+- You're logged in either as root or as the cloud's default user (`ubuntu` on Ubuntu AMIs, `admin` on Debian AMIs, `ec2-user` on Amazon Linux).
 - **Tailscale is already installed and logged in.** (`tailscale status` should show your tailnet.)
 - Outbound HTTPS works (default on every cloud VM I've seen, but worth saying out loud).
 
-If your instance is smaller than ~2 GB RAM, do Step 7 (swap) early — Node + Claude Code + Docker get cranky without it.
+If your instance is smaller than ~2 GB RAM, do Step 8 (swap) early — Node + Claude Code + Docker get cranky without it.
 
 ---
 
@@ -20,6 +20,12 @@ sudo apt update
 sudo apt upgrade -y
 ```
 
+If you're root and got `sudo: command not found` (some minimal Debian images), install it first:
+
+```bash
+apt update && apt install -y sudo
+```
+
 Reboot if the kernel updated:
 
 ```bash
@@ -28,7 +34,73 @@ Reboot if the kernel updated:
 
 (SSH back in via Tailscale after the reboot if so.)
 
-## Step 2 — Locale (1 min, critical)
+## Step 2 — Create the bot user (3 min)
+
+Don't run the bot as root or as the cloud's shared default user. Make it a dedicated account so SSH keys, sudoers, group memberships, and crontab live in one tidy `$HOME`.
+
+Pick a username — by convention, the bot's name in lowercase. The walkthrough below uses `nlbot`; substitute your own.
+
+```bash
+BOTUSER=nlbot
+```
+
+### 2a. Make sure sudo exists
+
+Some minimal Debian cloud images don't ship with `sudo` installed (you log in as root via SSH key instead). Check and install if needed:
+
+```bash
+if ! command -v sudo >/dev/null; then
+  # Run as root — `apt` directly, no sudo
+  apt update && apt install -y sudo
+fi
+```
+
+### 2b. Create the user, set a password, grant sudo
+
+```bash
+sudo adduser --gecos "" $BOTUSER
+# adduser will prompt twice for a password — pick a strong one,
+# you'll need it whenever the bot user runs sudo
+sudo usermod -aG sudo $BOTUSER
+```
+
+If you'd rather have **passwordless sudo** for this user (convenient for unattended cron-driven work; tradeoff is anyone with a shell as $BOTUSER gets root-equivalent), drop a sudoers snippet instead of relying on group membership:
+
+```bash
+echo "$BOTUSER ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/$BOTUSER
+sudo chmod 440 /etc/sudoers.d/$BOTUSER
+sudo visudo -cf /etc/sudoers.d/$BOTUSER   # syntax-check; should print "parsed OK"
+```
+
+(Pick one approach — group membership or NOPASSWD — not both. The persistent `claude-code.service` runs without prompting either way; sudo only matters when you, the human, are interactively setting things up.)
+
+### 2c. Copy your SSH key over so you can `ssh $BOTUSER@<host>` directly
+
+This is what lets you skip back to the cloud-default user once you're done with bootstrap. Tailscale's SSH or your existing `authorized_keys` both work.
+
+```bash
+sudo install -d -m 700 -o $BOTUSER -g $BOTUSER /home/$BOTUSER/.ssh
+sudo cp ~/.ssh/authorized_keys /home/$BOTUSER/.ssh/authorized_keys
+sudo chown $BOTUSER:$BOTUSER /home/$BOTUSER/.ssh/authorized_keys
+sudo chmod 600 /home/$BOTUSER/.ssh/authorized_keys
+```
+
+If you're using Tailscale SSH (`tailscale up --ssh`), you can skip the key-copy entirely — Tailscale handles auth — but copying the key is harmless and gives you a fallback path.
+
+### 2d. Switch to the new user
+
+Everything from Step 3 onward runs as `$BOTUSER`. Open a fresh login shell so group memberships take effect:
+
+```bash
+sudo su - $BOTUSER
+# from here on, your prompt is $BOTUSER's, and `whoami` returns $BOTUSER
+```
+
+(You can also disconnect and `ssh $BOTUSER@<host>` instead. Either way works.)
+
+You'll add the bot user to the `docker` group in Step 6 — that step's `sudo usermod -aG docker $USER` picks up the right user automatically since you're now logged in as `$BOTUSER`.
+
+## Step 3 — Locale (1 min, critical)
 
 Claude Code uses Unicode box-drawing characters (`❯ ─ ┌`) for its prompt and panes. If the locale isn't right, you'll see `__` or `??` instead and the UI will look broken even though it's working.
 
@@ -47,7 +119,7 @@ echo "❯ ─ ┌"
 
 If the second line shows the actual glyphs (not `??`), you're good. If not, see the "Glyph rendering inside tmux" section in [`persistence-and-hardware.md`](persistence-and-hardware.md).
 
-## Step 3 — Core tools (1 min)
+## Step 4 — Core tools (1 min)
 
 ```bash
 sudo apt install -y \
@@ -63,7 +135,7 @@ sudo apt install -y \
   build-essential
 ```
 
-## Step 4 — Node.js 20+ (2 min)
+## Step 5 — Node.js 20+ (2 min)
 
 Claude Code needs Node 20 or newer. The Ubuntu repo ships an older version, so use NodeSource:
 
@@ -74,7 +146,7 @@ node --version    # v20.x.y
 npm --version
 ```
 
-## Step 5 — Docker + compose plugin (3 min)
+## Step 6 — Docker + compose plugin (3 min)
 
 For SilverBullet (the vault editor). Skip only if you're certain you don't want SilverBullet.
 
@@ -111,7 +183,7 @@ docker compose version    # 'docker compose' (two words, plugin), not 'docker-co
 docker run --rm hello-world
 ```
 
-## Step 6 — Claude Code (1 min)
+## Step 7 — Claude Code (1 min)
 
 ```bash
 sudo npm install -g @anthropic-ai/claude-code
@@ -126,7 +198,7 @@ claude
 
 Follow the OAuth prompt, accept the TOS, exit.
 
-## Step 7 — Swap file (optional but recommended)
+## Step 8 — Swap file (optional but recommended)
 
 If your instance has less than ~4 GB RAM, give it 2 GB of swap. Skip if you've already got plenty of memory.
 
@@ -139,7 +211,7 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 free -h    # should show ~2G under 'Swap'
 ```
 
-## Step 8 — Timezone (optional)
+## Step 9 — Timezone (optional)
 
 The bot's journal entries use the local timezone. Defaults are usually UTC; set explicitly if you want something else:
 
@@ -148,7 +220,7 @@ sudo timedatectl set-timezone America/New_York   # or your zone
 timedatectl
 ```
 
-## Step 9 — Clone the kit (1 min)
+## Step 10 — Clone the kit (1 min)
 
 ```bash
 cd ~
@@ -159,7 +231,7 @@ ls
 
 You should see `README.md`, `first-time-setup.md`, `setup-orchestrator.md`, the `runtime/`, `dot-claude/`, `templates/`, and `web-terminal/` directories.
 
-## Step 10 — Sanity check
+## Step 11 — Sanity check
 
 Run all the prereq checks at once:
 
