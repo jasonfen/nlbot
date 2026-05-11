@@ -8,6 +8,29 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
+// Prefer secrets loaded via systemd LoadCredentialEncrypted= over the
+// fallback `.env` (plaintext) values. The credentials directory is a
+// kernel-mounted tmpfs only visible to this process — `cat` outside the
+// service can't see it. If $CREDENTIALS_DIRECTORY isn't set (e.g., running
+// outside systemd), the dotenv values take over.
+function loadFromCreds() {
+  const dir = process.env.CREDENTIALS_DIRECTORY;
+  if (!dir) return;
+  const map = {
+    'web-session-secret': 'SESSION_SECRET',
+    'web-ui-username':    'UI_USERNAME',
+    'web-ui-password':    'UI_PASSWORD',
+  };
+  for (const [credName, envName] of Object.entries(map)) {
+    const file = path.join(dir, credName);
+    if (fs.existsSync(file)) {
+      // Trim trailing newline only; passwords may contain whitespace.
+      process.env[envName] = fs.readFileSync(file, 'utf8').replace(/\n$/, '');
+    }
+  }
+}
+loadFromCreds();
+
 const app = express();
 const server = http.createServer(app);
 

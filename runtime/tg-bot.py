@@ -20,13 +20,40 @@ POLL_TIMEOUT = 5  # seconds — short so we check outbound frequently
 
 
 def load_config():
+    """Load BOT_TOKEN / CHAT_ID / BOT_USERNAME.
+
+    Preference order:
+    1. systemd-creds-loaded files under $CREDENTIALS_DIRECTORY (when
+       running as the daemon under telegram-bot.service with
+       LoadCredentialEncrypted= entries).
+    2. .telegram/config plaintext fallback (older installs, or when
+       running interactively outside systemd).
+
+    The credentials directory is a kernel-mounted tmpfs visible only to
+    this process — `cat` outside the daemon can't see it.
+    """
     config = {}
-    with open(CONFIG_FILE) as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                key, val = line.split("=", 1)
-                config[key.strip()] = val.strip()
+    creds_dir = os.environ.get("CREDENTIALS_DIRECTORY")
+    if creds_dir:
+        creds_map = {
+            "tg-bot-token":    "BOT_TOKEN",
+            "tg-chat-id":      "CHAT_ID",
+            "tg-bot-username": "BOT_USERNAME",
+        }
+        for cred_name, key in creds_map.items():
+            cred_path = Path(creds_dir) / cred_name
+            if cred_path.is_file():
+                config[key] = cred_path.read_text().rstrip("\n")
+    # Plaintext fallback — only fill keys not already populated.
+    if CONFIG_FILE.is_file():
+        with open(CONFIG_FILE) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    key, val = key.strip(), val.strip()
+                    if key not in config:
+                        config[key] = val
     return config
 
 
