@@ -26,6 +26,8 @@ If you have no idea what any of that means, start with **[INTRO-FOR-HUMANS.md](I
 - **`dot-claude/`** — Claude Code config (custom agents + slash commands). The leading dot is dropped so it's not hidden by `ls`; the orchestrator renames it to `.claude/` when copying to your vault root.
 - **`web-terminal/`** — the optional browser shell (Express + WebSocket + node-pty + xterm.js, login-protected, Tailscale-only). Skip if you only want Telegram + SilverBullet.
 - **`templates/`** — fresh copies of `identity.md`, `user-profile.md`, `soul-loop.md`, `secretary-agent.md` to seed your vault.
+- **`templates/vault-pages/`** — SilverBullet index pages (`index.md`, `dashboard.md`, `handoffs.md`, `journals.md`, `processes.md`, `inbox.md`, `decisions.md`) copied to the vault root during Step 2. Without these the vault renders empty on first SB load.
+- **`templates/processes/`** — canonical lifecycle docs (`soul-loop.md`, `journaling.md`, `handoffs.md`) copied to `<VAULT>/processes/`. The agents read these at runtime; edit the vault doc, not the agent prompt.
 
 ## Hardware floor
 
