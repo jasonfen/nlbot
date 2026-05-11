@@ -45,7 +45,7 @@ mkdir -p <vault>/.telegram
 cat > <vault>/.telegram/config <<EOF
 BOT_TOKEN=123456789:AAH...
 CHAT_ID=987654321
-BOT_USERNAME=natebot
+BOT_USERNAME=<your-bot-username>
 EOF
 chmod 600 <vault>/.telegram/config   # token is a secret
 ```

@@ -57,7 +57,7 @@ For remote access from your phone or laptop, expose it through Tailscale instead
 
 Install Tailscale on the host. Then either:
 
-- **`tailscale serve` (recommended)** — proxies the localhost port onto your tailnet at a stable HTTPS URL: `https://natebot.<your-tailnet>.ts.net`.
+- **`tailscale serve` (recommended)** — proxies the localhost port onto your tailnet at a stable HTTPS URL: `https://<bot-host>.<your-tailnet>.ts.net` (the hostname is whatever Tailscale registered for the box).
   ```bash
   sudo tailscale serve --bg --https=443 http://127.0.0.1:3001
   sudo tailscale serve status

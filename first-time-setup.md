@@ -51,36 +51,41 @@ Anything that fails: install the missing piece before continuing. `docker compos
 
 ## Step 2 — Drop in the vault (5 min)
 
-Pick a directory name. The convention here is the bot's name + lowercase: `~/natebot`. From here on this doc uses `~/natebot/` as the vault root — substitute your own name throughout if you pick something else.
+If you cloned the kit per `bootstrap.md`, the clone IS your vault — the kit files (`CLAUDE-nate.md`, `templates/`, `dot-claude/`, `runtime/`) sit alongside the vault files you're about to create (`journals/`, `handoffs/`, etc.). The clone directory's path depends on whatever name you cloned it under. Set it once as `VAULT` and everything below uses that variable:
 
 ```bash
-mkdir -p ~/natebot/journals/fiction ~/natebot/handoffs ~/natebot/processes
-cd ~/natebot
+VAULT=~/nlbot
+cd $VAULT
+```
 
-# If you ran bootstrap.md Step 9, you're already in the cloned repo:
-KIT=$(pwd)
-# Otherwise: KIT=/wherever/you/cloned/nlbot
+If you cloned with a different directory name (e.g. `~/natebot` because your bot is called `natebot`), set `VAULT` to that path instead. Every subsequent code block in this doc uses `$VAULT`, so just changing this one line propagates everywhere.
 
-cp $KIT/CLAUDE-nate.md       CLAUDE.md
-cp -r $KIT/templates         templates
+Build the vault skeleton and copy the kit's seed files:
+
+```bash
+mkdir -p $VAULT/journals/fiction $VAULT/handoffs $VAULT/processes
+KIT=$VAULT
+
+cp $KIT/CLAUDE-nate.md       $VAULT/CLAUDE.md
+cp -r $KIT/templates         $VAULT/templates
 # NOTE the rename in the next command: dot-claude → .claude
-cp -r $KIT/dot-claude        .claude
+cp -r $KIT/dot-claude        $VAULT/.claude
 
 # Seed the bot's identity from the bundled templates
-cp templates/identity.md     identity.md
-cp templates/user-profile.md user-profile.md
-cp templates/soul-loop.md    soul-loop.md
+cp $VAULT/templates/identity.md     $VAULT/identity.md
+cp $VAULT/templates/user-profile.md $VAULT/user-profile.md
+cp $VAULT/templates/soul-loop.md    $VAULT/soul-loop.md
 
-# Seed the SilverBullet vault — top-level index pages + canonical process docs
-cp $KIT/templates/vault-pages/*.md  ./
-cp $KIT/templates/processes/*.md    ./processes/
+# Seed the SilverBullet vault — top-level index pages + process docs
+cp $KIT/templates/vault-pages/*.md  $VAULT/
+cp $KIT/templates/processes/*.md    $VAULT/processes/
 
-touch journals/journal.md
+touch $VAULT/journals/journal.md
 ```
 
 Now open `CLAUDE.md` in your editor and replace every `[Nate]` and `[Your Bot's Name]` placeholder with your actual name and the bot's name. Same with `identity.md` and `user-profile.md` — fill in the canary phrase, your role, what you want from this bot. There's no "right" answer; first-pass guesses are fine, you'll edit later.
 
-The vault-page copies above also contain `<BOT_NAME>` / `<USER_NAME>` / `<VAULT>` placeholders. If you're walking through this with the assisting CC and Phase 0 (see `setup-orchestrator.md`), those get substituted automatically when CC applies the Phase 0 map. If you're doing DIY install, run a one-shot `sed` over `~/natebot/*.md ~/natebot/processes/*.md` once you've decided on the values.
+The vault-page copies above also contain `<BOT_NAME>` / `<USER_NAME>` / `<VAULT>` placeholders. If you're walking through this with the assisting CC and Phase 0 (see `setup-orchestrator.md`), those get substituted automatically when CC applies the Phase 0 map. If you're doing DIY install, run a one-shot `sed` over `$VAULT/*.md $VAULT/processes/*.md` once you've decided on the values.
 
 **About the canary phrase:** in `identity.md`, you'll set a short string ("the lighthouse keeper waves at midnight" — anything memorable). The bot is supposed to remember it without re-reading the file. If at any point it can't recall the phrase, that's its signal it has lost context (post-restart, post-compaction) and needs to re-anchor by reading `identity.md` and `user-profile.md`. It's not a security secret; just an orientation anchor.
 
@@ -120,10 +125,11 @@ Skip this and you'll discover why on day three. See [persistence-and-hardware.md
 Copy the runtime scripts from this kit into the vault, then drop the systemd unit:
 
 ```bash
-cp $KIT/runtime/start-claude.sh ~/natebot/start-claude.sh
-chmod +x ~/natebot/start-claude.sh
-# Edit the path inside if your vault isn't ~/natebot
+cp $KIT/runtime/start-claude.sh $VAULT/start-claude.sh
+chmod +x $VAULT/start-claude.sh
 ```
+
+The script has a `cd` line near the top that hardcodes the vault path. Open `$VAULT/start-claude.sh` and update that line if it doesn't already point at `$VAULT`.
 
 Then drop the systemd unit at `/etc/systemd/system/claude-code.service` (template in [persistence-and-hardware.md](persistence-and-hardware.md) — change `User=` and the path).
 
@@ -248,7 +254,7 @@ This is your daily interface to the bot's brain. Walked through fully in [silver
    openssl rand -base64 24    # for SB_USER password
    openssl rand -base64 24    # for SB_AUTH_TOKEN
    ```
-2. Drop a `docker-compose.yml` in `~/natebot/` with the silverbullet service block (template in [silverbullet-setup.md](silverbullet-setup.md)) — set `SB_USER=nate:<password>`, `SB_AUTH_TOKEN=<token>`, mount `~/natebot:/space`, bind `127.0.0.1:3001:3000`.
+2. Drop a `docker-compose.yml` in `$VAULT/` with the silverbullet service block (template in [silverbullet-setup.md](silverbullet-setup.md)) — set `SB_USER=<bot-name>:<password>`, `SB_AUTH_TOKEN=<token>`, mount `$VAULT:/space`, bind `127.0.0.1:3001:3000`.
 3. `docker compose up -d` and visit `http://localhost:3001`. Log in with the SB_USER credentials. You should see your vault.
 4. Expose via Tailscale: `sudo tailscale serve --bg --https=443 http://127.0.0.1:3001`. Now reachable from your phone at `https://<host>.<tailnet>.ts.net`.
 5. Install the **TreeView** plug — essential for vault navigation. In SilverBullet:
@@ -267,8 +273,8 @@ Walked through end-to-end in [telegram-integration.md](telegram-integration.md).
 
 1. In Telegram, message `@BotFather`, send `/newbot`, follow prompts, save the token.
 2. DM your new bot once. Then visit `https://api.telegram.org/bot<TOKEN>/getUpdates` and find your `chat.id`.
-3. Create `~/natebot/.telegram/config` with `BOT_TOKEN=`, `CHAT_ID=`, `BOT_USERNAME=`. `chmod 600` it.
-4. Copy `tg-bot.py` and `tg-post.sh` from `runtime/` into `~/natebot/.telegram/`. Make them executable (`chmod +x`).
+3. Create `$VAULT/.telegram/config` with `BOT_TOKEN=`, `CHAT_ID=`, `BOT_USERNAME=`. `chmod 600` it.
+4. Copy `tg-bot.py` and `tg-post.sh` from `runtime/` into `$VAULT/.telegram/`. Make them executable (`chmod +x`).
 5. Drop `/etc/systemd/system/telegram-bot.service` (template in [telegram-integration.md](telegram-integration.md)). Enable and start.
 6. DM your bot something — anything. `journalctl -u telegram-bot -f` should show the message arrive. The file `.telegram/new-messages.txt` should appear in your vault.
 
@@ -276,9 +282,9 @@ Walked through end-to-end in [telegram-integration.md](telegram-integration.md).
 
 The web shell is a small Node.js server that attaches to your `claude` tmux session and renders it through xterm.js in the browser, login-protected and Tailscale-only. Walked through end-to-end in [web-shell.md](web-shell.md). The condensed version:
 
-1. Copy `web-terminal/` into `~/natebot/web-terminal/`.
-2. `cd web-terminal && npm install`.
-3. Create `.env` with `PORT=3000`, `SESSION_SECRET=<random>`, `UI_USERNAME=nate`, `UI_PASSWORD=<random>`.
+1. Copy `web-terminal/` into `$VAULT/web-terminal/`.
+2. `cd $VAULT/web-terminal && npm install`.
+3. Create `.env` with `PORT=3000`, `SESSION_SECRET=<random>`, `UI_USERNAME=<bot-name>`, `UI_PASSWORD=<random>`.
 4. Drop `/etc/systemd/system/<BOT_NAME>-web.service` (template in the doc). Enable and start.
 5. `sudo tailscale serve --bg --https=8443 http://127.0.0.1:3000`.
 6. Visit `https://<host>.<tailnet>.ts.net:8443`, log in, watch Claude type.
@@ -290,10 +296,10 @@ On iOS, "Add to Home Screen" makes it behave like a native app (PWA manifest is 
 ⚠ **Do this AFTER the verification reboot from Step 4 — not before.** If cron fires before the tmux session exists, `inject-prompt.sh` will silently noop.
 
 ```bash
-mkdir -p ~/natebot/cron-prompts
-cp $KIT/runtime/inject-prompt.sh ~/natebot/cron-prompts/
-cp $KIT/runtime/cron-prompts/*.md ~/natebot/cron-prompts/
-chmod +x ~/natebot/cron-prompts/inject-prompt.sh
+mkdir -p $VAULT/cron-prompts
+cp $KIT/runtime/inject-prompt.sh $VAULT/cron-prompts/
+cp $KIT/runtime/cron-prompts/*.md $VAULT/cron-prompts/
+chmod +x $VAULT/cron-prompts/inject-prompt.sh
 ```
 
 Then `crontab -e`:

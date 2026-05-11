@@ -76,7 +76,7 @@ For each file copied into the vault, use the `Edit` tool with `replace_all: true
 | `<USER_NAME>` | `$USER_NAME` | `<VAULT>/index.md`, `<VAULT>/processes/journaling.md`, `<VAULT>/processes/handoffs.md` (introduced by `templates/vault-pages/` and `templates/processes/`) |
 | `<USER>` | `$BOT_NAME` | `web-terminal/claude-web.service` |
 | `<VAULT>` | full vault path (e.g. `/home/nlbot/nlbot`) | `dot-claude/agents/*.md`, `dot-claude/commands/*.md`, `runtime/start-claude.sh`, `web-terminal/claude-web.service`, the docker-compose.yml you write for SilverBullet, the cron entries from Step 8 of `first-time-setup.md`, `<VAULT>/processes/soul-loop.md`, `<VAULT>/processes/handoffs.md` |
-| `~/natebot` (literal in narrative examples) | `~/$BOT_NAME` or `$VAULT` | `first-time-setup.md`, `silverbullet-setup.md`, `telegram-integration.md`, `web-shell.md` — but **only** in commands you're about to run; you don't need to rewrite the source docs in place |
+| `$VAULT` (shell variable used in docs) | full vault path (`/home/$BOT_NAME/<clone-dir>`) | `first-time-setup.md`, `silverbullet-setup.md`, `telegram-integration.md`, `web-shell.md` — define `VAULT=~/<clone-dir>` once at the top of Step 2 of `first-time-setup.md` and every later code block uses `$VAULT` directly. No further substitution needed |
 
 After each substitution batch, confirm with `grep`:
 
