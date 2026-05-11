@@ -149,17 +149,32 @@ prompt_value USER_PREFS         "Non-negotiable preferences (one short line)" "b
 [ -z "${VAULT:-}" ] && { echo "VAULT unresolved; aborting." >&2; exit 1; }
 
 # --- Step 1: prereq check ---------------------------------------------------
+#
+# setup-status.sh exits 1 whenever ANY part of the kit is incomplete —
+# including the vault skeleton + claude-code.service that THIS script
+# is about to install. So we can't gate on its exit code directly.
+# Instead, run it once, capture the output, and only abort if a [✗]
+# appears in the "System prerequisites" or "Bot user" sections (the
+# things bootstrap.md owns; everything else is what we're here to do).
 
 banner "Step 1 — Prereqs (delegating to setup-status.sh)"
 if [ -x "$VAULT/runtime/setup-status.sh" ]; then
-  if ! bash "$VAULT/runtime/setup-status.sh" >/dev/null 2>&1; then
-    bash "$VAULT/runtime/setup-status.sh" || true
-    echo
-    echo "  ✗ Prereq check reported issues. Resolve the items above, then re-run." >&2
-    echo "    (System packages, bot user, docker group, ssh keys — see bootstrap.md)" >&2
+  PROBE=$(bash "$VAULT/runtime/setup-status.sh" 2>&1 || true)
+  echo "$PROBE"
+  echo
+  # Extract just the System + Bot-user sections (between their headers
+  # and the next major section "Vault and bot service") and check those
+  # lines for [✗] markers. Anything before "Vault and bot service" is a
+  # genuine prereq the script can't fix; anything after is our own job.
+  PREREQ_FAILS=$(printf '%s\n' "$PROBE" \
+    | awk '/^Vault and bot service/{exit} /\[✗\]/{print}')
+  if [ -n "$PREREQ_FAILS" ]; then
+    echo "  ✗ Genuine prereq failures (bootstrap.md territory):" >&2
+    printf '%s\n' "$PREREQ_FAILS" | sed 's/^/      /' >&2
+    echo "    Resolve those, then re-run this script." >&2
     exit 1
   fi
-  echo "  ✓ Prereqs look good."
+  echo "  ✓ System + bot-user prereqs OK. Vault/service items below will be addressed by Steps 2-4."
 else
   skip "setup-status.sh not executable (continuing — re-bootstrap recommended)"
 fi
