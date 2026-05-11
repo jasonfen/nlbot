@@ -4,6 +4,18 @@ A 30-minute path from "I want one of these" to "it's running and I'm talking to 
 
 *If a Claude Code instance is helping you with the install, it should read [setup-orchestrator.md](setup-orchestrator.md) first. That doc tells the assisting Claude how to walk through this one with you and track progress in `setup-state.md` so an interrupted setup can resume cleanly.*
 
+## TL;DR — run the script
+
+`runtime/first-time-setup.sh` automates Steps 1–4 of this walkthrough end-to-end: vault skeleton, identity seed, placeholder substitution, keybindings, `start-claude.sh`, the systemd unit, and bringing up the tmux session. It stops at the kit's explicit "hand over the keys" gate — the NOPASSWD sudoers grant and verification reboot stay manual.
+
+```bash
+bash $VAULT/runtime/first-time-setup.sh
+```
+
+The script prompts interactively for Phase 0 values (`BOT_NAME`, `USER_NAME`, `VAULT`, `CANARY_PHRASE`, identity prefs), with sensible defaults in brackets. Pre-set env vars (`BOT_NAME=nlbot ./first-time-setup.sh`) skip the corresponding prompt; values already populated in `setup-state.md`'s Values block are also picked up automatically. After the run, the script prints the remaining manual commands (NOPASSWD grant, reboot, `setup-status.sh` to watch the bot-driven Steps 5–9).
+
+The rest of this doc is the canonical reference: read along to know exactly what the script is doing, or use the prose blocks to do any step by hand.
+
 ## What you'll need before you start
 
 - A Linux machine you can leave running (LXC container, spare laptop, small VPS — see [persistence-and-hardware.md](persistence-and-hardware.md) for the floor: 2 cores / 2 GB RAM / 8 GB disk).
