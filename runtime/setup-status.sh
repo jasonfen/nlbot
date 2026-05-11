@@ -263,6 +263,45 @@ if [ -d "$VAULT" ]; then
   else
     fail "identity.md + user-profile.md" "(first-time-setup.md Step 2)"
   fi
+
+  # .claude/ freshness: confirm the post-merge hook is installed and that
+  # the rendered .claude/ matches what dot-claude/ would produce right
+  # now. If they drift, kit updates aren't reaching the bot — every git
+  # pull leaves orphan-stale slash commands and agents.
+  if [ -x "$VAULT/.git/hooks/post-merge" ] && grep -q refresh-claude-dir.sh "$VAULT/.git/hooks/post-merge" 2>/dev/null; then
+    pass ".claude/ auto-refresh hook installed" "(.git/hooks/post-merge)"
+  else
+    warn ".claude/ auto-refresh hook" "(install: install -m 755 $VAULT/runtime/hooks/post-merge $VAULT/.git/hooks/post-merge)"
+  fi
+  if [ -d "$VAULT/dot-claude" ] && [ -d "$VAULT/.claude" ] && [ -x "$VAULT/runtime/refresh-claude-dir.sh" ]; then
+    drift_tmpdir=$(mktemp -d)
+    # Dry-run the refresh into a scratch dir, then diff to find drift.
+    if (cd "$drift_tmpdir" && cp -r "$VAULT/dot-claude" "$drift_tmpdir/.claude" 2>/dev/null) ; then
+      # Re-apply substitution to the scratch copy and compare. Cheaper
+      # than calling refresh-claude-dir.sh directly because we don't
+      # want to touch the live .claude/ from a probe.
+      _BOT_NAME=$(grep "^- \*\*BOT_NAME\*\*:" "$VAULT/setup-state.md" 2>/dev/null | sed 's/^[^:]*: *//; s/ *<!--.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' | head -1)
+      _USER_NAME=$(grep "^- \*\*USER_NAME\*\*:" "$VAULT/setup-state.md" 2>/dev/null | sed 's/^[^:]*: *//; s/ *<!--.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' | head -1)
+      _VAULT=$(grep "^- \*\*VAULT\*\*:" "$VAULT/setup-state.md" 2>/dev/null | sed 's/^[^:]*: *//; s/ *<!--.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' | head -1)
+      _OS_USER=$(grep "^- \*\*OS_USER\*\*:" "$VAULT/setup-state.md" 2>/dev/null | sed 's/^[^:]*: *//; s/ *<!--.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' | head -1)
+      [ -n "$_OS_USER" ] || _OS_USER="$_BOT_NAME"
+      if [ -n "$_BOT_NAME" ] && [ -n "$_VAULT" ]; then
+        find "$drift_tmpdir/.claude" -type f -exec sed -i \
+          -e "s|<BOT_NAME>|$_BOT_NAME|g" \
+          -e "s|<USER_NAME>|$_USER_NAME|g" \
+          -e "s|<VAULT>|$_VAULT|g" \
+          -e "s|<USER>|$_OS_USER|g" \
+          {} \;
+        if diff -rq "$drift_tmpdir/.claude" "$VAULT/.claude" >/dev/null 2>&1; then
+          pass ".claude/ in sync with dot-claude/"
+        else
+          drift_count=$(diff -rq "$drift_tmpdir/.claude" "$VAULT/.claude" 2>/dev/null | wc -l)
+          warn ".claude/ drift" "($drift_count file(s) differ — run bash $VAULT/runtime/refresh-claude-dir.sh)"
+        fi
+      fi
+    fi
+    rm -rf "$drift_tmpdir"
+  fi
 else
   fail "vault directory exists" "(not yet — first-time-setup.md Step 2 creates it)"
 fi
