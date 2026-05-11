@@ -40,7 +40,21 @@ The Phase 0 substitution map in `setup-orchestrator.md` is canonical for placeho
 
 ### `step-5-silverbullet`
 
-**Probe:** `docker compose -f <VAULT>/docker-compose.yml ps silverbullet 2>/dev/null | grep -q running` → if true, advance phase.
+**Probe (vault pages):** Before launching the container, confirm Step 2 copied the SB index pages and process docs into the vault. Run:
+
+```bash
+ls <VAULT>/index.md <VAULT>/dashboard.md <VAULT>/handoffs.md <VAULT>/processes/soul-loop.md 2>/dev/null | wc -l
+```
+
+If the count is < 4, the human (or the assisting CC) skipped the new `cp $KIT/templates/vault-pages/*.md ./` and `cp $KIT/templates/processes/*.md ./processes/` lines from Step 2. **Do not synthesize the pages here** — post a BLOCKER and stop:
+
+```
+BLOCKER missing-vault-pages: Step 2's `cp $KIT/templates/vault-pages/*.md ./` and `cp $KIT/templates/processes/*.md ./processes/` weren't run. Re-run them from the kit clone, apply Phase 0 substitution to <BOT_NAME> / <USER_NAME> / <VAULT>, then re-fire setup-runner.
+```
+
+If the count is 4, advance to the container probe.
+
+**Probe (container):** `docker compose -f <VAULT>/docker-compose.yml ps silverbullet 2>/dev/null | grep -q running` → if true, advance phase.
 
 **Execute:**
 1. Generate two secrets: `openssl rand -base64 24` twice. Write them to `setup-state.md` Values block as `SB_USER_PASSWORD` and `SB_AUTH_TOKEN`. Use `Edit` with `replace_all: false` on the specific lines.

@@ -48,7 +48,7 @@ Anything that fails: install the missing piece before continuing. `docker compos
 Pick a directory name. The convention here is the bot's name + lowercase: `~/natebot`. From here on this doc uses `~/natebot/` as the vault root — substitute your own name throughout if you pick something else.
 
 ```bash
-mkdir -p ~/natebot/journals ~/natebot/handoffs
+mkdir -p ~/natebot/journals/fiction ~/natebot/handoffs ~/natebot/processes
 cd ~/natebot
 
 # If you ran bootstrap.md Step 9, you're already in the cloned repo:
@@ -64,10 +64,16 @@ cp templates/identity.md     identity.md
 cp templates/user-profile.md user-profile.md
 cp templates/soul-loop.md    soul-loop.md
 
-touch journals/journal.md inbox.md decisions.md
+# Seed the SilverBullet vault — top-level index pages + canonical process docs
+cp $KIT/templates/vault-pages/*.md  ./
+cp $KIT/templates/processes/*.md    ./processes/
+
+touch journals/journal.md
 ```
 
 Now open `CLAUDE.md` in your editor and replace every `[Nate]` and `[Your Bot's Name]` placeholder with your actual name and the bot's name. Same with `identity.md` and `user-profile.md` — fill in the canary phrase, your role, what you want from this bot. There's no "right" answer; first-pass guesses are fine, you'll edit later.
+
+The vault-page copies above also contain `<BOT_NAME>` / `<USER_NAME>` / `<VAULT>` placeholders. If you're walking through this with the assisting CC and Phase 0 (see `setup-orchestrator.md`), those get substituted automatically when CC applies the Phase 0 map. If you're doing DIY install, run a one-shot `sed` over `~/natebot/*.md ~/natebot/processes/*.md` once you've decided on the values.
 
 **About the canary phrase:** in `identity.md`, you'll set a short string ("the lighthouse keeper waves at midnight" — anything memorable). The bot is supposed to remember it without re-reading the file. If at any point it can't recall the phrase, that's its signal it has lost context (post-restart, post-compaction) and needs to re-anchor by reading `identity.md` and `user-profile.md`. It's not a security secret; just an orientation anchor.
 
@@ -233,9 +239,15 @@ This is your daily interface to the bot's brain. Walked through fully in [silver
 2. Drop a `docker-compose.yml` in `~/natebot/` with the silverbullet service block (template in [silverbullet-setup.md](silverbullet-setup.md)) — set `SB_USER=nate:<password>`, `SB_AUTH_TOKEN=<token>`, mount `~/natebot:/space`, bind `127.0.0.1:3001:3000`.
 3. `docker compose up -d` and visit `http://localhost:3001`. Log in with the SB_USER credentials. You should see your vault.
 4. Expose via Tailscale: `sudo tailscale serve --bg --https=443 http://127.0.0.1:3001`. Now reachable from your phone at `https://<host>.<tailnet>.ts.net`.
-5. In SilverBullet's command palette, install the **TreeView** plug — it's essential for vault navigation.
+5. Install the **TreeView** plug — essential for vault navigation. In SilverBullet:
+   1. Open the command palette (Ctrl/Cmd-K).
+   2. Type `Plugs: Add Plug`.
+   3. Paste: `github:silverbulletmd/silverbullet-treeview/treeview.plug.js`
+   4. Run `Plugs: Update`, then reload (Ctrl/Cmd-R). The folder sidebar should appear.
 
-You can now read `journals/journal.md` from your phone and leave handoff tasks (`- [ ] do X #handoff`) for the bot.
+   Other plugs (e.g., `silverbullet-tasks` for richer task views) install the same way. Defaults are fine for everything else; skip a `SETTINGS.md` unless you have a specific reason.
+
+When you first land on SilverBullet, [[index]] is the entry point (created from `templates/vault-pages/index.md` in Step 2) and [[dashboard]] shows live queries for open handoffs / tasks / recent activity. You can now read `journals/journal.md` from your phone and leave handoff tasks (`- [ ] do X #handoff`) for the bot.
 
 ### Step 6 detail — Telegram
 

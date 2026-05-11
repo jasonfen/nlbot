@@ -72,16 +72,17 @@ For each file copied into the vault, use the `Edit` tool with `replace_all: true
 | `[poems/stories/technical docs/music reviews]` | `$CREATIVE_OUTPUT` | `identity.md` |
 | `[direct/gentle/playful/formal]` | `$COMM_STYLE` | `identity.md` |
 | `[quality/speed/creativity/accuracy]` | `$VALUES_CARES_ABOUT` | `identity.md` |
-| `<BOT_NAME>` | `$BOT_NAME` | `runtime/start-claude.sh` (after copying), systemd unit examples in `persistence-and-hardware.md` if cribbing from there, `web-shell.md` if doing the web shell |
+| `<BOT_NAME>` | `$BOT_NAME` | `runtime/start-claude.sh` (after copying), systemd unit examples in `persistence-and-hardware.md` if cribbing from there, `web-shell.md` if doing the web shell, **all vault-page templates copied in Step 2** (`<VAULT>/index.md`, `<VAULT>/handoffs.md`, `<VAULT>/processes/soul-loop.md`, `<VAULT>/processes/journaling.md`, `<VAULT>/processes/handoffs.md`) |
+| `<USER_NAME>` | `$USER_NAME` | `<VAULT>/index.md`, `<VAULT>/processes/journaling.md`, `<VAULT>/processes/handoffs.md` (introduced by `templates/vault-pages/` and `templates/processes/`) |
 | `<USER>` | `$BOT_NAME` | `web-terminal/claude-web.service` |
-| `<VAULT>` | full vault path (e.g. `/home/nlbot/nlbot`) | `dot-claude/agents/*.md`, `dot-claude/commands/*.md`, `runtime/start-claude.sh`, `web-terminal/claude-web.service`, the docker-compose.yml you write for SilverBullet, the cron entries from Step 8 of `first-time-setup.md` |
+| `<VAULT>` | full vault path (e.g. `/home/nlbot/nlbot`) | `dot-claude/agents/*.md`, `dot-claude/commands/*.md`, `runtime/start-claude.sh`, `web-terminal/claude-web.service`, the docker-compose.yml you write for SilverBullet, the cron entries from Step 8 of `first-time-setup.md`, `<VAULT>/processes/soul-loop.md`, `<VAULT>/processes/handoffs.md` |
 | `~/natebot` (literal in narrative examples) | `~/$BOT_NAME` or `$VAULT` | `first-time-setup.md`, `silverbullet-setup.md`, `telegram-integration.md`, `web-shell.md` — but **only** in commands you're about to run; you don't need to rewrite the source docs in place |
 
 After each substitution batch, confirm with `grep`:
 
 ```bash
 # Should return no [bracket] or stray <USER>/<VAULT>/<BOT_NAME> in the vault
-grep -rE '\[Your Bot|\[Nate\]|\[CHOOSE YOUR|<USER>|<VAULT>|<BOT_NAME>' $VAULT/ \
+grep -rE '\[Your Bot|\[Nate\]|\[CHOOSE YOUR|<USER>|<USER_NAME>|<VAULT>|<BOT_NAME>' $VAULT/ \
   --include='*.md' --include='*.service' --include='*.sh' \
   | grep -v '\[ \]'   # ignore unchecked checkboxes
 ```

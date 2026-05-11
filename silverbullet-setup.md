@@ -76,6 +76,17 @@ SilverBullet has a plug system. The ones worth installing on day one:
 
 The `dashboard.md` page in this kit has example query blocks you can drop into your own vault.
 
+## What you'll see when you first open SilverBullet
+
+Assuming Step 2 of `first-time-setup.md` ran (the `cp $KIT/templates/vault-pages/*.md ./` and `cp $KIT/templates/processes/*.md ./processes/` lines), the vault already has its landing pages and process docs:
+
+- **`index.md`** — the entry point. Top-level navigation: recovery-critical files, processes, reference, creative.
+- **`dashboard.md`** — live overview. SilverBullet queries render open tasks, recent activity, open handoffs, open ideas — refreshed on each page load. If you see literal `${template.each(...)}` text instead of a rendered list, the query syntax didn't compile (most often: SilverBullet hasn't finished its first index sweep; reload after ~10s).
+- **`handoffs.md`** / **`journals.md`** / **`processes.md`** — folder indexes. Same query pattern; each lists the contents of its folder via the SB index.
+- **`processes/{soul-loop,journaling,handoffs}.md`** — canonical lifecycle docs the bot's agents BOOTSTRAP from. Edit these to change bot behavior; the agent prompts read them at runtime instead of carrying their own copies.
+
+If Step 2 didn't run those `cp`s (you'll see a near-empty vault), the bot's `setup-runner` will post a `BLOCKER missing-vault-pages` line and stop until you re-run them. Don't synthesize the pages by hand — the templates already match the kit's `<BOT_NAME>` / `<USER_NAME>` / `<VAULT>` substitution flow.
+
 ## How you actually use it
 
 Day-to-day:
