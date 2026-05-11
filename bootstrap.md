@@ -160,7 +160,16 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.
   sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
 sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+# Use `\` continuations: a single long line wraps in narrow terminals and
+# bracketed-paste can chop it mid-package-name, leaving apt to fail silently
+# on a "doc" / "ker-compose-plugin" split (caught on nlbot-test 2026-05-11).
+# Each backslash-newline glues the next line back into one command for bash.
+sudo apt install -y \
+  docker-ce \
+  docker-ce-cli \
+  containerd.io \
+  docker-buildx-plugin \
+  docker-compose-plugin
 
 # Add yourself to the docker group so you don't need sudo for `docker`
 sudo usermod -aG docker $USER
