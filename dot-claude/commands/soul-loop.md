@@ -38,12 +38,31 @@ else
 fi
 SECONDS_SINCE=$((NOW - LAST))
 
-echo "SETUP_PHASE=$SETUP_PHASE HANDOFFS=$HANDOFFS SECONDS_SINCE_LAST_ACTION=$SECONDS_SINCE"
+# *-blocker phases are human-action gates. The bot can't advance them by
+# dispatching setup-runner — the runner just confirms "still waiting" and
+# returns. Mirror the #blocked-on-human handoff skip: if Current phase
+# ends with -blocker AND a BLOCKER line is still active in setup-state.md
+# (not yet replaced with RESOLVED or removed), short-circuit to shell-
+# only rest. When the human clears the BLOCKER line, the next loop falls
+# through to normal setup-runner dispatch, which detects the resolution
+# and advances Current phase.
+BLOCKER_GATED=0
+if [[ "$SETUP_PHASE" == *-blocker ]] && grep -q '^BLOCKER ' <VAULT>/setup-state.md 2>/dev/null; then
+  BLOCKER_GATED=1
+fi
+
+echo "SETUP_PHASE=$SETUP_PHASE BLOCKER_GATED=$BLOCKER_GATED HANDOFFS=$HANDOFFS SECONDS_SINCE_LAST_ACTION=$SECONDS_SINCE"
 ```
 
 ## Tier 2 — decide
 
 In priority order:
+
+- **If `BLOCKER_GATED == 1`:** setup is parked on a `-blocker` phase with an active BLOCKER line. Bot can't advance until the human acts. Shell-only rest:
+  ```bash
+  echo "| $(date '+%Y-%m-%d %H:%M') | soul-loop | 0 | shell-only rest (setup blocker pending: $SETUP_PHASE) |" >> <VAULT>/cron-prompts/job-log.md
+  ```
+  Stay silent. Stop here.
 
 - **If `SETUP_PHASE` is non-empty AND not `done`:** setup is still in progress. Spawn `setup-runner` (Agent tool, `subagent_type: "setup-runner"`) with this prompt:
   > Read /home/<BOT_NAME>/<VAULT>/setup-state.md, find the Current phase, and execute that phase. One phase per dispatch. Update state when done. Return one line.
