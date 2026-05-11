@@ -32,7 +32,9 @@ The Phase 0 substitution map in `setup-orchestrator.md` is canonical for placeho
 - **Idempotent.** Every phase starts with a "is this already done?" probe — if yes, advance the phase and return without running the work. The bot may dispatch you mid-phase after a crash or restart.
 - **Phase-at-a-time.** Do one phase per dispatch, then return. The soul-loop will dispatch you again on the next heartbeat. This keeps each invocation small and lets the human interrupt cleanly.
 - **Write state before declaring success.** Advance `Current phase:` and add a `## Done` line only after the verification probe for that phase passes.
-- **Block, don't loop.** If a phase needs human input (BotFather token, Tailscale auth, password confirmation), write a `BLOCKER <name>: <instruction>` line in `## Blockers`, set phase to a `*-blocker` value, and return. The soul-loop will stop dispatching you until the human removes the BLOCKER.
+- **Block, don't loop.** If a phase genuinely needs human input before it can complete (BotFather token, Tailscale auth, password the bot can't generate itself), do TWO things together: write a `BLOCKER <name>: <instruction>` line in `## Blockers` **AND** set `Current phase:` to a matching `*-blocker` value. The phase value is the gate — the BLOCKER line is its human-readable explanation. The soul-loop will stop dispatching you until the human resolves the blocker phase.
+- **Don't put non-gating info in `## Blockers`.** Recovery instructions, write-down reminders, or anything the human should see but that doesn't block the bot's next phase goes in `## Notes`, not `## Blockers`. The previous convention of "informational BLOCKERs" conflated the two and caused setup-runner to stall on unrelated phases (e.g. parking step-8-memory behind a web-shell-credentials recovery note). Rule of thumb: if you're advancing the phase in the same dispatch, it's a `## Notes` line, not a `## Blockers` line.
+- **BLOCKERs gate only their own phase.** A leftover BLOCKER from an earlier phase (left there as a paper trail) does **not** gate later phases. Only the `Current phase:` value gates the walk. If you see stale BLOCKER lines and `Current phase:` is past them, leave them alone unless converting them to `RESOLVED`.
 - **Log to journal as you work.** After each substantive action (container up, service enabled, secret generated), append a one-line note to `<VAULT>/journals/journal.md` under today's daily section. The human reads this via SilverBullet once Step 5 lands.
 - **Read-don't-narrate.** Don't post status messages to the tmux pane that aren't actually useful. The journal + setup-state.md are your reporting surface.
 
@@ -103,11 +105,11 @@ If the count is 4, advance to the container probe.
    echo "$BOT_NAME" | <VAULT>/runtime/bot-secrets.sh store web-ui-username
    ```
    In `setup-state.md` record `(systemd-creds: web-session-secret)` etc. as pointers.
-2. Post BLOCKER (informational, doesn't gate progress):
+2. Append a recovery note to `## Notes` (NOT `## Blockers` — this doesn't gate the phase walk):
    ```
-   BLOCKER web-shell-credentials: Web shell credentials stored at /etc/<BOT_NAME>/secrets/{web-ui-username,web-ui-password}. To retrieve them ONCE for the human to record, run on the host:
+   - web-shell-credentials: stored at /etc/<BOT_NAME>/secrets/{web-ui-username,web-ui-password}. To retrieve them ONCE for the human to record, run on the host:
        sudo systemd-creds decrypt /etc/<BOT_NAME>/secrets/web-ui-password -
-   The bot can't print these — they're root-only. Have the human record them in a password manager, then change this line to RESOLVED web-shell-credentials.
+     The bot can't print these — they're root-only. Have the human record them in a password manager; delete this note once recorded.
    ```
 3. `cd <VAULT>/web-terminal && npm install` (may take 30–60s).
 4. Write `<VAULT>/web-terminal/.env` with just `PORT=3000` and stubs noting the other values are loaded from systemd-creds at service start. `chmod 600`.

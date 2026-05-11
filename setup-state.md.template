@@ -88,10 +88,10 @@ Idempotency: every step starts with a "is this already done?" probe (e.g. `docke
 
 ## Blockers
 
-*Format: each blocker is one line starting with `BLOCKER <short-name>:` followed by what the human needs to do to clear it. The bot reads this section every soul-loop and won't advance until the relevant blocker is removed (or replaced with `RESOLVED <short-name>:`). Examples will appear here once setup is running.*
+*Format: each blocker is one line starting with `BLOCKER <short-name>:` followed by what the human needs to do to clear it. **A BLOCKER is always paired with `Current phase:` set to a matching `*-blocker` value** — the phase is the gate, the BLOCKER line is its human-readable explanation. The bot only treats this section as gating when `Current phase` ends in `-blocker`; stale BLOCKER lines left behind for paper-trail do not gate later phases. Clear a blocker by either deleting the line or replacing the `BLOCKER` prefix with `RESOLVED`. Non-gating recovery info (e.g. "write down this password") belongs in `## Notes`, not here.*
 
 (none)
 
 ## Notes
 
-- (append one-liners here as you learn things worth remembering)
+- (append one-liners here as you learn things worth remembering — recovery instructions, write-down reminders, anything the human should see but that doesn't gate the phase walk)

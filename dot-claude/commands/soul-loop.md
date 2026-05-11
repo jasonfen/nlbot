@@ -17,12 +17,16 @@ if [ -f <VAULT>/setup-state.md ]; then
   SETUP_PHASE=$(grep '^Current phase:' <VAULT>/setup-state.md 2>/dev/null | head -1 | sed 's/^Current phase: *//; s/[[:space:]]*$//')
 fi
 
-# Count open handoff tasks across the vault. Skip handoffs tagged
-# #blocked-on-human — those can't progress without the user answering, so
-# repeatedly spawning a 15-20k-token agent to re-ack the same blocker is
-# pure burn. Handoffs need both tags for the short-circuit: #handoff and
-# #blocked-on-human on the same checkbox line.
-HANDOFFS=$(grep -rn "\- \[ \].*#handoff" <VAULT>/ 2>/dev/null | grep -v templates/ | grep -v node_modules | grep -v kit/ | grep -v CLAUDE.md | grep -v collaboration.md | grep -v "#blocked-on-human" | grep -v "\.conflicted" | wc -l)
+# Count open handoff tasks. Scoped to <VAULT>/handoffs/ + <VAULT>/inbox.md
+# only — those are the canonical handoff locations. Scanning the whole
+# vault picked up example checkboxes inside docs (silverbullet-setup.md
+# line 94 had `- [ ] do the thing #handoff` as illustrative prose) and
+# inflated the count, causing soul-loop-runner spawns with no real work.
+# Skip handoffs tagged #blocked-on-human — they can't progress without
+# the user answering, so spawning a 15-20k-token agent to re-ack the
+# same blocker is pure burn. Handoffs need both tags for the short-
+# circuit: #handoff and #blocked-on-human on the same checkbox line.
+HANDOFFS=$(grep -rhn "\- \[ \].*#handoff" <VAULT>/handoffs/ <VAULT>/inbox.md 2>/dev/null | grep -v "#blocked-on-human" | grep -v "\.conflicted" | wc -l)
 
 # Time since the last non-rest soul loop (creative/handoff action)
 LAST_ACTION_FILE=<VAULT>/cron-prompts/.soul-loop-last-action
