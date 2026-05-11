@@ -12,24 +12,59 @@
 #                 and compares to Current phase.
 #
 # Exit codes:
-#   0 — state-file and reality agree (or setup is `done`).
+#   0 — state-file and reality agree (or setup is `done`, or --apply
+#       resolved the drift).
 #   1 — discrepancy or pending work; recommendation printed.
 #   2 — script can't determine vault location (only happens if you set
 #       VAULT explicitly to a bogus path).
 #
-# The script is read-only — never edits setup-state.md. The recommendation
-# is for the human (or the setup-runner subagent) to apply.
+# Default mode is read-only — the script prints a recommendation and
+# the human (or the setup-runner subagent) applies it. Pass --apply to
+# let the script rewrite setup-state.md's `Current phase:` line itself
+# when declared and reality disagree. `Last updated:` is bumped to match.
 #
 # Useful invocations:
-#   bash runtime/setup-status.sh                    # auto-detect vault from script location
+#   bash runtime/setup-status.sh                    # read-only probe
+#   bash runtime/setup-status.sh --apply            # probe + auto-resync state-file
 #   BOT_NAME=nlbot bash runtime/setup-status.sh     # tell the script who the bot user will be (pre-setup)
 #   VAULT=/home/nlbot/nlbot bash runtime/setup-status.sh  # explicit vault path
 
 set -u
 
+APPLY=0
+for arg in "$@"; do
+  case "$arg" in
+    --apply) APPLY=1 ;;
+    -h|--help)
+      sed -n '2,/^$/p' "$0" | sed 's/^# \?//'
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $arg" >&2
+      exit 2
+      ;;
+  esac
+done
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VAULT="${VAULT_DIR:-${VAULT:-$(cd "$SCRIPT_DIR/.." && pwd)}}"
 SETUP_STATE="$VAULT/setup-state.md"
+
+# Atomically rewrite the `Current phase:` line and bump `Last updated:`.
+# Called from the POST-SETUP recommendation block when --apply is set.
+apply_phase() {
+  local new_phase="$1"
+  local ts
+  ts="$(date '+%Y-%m-%d %H:%M')"
+  # Use a temp file so a partial write never corrupts state.
+  local tmp
+  tmp="$(mktemp "${SETUP_STATE}.XXXXXX")"
+  awk -v ph="$new_phase" -v ts="$ts" '
+    /^Current phase:/ { print "Current phase: " ph; next }
+    /^Last updated:/  { print "Last updated: " ts;  next }
+    { print }
+  ' "$SETUP_STATE" > "$tmp" && mv "$tmp" "$SETUP_STATE"
+}
 
 # --- Helpers -----------------------------------------------------------------
 
@@ -363,8 +398,13 @@ if [ "$REACHED" = "step-9-memory" ] && \
   if [ "$DECLARED" = "done" ]; then
     echo "${G}✓ Aligned. Setup is complete; no action needed.${N}"
     exit 0
+  elif [ "$APPLY" = "1" ]; then
+    apply_phase "done"
+    echo "${G}✓ Reality shows all phases complete. Wrote 'Current phase: done' to $SETUP_STATE.${N}"
+    exit 0
   else
     echo "${Y}Reality shows all phases complete. Recommend setting Current phase to 'done'.${N}"
+    echo "  To auto-apply: re-run with --apply"
     exit 1
   fi
 fi
@@ -387,9 +427,14 @@ echo
 
 if [ "$DECLARED" = "$NEXT" ]; then
   echo "${G}✓ Declared phase matches next-to-run. Run /setup (or wait for next soul-loop) to execute.${N}"
+  exit 0
+elif [ "$APPLY" = "1" ]; then
+  apply_phase "$NEXT"
+  echo "${G}✓ Resynced: rewrote 'Current phase: $NEXT' in $SETUP_STATE (was: ${DECLARED:-unset}).${N}"
+  echo "  Run /setup (or wait for next soul-loop) to execute."
+  exit 0
 else
   echo "${Y}! Declared phase ($DECLARED) doesn't match reality ($NEXT).${N}"
-  echo "  To resync: edit $SETUP_STATE → 'Current phase: $NEXT' → run /setup."
+  echo "  To resync: re-run with --apply (or edit $SETUP_STATE → 'Current phase: $NEXT' → /setup)."
+  exit 1
 fi
-
-exit 1

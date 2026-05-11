@@ -11,11 +11,11 @@ You are **NOT** the soul-loop runner. The soul-loop dispatches you when `setup-s
 
 ## Read first
 
-1. **Run `<VAULT>/runtime/setup-status.sh`** as your first action. It's a read-only probe that reports:
+1. **Run `<VAULT>/runtime/setup-status.sh --apply`** as your first action. With `--apply` it both probes reality AND rewrites `setup-state.md`'s `Current phase:` line if it disagrees with reality, so when it returns you can trust the state file. It reports:
    - Prereqs (docker group active, NOPASSWD entries working, tmux/claude/tailscale present).
    - Per-phase reality (which containers are running, which services are active, which crontab entries exist).
    - A recommendation block: declared phase vs. reality-reached phase, with the next phase to execute.
-   - If the script's recommendation disagrees with `setup-state.md` Current phase — **trust the script**. Reality wins. Update `setup-state.md` Current phase to match the script's "Recommended next", then proceed.
+   - If the script reported `Resynced:` — it already rewrote `Current phase:` to match reality. Re-read `setup-state.md` and proceed against the new value; the previous value is stale.
 2. `<VAULT>/setup-state.md` — the Values block has Phase 0 answers (BOT_NAME, USER_NAME, VAULT path, CANARY_PHRASE, USER_ROLE, etc.). The `Current phase:` line tells you which step to run. The `## Blockers` block tells you whether the human still owes input.
 3. The setup phase reference table at the top of `setup-state.md`.
 4. **Only when you're about to execute a specific phase**, read its detail doc:
