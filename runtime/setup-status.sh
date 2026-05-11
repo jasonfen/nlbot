@@ -271,7 +271,15 @@ if [ "$MODE" = "POST-SETUP" ]; then
   echo "${B}Bot-driven setup phases${N}"
 
   # step-5-silverbullet
-  if [ -f "$VAULT/docker-compose.yml" ] && docker compose -f "$VAULT/docker-compose.yml" ps silverbullet 2>/dev/null | grep -q running; then
+  # `docker compose ps`'s default output shows the STATUS column ("Up 8m
+  # (healthy)") not the STATE column ("running") — grepping for "running"
+  # against that output is a false-negative even when the container is up.
+  # Use the explicit `--status running` filter + `--services` to get an
+  # unambiguous match: a service name on stdout means it's running, else
+  # empty.
+  if [ -f "$VAULT/docker-compose.yml" ] && \
+     docker compose -f "$VAULT/docker-compose.yml" ps \
+       --status running --services 2>/dev/null | grep -qx silverbullet; then
     if sudo -n tailscale serve status 2>/dev/null | grep -q 3001; then
       pass "step-5-silverbullet" "container + tailscale serve"
     else
