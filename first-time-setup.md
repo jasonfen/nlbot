@@ -170,20 +170,33 @@ This is the privilege grant that lets the bot drive Steps 5–9 from inside the 
 # Substitute $BOTUSER with your bot's unix username
 # (the one from bootstrap.md Step 2)
 sudo tee /etc/sudoers.d/$BOTUSER >/dev/null <<EOF
+# Service + container + cron management
 $BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/systemctl
 $BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/crontab
 $BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/docker
+# Service-file + log inspection (setup-runner step-7 step-9)
+$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/tee
+$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/journalctl
+# Tailscale serve (setup-runner step-6 + step-7)
+$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/tailscale
+# systemd-creds + secret-blob ops (runtime/bot-secrets.sh,
+# migrate-secrets.sh, silverbullet-up.sh — the encrypted-secrets
+# path needs all of these to run unattended from the soul-loop)
+$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/systemd-creds
+$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/install
+$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/mktemp
+$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/rm
+$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/test
+$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/ls
 EOF
 sudo chmod 440 /etc/sudoers.d/$BOTUSER
 sudo visudo -cf /etc/sudoers.d/$BOTUSER
 
 # Verify the bot user can actually use it
-sudo -u $BOTUSER sudo -n /usr/bin/systemctl --version > /dev/null \
-  && echo "NOPASSWD OK" \
-  || echo "NOPASSWD FAILED"
+sudo -u $BOTUSER sudo -ln | grep NOPASSWD
 ```
 
-Anything outside `systemctl / crontab / docker` still prompts for the password and stays your job. If something feels off here, **don't reboot yet** — debug first. If you want to undo: `sudo rm /etc/sudoers.d/$BOTUSER`. If you'd rather grant blanket `NOPASSWD: ALL` instead of scoped (bigger blast radius if the bot ever runs amok), substitute `NOPASSWD: ALL` for the comma-list above. The kit's recommended path is scoped.
+Anything outside the list above still prompts for the password and stays your job. The list pairs to specific bot operations: `systemctl/crontab/docker` for service + cron + container management; `tee/journalctl` for writing service files and tailing logs during steps 7 and 9; `tailscale` for the `tailscale serve` publishes in steps 6 and 7; `systemd-creds + install/mktemp/rm/test/ls` for the encrypted-secrets path (bot-secrets.sh, migrate-secrets.sh, silverbullet-up.sh) that needs root to write/read `/etc/$BOTUSER/secrets/`. If something feels off here, **don't reboot yet** — debug first. If you want to undo: `sudo rm /etc/sudoers.d/$BOTUSER`. If you'd rather grant blanket `NOPASSWD: ALL` instead of scoped (bigger blast radius if the bot ever runs amok), substitute `NOPASSWD: ALL` for the comma-list above. The kit's recommended path is scoped.
 
 ### Reboot
 

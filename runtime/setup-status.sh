@@ -208,15 +208,29 @@ if getent passwd "$BOT_NAME" >/dev/null 2>&1; then
     warn "ssh authorized_keys" "(bootstrap.md Step 2c — only matters if you want direct SSH as $BOT_NAME)"
   fi
 
-  # Scoped NOPASSWD
+  # Scoped NOPASSWD. The kit grants twelve binaries; the three legacy ones
+  # (systemctl/crontab/docker) cover service+cron+container management; the
+  # rest (tee/journalctl/tailscale/systemd-creds/install/mktemp/rm/test/ls)
+  # cover service-file writes, log tailing, tailscale serve, and the
+  # encrypted-secrets path. Reporting which are missing (vs. just "doesn't
+  # match expected") lets the human patch one entry instead of rewriting
+  # the whole file. Blanket NOPASSWD:ALL is still accepted.
   if [ -f "/etc/sudoers.d/$BOT_NAME" ]; then
     if sudo -n test -r "/etc/sudoers.d/$BOT_NAME" 2>/dev/null || [ -r "/etc/sudoers.d/$BOT_NAME" ]; then
-      if grep -q 'NOPASSWD.*systemctl.*crontab.*docker' "/etc/sudoers.d/$BOT_NAME" 2>/dev/null \
-         || grep -q 'NOPASSWD: */usr/bin/systemctl, */usr/bin/crontab, */usr/bin/docker' "/etc/sudoers.d/$BOT_NAME" 2>/dev/null \
-         || grep -q 'NOPASSWD:ALL' "/etc/sudoers.d/$BOT_NAME" 2>/dev/null; then
-        pass "scoped NOPASSWD sudoers" "(/etc/sudoers.d/$BOT_NAME)"
+      sudoers_content=$(sudo -n cat "/etc/sudoers.d/$BOT_NAME" 2>/dev/null || cat "/etc/sudoers.d/$BOT_NAME" 2>/dev/null)
+      if printf '%s' "$sudoers_content" | grep -q 'NOPASSWD:[[:space:]]*ALL'; then
+        pass "scoped NOPASSWD sudoers" "(blanket NOPASSWD:ALL — works but wide-blast-radius)"
       else
-        warn "scoped NOPASSWD sudoers" "(file exists but doesn't match expected pattern; verify with visudo -cf)"
+        missing=""
+        for bin in systemctl crontab docker tee journalctl tailscale systemd-creds install mktemp rm test ls; do
+          printf '%s' "$sudoers_content" | grep -qE "NOPASSWD:[[:space:]]*(/usr/bin/)?$bin([[:space:]]|,|$)" \
+            || missing="$missing $bin"
+        done
+        if [ -z "$missing" ]; then
+          pass "scoped NOPASSWD sudoers" "(all 12 entries present)"
+        else
+          warn "scoped NOPASSWD sudoers" "(missing:$missing — see first-time-setup.md Step 4 'Final action')"
+        fi
       fi
     else
       warn "scoped NOPASSWD sudoers" "(file exists but can't read it from $USER)"

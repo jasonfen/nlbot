@@ -428,16 +428,37 @@ cat <<EOF
   2. Grant scoped NOPASSWD sudo (the kit's "hand over the keys" gate):
 
         sudo tee /etc/sudoers.d/$BOT_NAME >/dev/null <<EOS
+# Service + container + cron management
 $BOT_NAME ALL=(ALL) NOPASSWD: /usr/bin/systemctl
 $BOT_NAME ALL=(ALL) NOPASSWD: /usr/bin/crontab
 $BOT_NAME ALL=(ALL) NOPASSWD: /usr/bin/docker
+# Service-file + log inspection (setup-runner step-7 step-9)
+$BOT_NAME ALL=(ALL) NOPASSWD: /usr/bin/tee
+$BOT_NAME ALL=(ALL) NOPASSWD: /usr/bin/journalctl
+# Tailscale serve (setup-runner step-6 + step-7 publish via tailscale)
+$BOT_NAME ALL=(ALL) NOPASSWD: /usr/bin/tailscale
+# systemd-creds + secret-blob ops (runtime/bot-secrets.sh, migrate-secrets.sh,
+# silverbullet-up.sh — the encrypted-secrets path needs all of these to run
+# unattended from the soul-loop)
+$BOT_NAME ALL=(ALL) NOPASSWD: /usr/bin/systemd-creds
+$BOT_NAME ALL=(ALL) NOPASSWD: /usr/bin/install
+$BOT_NAME ALL=(ALL) NOPASSWD: /usr/bin/mktemp
+$BOT_NAME ALL=(ALL) NOPASSWD: /usr/bin/rm
+$BOT_NAME ALL=(ALL) NOPASSWD: /usr/bin/test
+$BOT_NAME ALL=(ALL) NOPASSWD: /usr/bin/ls
 EOS
         sudo chmod 440 /etc/sudoers.d/$BOT_NAME
         sudo visudo -cf /etc/sudoers.d/$BOT_NAME
 
-     Verify:
-        sudo -u $BOT_NAME sudo -n /usr/bin/systemctl --version >/dev/null \\
-          && echo "NOPASSWD OK"
+     Verify the grant is active (lists every NOPASSWD entry $BOT_NAME has):
+        sudo -u $BOT_NAME sudo -ln | grep NOPASSWD
+
+     Confirm systemd-creds is present on the box (bootstrap.md installs
+     systemd >= 250 which includes it; required for the encrypted-secrets
+     path used by setup-runner steps 6–7):
+        sudo -u $BOT_NAME sudo -n /usr/bin/systemd-creds has-tpm2 \\
+          && echo "systemd-creds OK (TPM available)" \\
+          || echo "systemd-creds OK (no TPM — host-key fallback)"
 
   3. sudo reboot
      Verify the box comes back clean and claude-code.service auto-starts.
