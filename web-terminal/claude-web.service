@@ -1,5 +1,5 @@
-# Substitute <USER> and <VAULT> for your actual values before installing.
-# Then: sudo cp this file to /etc/systemd/system/<botname>-web.service
+# Substitute <USER>, <VAULT>, and <BOT_NAME> for your actual values before
+# installing. Then: sudo cp this file to /etc/systemd/system/<botname>-web.service
 [Unit]
 Description=Web Terminal
 After=network.target claude-code.service
@@ -14,6 +14,14 @@ RestartSec=10
 Environment=HOME=/home/<USER>
 Environment=LANG=C.utf8
 Environment=VAULT_DIR=<VAULT>
+
+# Encrypted credentials. systemd decrypts each at unit start and mounts it
+# under $CREDENTIALS_DIRECTORY/<name> on a tmpfs only this process can see.
+# server.js's loadFromCreds() copies them into process.env before any code
+# that reads SESSION_SECRET / UI_USERNAME / UI_PASSWORD runs.
+LoadCredentialEncrypted=web-session-secret:/etc/<BOT_NAME>/secrets/web-session-secret
+LoadCredentialEncrypted=web-ui-username:/etc/<BOT_NAME>/secrets/web-ui-username
+LoadCredentialEncrypted=web-ui-password:/etc/<BOT_NAME>/secrets/web-ui-password
 
 [Install]
 WantedBy=multi-user.target

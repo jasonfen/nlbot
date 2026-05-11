@@ -57,6 +57,7 @@ store("nate factorio mod", "Working on Python mod for Factorio, uses custom JSON
 - `user-profile.md` — who [Nate] is.
 - `decisions.md` — facts and decisions recorded for easy searching.
 - `processes/{soul-loop,journaling,handoffs}.md` — **authoritative lifecycle docs.** The agents (soul-loop-runner, journal-synthesizer, secretary) BOOTSTRAP from these. To change how a subsystem works, edit the process doc; the agents pick up the change on their next fire.
+- `processes/security.md` — **secrets handling rules. Read this once and follow it.** Credentials live encrypted in `/etc/<BOT_NAME>/secrets/` (systemd-creds). Never echo, cat, grep, or print a plaintext value. Never grep across the vault for "TOKEN" / "PASSWORD" / etc. Use `runtime/bot-secrets.sh` for all credential operations — no `get` command by design.
 
 ## When you're idle (the soul loop)
 

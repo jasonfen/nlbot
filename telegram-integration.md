@@ -63,7 +63,7 @@ chmod +x <vault>/.telegram/tg-bot.py <vault>/.telegram/tg-post.sh
 ```ini
 # /etc/systemd/system/telegram-bot.service
 [Unit]
-Description=Nate Telegram bot daemon
+Description=<BOT_NAME> Telegram bot daemon
 After=network-online.target
 Wants=network-online.target
 
@@ -74,6 +74,14 @@ WorkingDirectory=<VAULT>
 ExecStart=/usr/bin/python3 <VAULT>/.telegram/tg-bot.py
 Restart=on-failure
 RestartSec=5
+
+# Encrypted credentials. systemd decrypts each at unit start and mounts it
+# under $CREDENTIALS_DIRECTORY/<name> on a tmpfs only this process can see.
+# tg-bot.py's load_config() reads them with .telegram/config as a fallback
+# for older installs.
+LoadCredentialEncrypted=tg-bot-token:/etc/<BOT_NAME>/secrets/tg-bot-token
+LoadCredentialEncrypted=tg-chat-id:/etc/<BOT_NAME>/secrets/tg-chat-id
+LoadCredentialEncrypted=tg-bot-username:/etc/<BOT_NAME>/secrets/tg-bot-username
 
 [Install]
 WantedBy=multi-user.target

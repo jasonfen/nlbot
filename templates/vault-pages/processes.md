@@ -11,6 +11,7 @@ The canonical *code* still lives at `.claude/agents/*.md` and `.claude/commands/
 - [[processes/soul-loop]] — idle-cycle heartbeat, three-tier triage, decision menu
 - [[processes/journaling]] — secretary + journal-synthesizer, memory layers, re-anchor checklist
 - [[processes/handoffs]] — async task delegation, detection, lifecycle, subpage shape
+- [[processes/security]] — secrets storage (systemd-creds), bot-side rules, recovery
 
 ## Relationship to other docs
 

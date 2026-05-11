@@ -77,12 +77,17 @@ If the count is 4, advance to the container probe.
 **Probe (container):** `docker compose -f <VAULT>/docker-compose.yml ps --status running --services 2>/dev/null | grep -qx silverbullet` → if true, advance phase.
 
 **Execute:**
-1. Generate two secrets: `openssl rand -base64 24` twice. Write them to `setup-state.md` Values block as `SB_USER_PASSWORD` and `SB_AUTH_TOKEN`. Use `Edit` with `replace_all: false` on the specific lines.
+1. Generate two encrypted credentials. `bot-secrets.sh generate` pipes openssl through `systemd-creds encrypt` in one pipeline — the plaintext never lands in a shell variable, a journal entry, or any non-encrypted file:
+   ```
+   <VAULT>/runtime/bot-secrets.sh generate sb-user-password 24
+   <VAULT>/runtime/bot-secrets.sh generate sb-auth-token    24
+   ```
+   In `setup-state.md` Values block, record `(systemd-creds: sb-user-password)` and `(systemd-creds: sb-auth-token)` — pointers, not values.
 2. Read `tailscale status --json | jq -r .Self.HostName`. Write as `TAILSCALE_HOSTNAME`.
-3. Write `<VAULT>/docker-compose.yml` using the template in `silverbullet-setup.md` — substitute `<BOT_NAME>` (use Values BOT_NAME), `<long-random-password>` (SB_USER_PASSWORD), `<long-random-token>` (SB_AUTH_TOKEN), `<VAULT>` (VAULT path).
-4. `cd <VAULT> && docker compose up -d silverbullet`. Tail logs for ~10s with `docker compose logs --tail=20 silverbullet` to verify clean start.
+3. Write `<VAULT>/docker-compose.yml` using the template in `silverbullet-setup.md`. **Substitute env-var references, not literal secrets** — the file should contain `${SB_USER_PASSWORD}` and `${SB_AUTH_TOKEN}` (and `${BOT_NAME}` if the username goes through the same pattern). The values are resolved at compose-up time by `runtime/silverbullet-up.sh`, which loads them from systemd-creds.
+4. `bash <VAULT>/runtime/silverbullet-up.sh` brings the container up with credentials in-memory only for the duration of `docker compose up`. Tail logs for ~10s with `docker compose logs --tail=20 silverbullet` to verify clean start.
 5. `sudo tailscale serve --bg --https=443 http://127.0.0.1:3001` (uses NOPASSWD entry). Verify with `sudo tailscale serve status`.
-6. Journal: append `### Step 6 done — SilverBullet at https://<TAILSCALE_HOSTNAME>.<tailnet>.ts.net; SB_USER credentials in setup-state.md Values block`.
+6. Journal: append `### Step 6 done — SilverBullet at https://<TAILSCALE_HOSTNAME>.<tailnet>.ts.net; SB credentials encrypted at /etc/<BOT_NAME>/secrets/{sb-user-password,sb-auth-token}`.
 7. Advance phase to `step-7-web-shell`.
 
 ### `step-7-web-shell`
@@ -90,18 +95,26 @@ If the count is 4, advance to the container probe.
 **Probe:** `systemctl is-active <BOT_NAME>-web.service` returns `active` → advance phase.
 
 **Execute:**
-1. Generate `WEB_SESSION_SECRET` via `openssl rand -hex 32` and `WEB_UI_PASSWORD` via `openssl rand -base64 24`. Set `WEB_UI_USERNAME` = BOT_NAME unless already set in Values. Write to setup-state.md.
+1. Generate three encrypted credentials. The plaintext stays inside the encrypt pipeline; the bot never sees the values:
+   ```
+   <VAULT>/runtime/bot-secrets.sh generate web-session-secret 32
+   <VAULT>/runtime/bot-secrets.sh generate web-ui-password    24
+   # Username is less sensitive but encrypted for consistency:
+   echo "$BOT_NAME" | <VAULT>/runtime/bot-secrets.sh store web-ui-username
+   ```
+   In `setup-state.md` record `(systemd-creds: web-session-secret)` etc. as pointers.
 2. Post BLOCKER (informational, doesn't gate progress):
    ```
-   BLOCKER web-shell-credentials: Web shell credentials written to setup-state.md Values. Username: <WEB_UI_USERNAME>, password: <WEB_UI_PASSWORD>. WRITE THESE DOWN — they aren't recoverable. After noting them, change this line to RESOLVED web-shell-credentials.
+   BLOCKER web-shell-credentials: Web shell credentials stored at /etc/<BOT_NAME>/secrets/{web-ui-username,web-ui-password}. To retrieve them ONCE for the human to record, run on the host:
+       sudo systemd-creds decrypt /etc/<BOT_NAME>/secrets/web-ui-password -
+   The bot can't print these — they're root-only. Have the human record them in a password manager, then change this line to RESOLVED web-shell-credentials.
    ```
-   Note: this BLOCKER is for the human's records only; setup-runner continues past it on the same dispatch.
 3. `cd <VAULT>/web-terminal && npm install` (may take 30–60s).
-4. Write `<VAULT>/web-terminal/.env` with PORT=3000, SESSION_SECRET, UI_USERNAME, UI_PASSWORD. `chmod 600`.
-5. Substitute `<USER>` and `<VAULT>` in `<VAULT>/web-terminal/claude-web.service`. Copy to `/etc/systemd/system/<BOT_NAME>-web.service` via `sudo tee`.
+4. Write `<VAULT>/web-terminal/.env` with just `PORT=3000` and stubs noting the other values are loaded from systemd-creds at service start. `chmod 600`.
+5. Substitute `<USER>`, `<VAULT>`, and `<BOT_NAME>` in `<VAULT>/web-terminal/claude-web.service`. Copy to `/etc/systemd/system/<BOT_NAME>-web.service` via `sudo tee`. The unit's LoadCredentialEncrypted= entries are already pointing at `/etc/<BOT_NAME>/secrets/`.
 6. `sudo systemctl daemon-reload && sudo systemctl enable --now <BOT_NAME>-web.service`.
 7. `sudo tailscale serve --bg --https=8443 http://127.0.0.1:3000`.
-8. Journal: `### Step 7 done — web shell live at https://<TAILSCALE_HOSTNAME>.<tailnet>.ts.net:8443`.
+8. Journal: `### Step 7 done — web shell live at https://<TAILSCALE_HOSTNAME>.<tailnet>.ts.net:8443; credentials encrypted in /etc/<BOT_NAME>/secrets/`.
 9. Advance phase to `step-8-memory`.
 
 ### `step-8-memory`
@@ -145,11 +158,17 @@ If the count is 4, advance to the container probe.
 **Probe:** `systemctl is-active telegram-bot.service` returns `active` → advance phase.
 
 **Execute:**
-1. Read TG_BOT_TOKEN, TG_BOT_USERNAME, TG_CHAT_ID from Values. Write into `<VAULT>/.telegram/config`.
-2. `sudo systemctl enable --now telegram-bot.service`.
+1. Read TG_BOT_TOKEN, TG_BOT_USERNAME, TG_CHAT_ID from Values. Pipe each into `bot-secrets.sh store` so they're encrypted before they touch any non-secret file:
+   ```
+   awk -F': ' '/^- \*\*TG_BOT_TOKEN\*\*:/   { sub(/ *<!--.*/, ""); print $2 }' <VAULT>/setup-state.md \
+     | <VAULT>/runtime/bot-secrets.sh store tg-bot-token
+   # …same for TG_CHAT_ID → tg-chat-id and TG_BOT_USERNAME → tg-bot-username.
+   ```
+   After all three are encrypted, redact the Values block in `setup-state.md`: replace each value with `(systemd-creds: <name>)`.
+2. `sudo systemctl enable --now telegram-bot.service`. The unit's `LoadCredentialEncrypted=` entries (already configured in the kit's template) make the credentials available to tg-bot.py via `$CREDENTIALS_DIRECTORY`.
 3. Verify with `systemctl is-active telegram-bot.service` + `journalctl --no-pager -u telegram-bot.service --since '1 min ago' | tail -10`.
 4. Send a test message: `echo "Setup complete. The bot is now in operational mode. SilverBullet at https://<TAILSCALE_HOSTNAME>.<tailnet>.ts.net" > <VAULT>/.telegram/message.txt`. (The daemon picks this up automatically.) Wait ~3s, verify the file got consumed.
-5. Journal: `### Step 9 done — Telegram daemon active, setup complete`.
+5. Journal: `### Step 9 done — Telegram daemon active; credentials encrypted at /etc/<BOT_NAME>/secrets/tg-*`.
 6. Advance phase to `done`.
 
 ### `done`

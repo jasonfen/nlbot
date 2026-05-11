@@ -307,6 +307,22 @@ fi
 
 banner "Step 4 — Persistence (start-claude.sh + systemd unit)"
 
+# Encrypted credentials directory. systemd-creds blobs live here, owned by
+# root mode 700 — the bot user can `ls` via sudo to see names but cannot
+# read the ciphertext. See templates/processes/security.md.
+sudo install -d -m 700 -o root -g root "/etc/$BOT_NAME/secrets"
+echo "  Ensured /etc/$BOT_NAME/secrets exists (root:root, 700)"
+
+# Stage the helper + migration scripts into the vault so they're invocable
+# by setup-runner and by the human post-install.
+cp "$VAULT/runtime/bot-secrets.sh" "$VAULT/bot-secrets.sh"
+chmod +x "$VAULT/bot-secrets.sh"
+if [ -f "$VAULT/runtime/migrate-secrets.sh" ]; then
+  cp "$VAULT/runtime/migrate-secrets.sh" "$VAULT/migrate-secrets.sh"
+  chmod +x "$VAULT/migrate-secrets.sh"
+fi
+echo "  Staged bot-secrets.sh + migrate-secrets.sh at \$VAULT/"
+
 # Copy + substitute start-claude.sh into the vault root
 cp "$VAULT/runtime/start-claude.sh" "$VAULT/start-claude.sh"
 substitute_placeholders "$VAULT/start-claude.sh"
