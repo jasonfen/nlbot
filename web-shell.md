@@ -295,13 +295,15 @@ journalctl -u <BOT_NAME>-web -f       # tail logs
 
 ## Tailscale exposure
 
-Same pattern as SilverBullet:
+Same `tailscale serve` pattern as SilverBullet, but on **8443** so the two coexist (SilverBullet owns 443; the tailnet's HTTPS endpoint can only multiplex by port):
 
 ```bash
-sudo tailscale serve --bg --https=443 http://127.0.0.1:3000
+sudo tailscale serve --bg --https=8443 http://127.0.0.1:3000
 ```
 
-Now reachable at `https://<host>.<your-tailnet>.ts.net`. Add it to your phone's home screen (Safari "Add to Home Screen" picks up the manifest and apple-touch-icon and treats it like a native app — fullscreen, dark status bar, the whole bit).
+Now reachable at `https://<host>.<your-tailnet>.ts.net:8443`. Add it to your phone's home screen (Safari "Add to Home Screen" picks up the manifest and apple-touch-icon and treats it like a native app — fullscreen, dark status bar, the whole bit).
+
+> No sidecar container — `tailscale serve` runs on the host directly, the same machine that runs both the SilverBullet container and the `<BOT_NAME>-web.service` Node process. Tailscale handles cert provisioning and TLS termination; the underlying services bind to `127.0.0.1` and never get a tailnet identity of their own. Keeps the install footprint small.
 
 ## Security model
 
