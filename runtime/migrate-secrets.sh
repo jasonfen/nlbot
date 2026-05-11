@@ -69,21 +69,30 @@ encrypt_one() {
 
 # Pull a value from setup-state.md's Values block. Empty if unset or
 # still the <!-- hint --> placeholder.
+#
+# Note the `|| true` after grep: under `set -euo pipefail` a no-match grep
+# returns 1, pipefail propagates that through the pipeline, the $(...)
+# substitution in the caller fails, and `set -e` kills the script with no
+# error message because the failure was inside command substitution.
+# nlbot-test hit this on .telegram/config (file existed but every line was
+# a redaction comment, no BOT_TOKEN= match).
 state_value() {
   local key="$1"
   local file="$VAULT/setup-state.md"
   [ -f "$file" ] || return 0
-  grep "^- \*\*$key\*\*:" "$file" 2>/dev/null \
+  { grep "^- \*\*$key\*\*:" "$file" 2>/dev/null || true; } \
     | sed 's/^[^:]*: *//; s/ *<!--.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' \
     | head -1
 }
 
-# Pull a value from a key=value .env / config file.
+# Pull a value from a key=value .env / config file. Same `|| true` guard
+# as state_value — see comment there.
 envfile_value() {
   local file="$1"
   local key="$2"
   [ -f "$file" ] || return 0
-  grep "^${key}=" "$file" 2>/dev/null | head -1 | cut -d= -f2- | sed 's/^"//; s/"$//'
+  { grep "^${key}=" "$file" 2>/dev/null || true; } \
+    | head -1 | cut -d= -f2- | sed 's/^"//; s/"$//'
 }
 
 # Replace a line in setup-state.md so the plaintext value is gone.
