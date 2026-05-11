@@ -26,8 +26,28 @@
     </label>
     <button id="esc-btn" class="tool-btn" tabindex="-1" title="Send Escape">Esc</button>
     <button id="copy-btn" class="tool-btn" tabindex="-1" title="Copy selection">&#x2398;</button>
+    <a id="session-toggle" class="tool-btn" tabindex="-1" title="Switch tmux session"></a>
     <button id="logout-btn" class="tool-btn" tabindex="-1" title="Logout">&#x23FB;</button>
   </div>
+  <script>
+    // Session toggle: jump between ?session=claude (default) and ?session=shell.
+    // Glyph reflects the CURRENT session; clicking the link switches to the other.
+    (function() {
+      const link = document.getElementById('session-toggle');
+      if (!link) return;
+      const params = new URLSearchParams(location.search);
+      const current = params.get('session') || 'claude';
+      if (current === 'shell') {
+        link.textContent = '🐚';
+        link.title = 'In shell — switch to Claude';
+        link.href = location.pathname;
+      } else {
+        link.textContent = '🤖';
+        link.title = 'In Claude — switch to shell';
+        link.href = location.pathname + '?session=shell';
+      }
+    })();
+  </script>
   <script src="xterm/xterm.js"></script>
   <script src="xterm/xterm-addon-fit.js"></script>
   <script src="xterm/xterm-addon-unicode11.js"></script>

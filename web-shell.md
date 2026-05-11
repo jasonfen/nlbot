@@ -305,6 +305,24 @@ Now reachable at `https://<host>.<your-tailnet>.ts.net:8443`. Add it to your pho
 
 > No sidecar container — `tailscale serve` runs on the host directly, the same machine that runs both the SilverBullet container and the `<BOT_NAME>-web.service` Node process. Tailscale handles cert provisioning and TLS termination; the underlying services bind to `127.0.0.1` and never get a tailnet identity of their own. Keeps the install footprint small.
 
+## Two tmux sessions: Claude + bash
+
+The web shell attaches to whichever tmux session the URL asks for:
+
+| URL | Tmux session | What you see |
+|---|---|---|
+| `https://<host>:8443/`                  | `claude` | Claude Code's REPL (default — bookmarks pointing at the bare URL still land here) |
+| `https://<host>:8443/?session=shell`    | `shell`  | A regular `bash -l` running as the bot user |
+
+Both sessions are long-lived systemd services and survive reboots:
+
+- `claude-code.service` → `tmux session 'claude'` (installed in `first-time-setup.md` Step 4).
+- `<BOT_NAME>-shell.service` → `tmux session 'shell'` (installed in the same step, same shape, independent restart).
+
+The web shell uses one login (same `UI_USERNAME` / `UI_PASSWORD` from `.env`). Session names are allowlisted in `server.js` (`ALLOWED_SESSIONS = {'claude', 'shell'}`); unknown values fall back to `claude`. There's no privilege separation between the two — both run as the bot user. If you need a true admin shell, SSH in as the cloud-default account.
+
+The toolbar has a 🤖 / 🐚 toggle button that flips between the two URLs in one click; the glyph reflects which session you're currently in.
+
 ## Security model
 
 - **Tailscale-only.** Your tailnet *is* the perimeter. Nobody outside it can reach the host.

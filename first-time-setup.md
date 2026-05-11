@@ -143,18 +143,24 @@ chmod +x $VAULT/start-claude.sh
 
 The script has a `cd` line near the top that hardcodes the vault path. Open `$VAULT/start-claude.sh` and update that line if it doesn't already point at `$VAULT`.
 
-Then drop the systemd unit at `/etc/systemd/system/claude-code.service` (template in [persistence-and-hardware.md](persistence-and-hardware.md) — change `User=` and the path).
+Then drop two sibling systemd units at `/etc/systemd/system/`:
+
+- `claude-code.service` (template in [persistence-and-hardware.md](persistence-and-hardware.md) — change `User=` and the path).
+- `<BOT_NAME>-shell.service` (parallel unit running `tmux new-session -d -s shell -c %h /bin/bash -l` as the bot user). The web shell exposes both tmux sessions; `?session=shell` lands here, `tmux attach -t shell` over SSH gets the same thing.
 
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now claude-code.service
-tmux ls                         # should show "claude" session
+sudo systemctl enable --now <BOT_NAME>-shell.service
+tmux ls                         # should show "claude" AND "shell" sessions
 tmux attach -t claude           # see Claude Code running
 # Check that the ❯ prompt renders correctly. If you see __ or ?? instead,
 # the locale isn't set right in some shell context. See the "Glyph rendering"
 # section in persistence-and-hardware.md — fix it before continuing.
 # detach with ctrl+b then d (don't kill it)
 ```
+
+`first-time-setup.sh` automates both `claude-code.service` and `<BOT_NAME>-shell.service` together — Step 4 of the script writes both heredocs, enables both, and verifies both tmux sessions came up.
 
 ### Final action: grant the bot scoped sudo NOPASSWD (then reboot)
 

@@ -348,14 +348,43 @@ WantedBy=multi-user.target
 EOF
 echo "  Wrote /etc/systemd/system/claude-code.service"
 
+# Sibling tmux service for a regular bash shell — accessible via the web
+# shell at ?session=shell, or `tmux attach -t shell` over SSH. Same User,
+# same Restart cap as claude-code.service. Independent of Claude — can be
+# stopped/restarted without disturbing the bot.
+sudo tee /etc/systemd/system/${BOT_NAME}-shell.service > /dev/null <<EOF
+[Unit]
+Description=Bot user persistent shell tmux session
+After=network-online.target
+Wants=network-online.target
+StartLimitBurst=10
+StartLimitIntervalSec=60
+
+[Service]
+Type=forking
+User=$BOT_NAME
+ExecStart=/usr/bin/tmux new-session -d -s shell -c %h /bin/bash -l
+ExecStop=/usr/bin/tmux kill-session -t shell
+Restart=on-failure
+RestartSec=5
+Environment=LANG=C.utf8
+Environment=LC_ALL=C.utf8
+
+[Install]
+WantedBy=multi-user.target
+EOF
+echo "  Wrote /etc/systemd/system/${BOT_NAME}-shell.service"
+
 sudo systemctl daemon-reload
 sudo systemctl enable --now claude-code.service
+sudo systemctl enable --now ${BOT_NAME}-shell.service
 
-# Verify the tmux session came up. Give it a few seconds to spawn.
-echo "  Waiting for tmux session to register…"
+# Verify BOTH tmux sessions came up. Give them a few seconds to spawn.
+echo "  Waiting for tmux sessions to register…"
 for i in 1 2 3 4 5; do
-  if tmux ls 2>/dev/null | grep -q '^claude:'; then
-    echo "  ✓ tmux session 'claude' is up."
+  if tmux ls 2>/dev/null | grep -q '^claude:' && \
+     tmux ls 2>/dev/null | grep -q '^shell:'; then
+    echo "  ✓ tmux sessions 'claude' and 'shell' are up."
     break
   fi
   sleep 1
@@ -363,6 +392,11 @@ done
 if ! tmux ls 2>/dev/null | grep -q '^claude:'; then
   echo "  ✗ tmux session 'claude' did NOT come up." >&2
   echo "    Check: sudo journalctl -u claude-code.service -n 50" >&2
+  exit 1
+fi
+if ! tmux ls 2>/dev/null | grep -q '^shell:'; then
+  echo "  ✗ tmux session 'shell' did NOT come up." >&2
+  echo "    Check: sudo journalctl -u ${BOT_NAME}-shell.service -n 50" >&2
   exit 1
 fi
 

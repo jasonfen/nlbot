@@ -59,7 +59,9 @@
   function connect() {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const path = location.pathname.replace(/\/$/, '') || '';
-    ws = new WebSocket(`${proto}//${location.host}${path}`);
+    // Forward query string (?session=claude|shell) so server.js can route
+    // the PTY to the right tmux session.
+    ws = new WebSocket(`${proto}//${location.host}${path}${location.search}`);
 
     ws.onopen = () => {
       const dims = fitAddon.proposeDimensions();

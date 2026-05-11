@@ -34,9 +34,10 @@ What it does NOT need:
 A working bot is three long-running services on the host, plus an optional fourth for browser access:
 
 1. **`claude-code.service`** — the Claude Code tmux session. Detailed below.
-2. **`telegram-bot.service`** — the Python daemon that send/receives Telegram messages. Setup in [telegram-integration.md](telegram-integration.md).
-3. **`docker-compose@<vault>.service`** *(or run `docker compose up -d` and let `restart: unless-stopped` handle it)* — runs the SilverBullet container, your editor for the vault. Setup in [silverbullet-setup.md](silverbullet-setup.md).
-4. *(optional)* **`<BOT_NAME>-web.service`** — small Node.js server that attaches to the same tmux pane and pipes the terminal through xterm.js for browser access. Setup in [web-shell.md](web-shell.md). Skip this if you only ever interact through Telegram + SilverBullet; add it the first time you wish you could see the live session from your phone.
+2. **`<BOT_NAME>-shell.service`** — a sibling tmux session named `shell` running `bash -l` as the bot user. Installed alongside `claude-code.service` in `first-time-setup.md` Step 4. Web-shell exposes it at `?session=shell`; SSH users hit it with `tmux attach -t shell`. Independent restart from claude-code.service.
+3. **`telegram-bot.service`** — the Python daemon that send/receives Telegram messages. Setup in [telegram-integration.md](telegram-integration.md).
+4. **`docker-compose@<vault>.service`** *(or run `docker compose up -d` and let `restart: unless-stopped` handle it)* — runs the SilverBullet container, your editor for the vault. Setup in [silverbullet-setup.md](silverbullet-setup.md).
+5. **`<BOT_NAME>-web.service`** — small Node.js server that attaches to either tmux session and pipes the terminal through xterm.js for browser access. Setup in [web-shell.md](web-shell.md). Same login, allowlisted `?session=` query string picks between `claude` and `shell`.
 
 All four are independently restartable. None depend on the others. If Claude crashes, SilverBullet keeps running; if the web shell hangs, Telegram is unaffected.
 

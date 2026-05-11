@@ -26,6 +26,22 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(sessionMiddleware);
 
+// Tmux session selector. The web-shell attaches to whichever named tmux
+// session the client requests via `?session=...`. Hard allowlist — never
+// pass arbitrary user input to `tmux -t`, even after auth.
+const ALLOWED_SESSIONS = new Set(['claude', 'shell']);
+const DEFAULT_SESSION = 'claude';
+
+function parseSession(req) {
+  try {
+    const u = new URL(req.url, 'http://localhost');
+    const s = u.searchParams.get('session') || DEFAULT_SESSION;
+    return ALLOWED_SESSIONS.has(s) ? s : DEFAULT_SESSION;
+  } catch (_e) {
+    return DEFAULT_SESSION;
+  }
+}
+
 // Auth middleware
 function requireAuth(req, res, next) {
   if (req.session && req.session.authenticated) return next();
@@ -88,9 +104,13 @@ server.on('upgrade', (req, socket, head) => {
   });
 });
 
-wss.on('connection', (ws) => {
-  // Attach to existing tmux session via PTY
-  const shell = pty.spawn('tmux', ['attach', '-t', 'claude'], {
+wss.on('connection', (ws, req) => {
+  // Pick the tmux session from the upgrade URL's ?session=... query string.
+  // Falls back to DEFAULT_SESSION for missing/unknown values (allowlist).
+  const sessionName = parseSession(req);
+
+  // Attach to the requested tmux session via PTY
+  const shell = pty.spawn('tmux', ['attach', '-t', sessionName], {
     name: 'xterm-256color',
     cols: 120,
     rows: 40,
