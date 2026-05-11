@@ -102,7 +102,14 @@ else
 fi
 
 pass() { printf "  [%s✓%s] %-38s %s\n" "$G" "$N" "$1" "${2:-}"; }
-fail() { printf "  [%s✗%s] %-38s %s\n" "$R" "$N" "$1" "${2:-}"; }
+# fail() also captures the FIRST failing phase name into FIRST_FAIL, so the
+# recommendation block can suggest "go back and fix this" even when later
+# phases coincidentally completed. The `${VAR:=val}` form only sets if VAR
+# is currently empty — subsequent fails don't overwrite the earliest one.
+fail() {
+  printf "  [%s✗%s] %-38s %s\n" "$R" "$N" "$1" "${2:-}"
+  : "${FIRST_FAIL:=$1}"
+}
 warn() { printf "  [%s!%s] %-38s %s\n" "$Y" "$N" "$1" "${2:-}"; }
 
 # --- Header ------------------------------------------------------------------
@@ -329,6 +336,11 @@ if [ "$MODE" = "POST-SETUP" ]; then
       REACHED="step-9-telegram-creds-resolved"
     else
       warn "step-9-telegram-creds" "BLOCKER pending: BotFather token"
+      # creds-missing is a user-action blocker; counts as the FIRST_FAIL
+      # so the recommendation reports "wait on BotFather" instead of
+      # falling through to the activate-fail below (which can't proceed
+      # without creds anyway).
+      : "${FIRST_FAIL:=step-9-telegram-creds-blocker}"
     fi
     if systemctl is-active telegram-bot.service >/dev/null 2>&1; then
       pass "step-9-telegram-activate" "service active"
@@ -420,26 +432,41 @@ if [ "$REACHED" = "step-9-telegram-activate" ] && \
   fi
 fi
 
-# Compute next-phase suggestion. `phase-0` is the legacy alias of `pre-step-5`
-# kept for back-compat with kits seeded before the schema collapse.
-# Telegram trio moved to the end of the walk (step-9-*) so its BotFather
-# BLOCKER doesn't gate web/cron/memory; legacy `step-6-telegram-*` phase
-# names are kept as aliases for kits that hit those values before the
-# reorder landed.
-case "${REACHED:-pre-step-5}" in
-  "phase-0"|"pre-step-5"|"")          NEXT="step-5-cron" ;;
-  "step-5-cron"|"step-7-cron")        NEXT="step-6-silverbullet" ;;
-  "step-6-silverbullet"|"step-5-silverbullet")
-                                      NEXT="step-7-web-shell" ;;
-  "step-7-web-shell"|"step-6-web-shell")
-                                      NEXT="step-8-memory" ;;
-  "step-8-memory"|"step-9-memory")    NEXT="step-9-telegram-daemon" ;;
-  "step-9-telegram-daemon"|"step-6-telegram-daemon")
-                                      NEXT="step-9-telegram-creds-blocker" ;;
-  "step-9-telegram-creds-resolved"|"step-6-telegram-creds-resolved")
-                                      NEXT="step-9-telegram-activate" ;;
-  *)                                  NEXT="${REACHED}" ;;
-esac
+# Compute next-phase suggestion.
+#
+# Preference order:
+#   1. FIRST_FAIL — the earliest phase that didn't pass, even if later
+#      phases coincidentally did. Catches "step-5-cron ✗ but step-9-* ✓"
+#      where the right action is "go back and fix step-5", not "proceed
+#      forward past the gap." Set by fail() (any [✗]) or by the
+#      telegram-creds warn branch when BotFather token is missing.
+#   2. REACHED → NEXT case mapping — used when FIRST_FAIL is empty
+#      (everything before REACHED passed). This is the normal "advance
+#      to next phase" path.
+#
+# `phase-0` is the legacy alias of `pre-step-5`. Telegram trio moved to
+# the end of the walk in c38173f; legacy `step-6-telegram-*` names kept
+# as aliases. Cron moved to first phase in 8b10926; legacy
+# `step-5-silverbullet`, `step-6-web-shell`, `step-7-cron`, and
+# `step-9-memory` kept as aliases.
+if [ -n "${FIRST_FAIL:-}" ]; then
+  NEXT="$FIRST_FAIL"
+else
+  case "${REACHED:-pre-step-5}" in
+    "phase-0"|"pre-step-5"|"")          NEXT="step-5-cron" ;;
+    "step-5-cron"|"step-7-cron")        NEXT="step-6-silverbullet" ;;
+    "step-6-silverbullet"|"step-5-silverbullet")
+                                        NEXT="step-7-web-shell" ;;
+    "step-7-web-shell"|"step-6-web-shell")
+                                        NEXT="step-8-memory" ;;
+    "step-8-memory"|"step-9-memory")    NEXT="step-9-telegram-daemon" ;;
+    "step-9-telegram-daemon"|"step-6-telegram-daemon")
+                                        NEXT="step-9-telegram-creds-blocker" ;;
+    "step-9-telegram-creds-resolved"|"step-6-telegram-creds-resolved")
+                                        NEXT="step-9-telegram-activate" ;;
+    *)                                  NEXT="${REACHED}" ;;
+  esac
+fi
 
 echo "Recommended next:     $NEXT"
 echo
