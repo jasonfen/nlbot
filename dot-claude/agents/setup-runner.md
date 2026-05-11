@@ -137,7 +137,7 @@ If the count is 4, advance to the container probe.
 1. Create `<VAULT>/.telegram/` with mode 700.
 2. Copy `<VAULT>/runtime/tg-bot.py` and `tg-post.sh` into `<VAULT>/.telegram/`. `chmod +x` both.
 3. Write `<VAULT>/.telegram/config` with empty `BOT_TOKEN=`, `CHAT_ID=`, `BOT_USERNAME=` lines. `chmod 600`.
-4. Write `/etc/systemd/system/telegram-bot.service` using the template in `telegram-integration.md` (substitute `<BOT_NAME>` and `<VAULT>`). Use `sudo tee` (NOPASSWD).
+4. Render `<VAULT>/runtime/telegram-bot.service` (substitute `<BOT_NAME>` and `<VAULT>`) and install it as `/etc/systemd/system/telegram-bot.service` via `sudo tee` (NOPASSWD). The kit template already includes `LoadCredentialEncrypted=` for the three tg-* blobs.
 5. `sudo systemctl daemon-reload` (don't enable yet — config has no token).
 6. Post BLOCKER:
    ```

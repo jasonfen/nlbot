@@ -177,6 +177,64 @@ if [ "$fail" -gt 0 ]; then
   exit 1
 fi
 
+# Replace a systemd unit file from a kit template, substituting placeholders.
+# Idempotent: if the running unit already loads encrypted credentials, skip.
+#   $1 = unit file name in /etc/systemd/system (e.g. nlbot-web.service)
+#   $2 = path to kit template (e.g. $VAULT/web-terminal/claude-web.service)
+#   $3 = (optional) human label for the banner
+replace_unit_if_stale() {
+  local unit_name="$1"
+  local template="$2"
+  local label="${3:-$unit_name}"
+  local installed="/etc/systemd/system/$unit_name"
+
+  if [ ! -f "$template" ]; then
+    echo "  [skip] $label — template not found at $template" >&2
+    return 0
+  fi
+
+  # If the unit exists AND already has the LoadCredentialEncrypted= lines
+  # the new template introduces, nothing to do. Test with sudo because
+  # /etc/systemd/system files are root-readable on some installs.
+  if sudo test -f "$installed" && \
+     sudo grep -q "^LoadCredentialEncrypted=" "$installed" 2>/dev/null; then
+    echo "  [skip] $label — already loads encrypted credentials"
+    return 0
+  fi
+
+  # Render and install. The template uses <BOT_NAME>, <VAULT>, <USER>;
+  # OS_USER defaults to BOT_NAME (kit convention).
+  echo "  [unit] $label — replacing $installed with rendered template"
+  sed \
+    -e "s|<BOT_NAME>|$BOT_NAME|g" \
+    -e "s|<VAULT>|$VAULT|g" \
+    -e "s|<USER>|$BOT_NAME|g" \
+    "$template" \
+    | sudo tee "$installed" >/dev/null
+  return 1   # signal "changed" so caller can daemon-reload
+}
+
+banner "Phase 2.5 — Refresh service units"
+echo
+echo "  Encrypted credentials are useless if the unit files don't tell"
+echo "  systemd to load them. Replacing any unit that's missing"
+echo "  LoadCredentialEncrypted= with the kit's current template."
+echo
+
+units_changed=0
+replace_unit_if_stale "${BOT_NAME}-web.service" \
+  "$VAULT/web-terminal/claude-web.service" \
+  "web-terminal" || units_changed=$((units_changed+1))
+
+replace_unit_if_stale "telegram-bot.service" \
+  "$SCRIPT_DIR/telegram-bot.service" \
+  "telegram-bot" || units_changed=$((units_changed+1))
+
+if [ "$units_changed" -gt 0 ]; then
+  echo "  Reloading systemd to pick up $units_changed replaced unit(s)…"
+  sudo systemctl daemon-reload
+fi
+
 banner "Phase 3 — Redact plaintext"
 
 # setup-state.md
@@ -206,25 +264,42 @@ envfile_redact "$VAULT/.telegram/config" BOT_USERNAME       tg-bot-username
 # it does hold identity prefs and was world-readable before.
 chmod 600 "$VAULT/setup-state.md" 2>/dev/null || true
 
-banner "Done — restart services to load new credentials"
+banner "Phase 4 — Restart services"
+echo
+echo "  Plaintext secrets are now at $SECRETS_DIR (encrypted)."
+echo "  Restarting services so they pick up credentials via"
+echo "  \$CREDENTIALS_DIRECTORY."
+echo
+
+restart_one() {
+  local unit="$1"
+  if ! systemctl list-unit-files "$unit" >/dev/null 2>&1; then
+    echo "  [skip] $unit — not installed"
+    return 0
+  fi
+  if sudo systemctl restart "$unit"; then
+    sleep 1
+    if systemctl is-active "$unit" >/dev/null 2>&1; then
+      echo "  [ok]   $unit — active"
+    else
+      echo "  [FAIL] $unit — restart returned 0 but not active; check journalctl --no-pager -u $unit -n 30" >&2
+    fi
+  else
+    echo "  [FAIL] $unit — restart failed; check journalctl --no-pager -u $unit -n 30" >&2
+  fi
+}
+
+restart_one "${BOT_NAME}-web.service"
+restart_one "telegram-bot.service"
+
 cat <<EOF
 
-The plaintext secrets have been moved into:
-  $SECRETS_DIR
+SilverBullet (compose) still needs its wrapper to flip from
+inline literals to \${SB_USER_PASSWORD} / \${SB_AUTH_TOKEN} loaded
+from systemd-creds:
 
-Restart the services to pick them up (their unit files must already
-have LoadCredentialEncrypted= entries — see the new units in
-runtime/web-terminal/claude-web.service and runtime/telegram-bot.service):
-
-  sudo systemctl daemon-reload
-  sudo systemctl restart ${BOT_NAME}-web.service
-  sudo systemctl restart telegram-bot.service
-
-  # SilverBullet (compose) needs its wrapper:
   bash $SCRIPT_DIR/silverbullet-up.sh
 
-If a service fails to start, journalctl -u <unit> will say why; the
-most common cause is the unit not having LoadCredentialEncrypted= or
-the daemon not yet reading from \$CREDENTIALS_DIRECTORY. Both are
-addressed by the kit version that ships this script.
+(Skipped automatically here because it cascades a container
+restart; run it when you're ready for that.)
 EOF

@@ -1,0 +1,29 @@
+# Substitute <BOT_NAME> and <VAULT> for your actual values before
+# installing. Then: sudo tee /etc/systemd/system/telegram-bot.service.
+#
+# Used by:
+#   - dot-claude/agents/setup-runner.md step-9-telegram-daemon (fresh install)
+#   - runtime/migrate-secrets.sh Phase 2.5 (existing-box migration)
+[Unit]
+Description=<BOT_NAME> Telegram bot daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=<BOT_NAME>
+WorkingDirectory=<VAULT>
+ExecStart=/usr/bin/python3 <VAULT>/.telegram/tg-bot.py
+Restart=on-failure
+RestartSec=5
+
+# Encrypted credentials. systemd decrypts each at unit start and mounts it
+# under $CREDENTIALS_DIRECTORY/<name> on a tmpfs only this process can see.
+# tg-bot.py's load_config() reads them with .telegram/config as a fallback
+# for older installs.
+LoadCredentialEncrypted=tg-bot-token:/etc/<BOT_NAME>/secrets/tg-bot-token
+LoadCredentialEncrypted=tg-chat-id:/etc/<BOT_NAME>/secrets/tg-chat-id
+LoadCredentialEncrypted=tg-bot-username:/etc/<BOT_NAME>/secrets/tg-bot-username
+
+[Install]
+WantedBy=multi-user.target
