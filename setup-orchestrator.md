@@ -164,7 +164,7 @@ If `setup-state.md` doesn't exist yet, create it with this content:
 
 Started: <YYYY-MM-DD HH:MM>
 Last updated: <YYYY-MM-DD HH:MM>
-Current phase: phase-0
+Current phase: pre-step-5
 
 ## Values
 

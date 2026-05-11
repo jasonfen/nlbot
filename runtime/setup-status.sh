@@ -353,7 +353,7 @@ fi
 # POST-SETUP recommendation
 echo "Mode:                 POST-SETUP"
 echo "setup-state.md says:  Current phase: ${DECLARED:-(unset)}"
-echo "Reality reached:      ${REACHED:-phase-0}"
+echo "Reality reached:      ${REACHED:-pre-step-5}"
 echo
 
 # All-done case
@@ -369,9 +369,10 @@ if [ "$REACHED" = "step-9-memory" ] && \
   fi
 fi
 
-# Compute next-phase suggestion
-case "${REACHED:-phase-0}" in
-  "phase-0"|"")                       NEXT="step-5-silverbullet" ;;
+# Compute next-phase suggestion. `phase-0` is the legacy alias of `pre-step-5`
+# kept for back-compat with kits seeded before the schema collapse.
+case "${REACHED:-pre-step-5}" in
+  "phase-0"|"pre-step-5"|"")          NEXT="step-5-silverbullet" ;;
   "step-5-silverbullet")              NEXT="step-6-telegram-daemon" ;;
   "step-6-telegram-daemon")           NEXT="step-6-telegram-creds-blocker" ;;
   "step-6-telegram-creds-resolved")   NEXT="step-6-telegram-activate" ;;

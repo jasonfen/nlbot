@@ -9,7 +9,7 @@
 
 Started: <YYYY-MM-DD HH:MM>
 Last updated: <YYYY-MM-DD HH:MM>
-Current phase: phase-0
+Current phase: pre-step-5
 
 ---
 
@@ -19,8 +19,7 @@ The bot's soul-loop reads the `Current phase:` line above and dispatches accordi
 
 | Phase | Driven by | What runs |
 |---|---|---|
-| `phase-0` | Assisting CC (or human DIY) | Collect Values block (interview Nate) |
-| `pre-step-5` | Assisting CC (or human DIY) | Steps 1–4 of `first-time-setup.md`: vault, keybindings, `claude-code.service`, verification reboot. **The bot doesn't exist yet.** |
+| `pre-step-5` | Assisting CC (or human DIY) | Collect the Values block (interview Nate), then Steps 1–4 of `first-time-setup.md`: vault, keybindings, `claude-code.service`, verification reboot. **The bot doesn't exist yet.** Older kits used `phase-0` as the seed value; that's treated as an alias. |
 | `step-5-silverbullet` | **Bot** (setup-runner) | Generate SB_USER_PASSWORD + SB_AUTH_TOKEN, write docker-compose.yml, `docker compose up -d silverbullet`, `tailscale serve` for HTTPS |
 | `step-6-telegram-daemon` | **Bot** (setup-runner) | Copy `tg-bot.py` + `tg-post.sh` into `<VAULT>/.telegram/`, write `telegram-bot.service` (disabled). Post a BLOCKER asking for BotFather token. |
 | `step-6-telegram-creds-blocker` | **Human** | Talk to BotFather, paste TG_BOT_TOKEN + TG_BOT_USERNAME + TG_CHAT_ID into the Values block. Remove the BLOCKER line. |
