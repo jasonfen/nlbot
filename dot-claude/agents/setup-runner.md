@@ -19,9 +19,9 @@ You are **NOT** the soul-loop runner. The soul-loop dispatches you when `setup-s
 2. `<VAULT>/setup-state.md` — the Values block has Phase 0 answers (BOT_NAME, USER_NAME, VAULT path, CANARY_PHRASE, USER_ROLE, etc.). The `Current phase:` line tells you which step to run. The `## Blockers` block tells you whether the human still owes input.
 3. The setup phase reference table at the top of `setup-state.md`.
 4. **Only when you're about to execute a specific phase**, read its detail doc:
-   - `step-5-silverbullet` → `<VAULT>/silverbullet-setup.md` (or kit-clone equivalent)
-   - `step-6-web-shell` → `<VAULT>/web-shell.md`
-   - `step-7-cron` → `<VAULT>/first-time-setup.md` Step 7 section (cron entries)
+   - `step-5-cron` → `<VAULT>/first-time-setup.md` Step 5 section (cron entries)
+   - `step-6-silverbullet` → `<VAULT>/silverbullet-setup.md` (or kit-clone equivalent)
+   - `step-7-web-shell` → `<VAULT>/web-shell.md`
    - `step-8-memory` → `<VAULT>/memory.md`
    - `step-9-telegram-daemon` → `<VAULT>/telegram-integration.md`
 
@@ -38,7 +38,27 @@ The Phase 0 substitution map in `setup-orchestrator.md` is canonical for placeho
 
 ## Phase-by-phase playbook
 
-### `step-5-silverbullet`
+### `step-5-cron`
+
+**First bot-driven phase — intentionally.** Installing the heartbeat + journaling pipeline on minute one means soul-loop, secretary, wake-up, and midnight-maintenance all start running immediately. Every later phase becomes re-drivable from the heartbeat: if SilverBullet's container start mid-fails, the next soul-loop fire retries it. If the human pauses for hours between phases, the journal still captures what's happening. This phase has no bot-side prerequisites (claude-code.service + tmux session are already up from first-time-setup.md Step 4; NOPASSWD was granted as the human's final pre-reboot action).
+
+**Probe:** `crontab -u <BOT_NAME> -l 2>/dev/null | grep -q inject-prompt.sh` → if true, advance.
+
+**Execute:**
+1. Build the crontab entries (substitute `<VAULT>`):
+   ```
+   */10 7-23 * * * <VAULT>/cron-prompts/inject-prompt.sh /soul-loop
+   */30 * * * *   <VAULT>/cron-prompts/inject-prompt.sh /secretary
+   30 7 * * 1-5   <VAULT>/cron-prompts/inject-prompt.sh /wake-up
+   5 0 * * *      <VAULT>/cron-prompts/inject-prompt.sh /midnight-maintenance
+   ```
+2. `mkdir -p <VAULT>/cron-prompts`. Copy `<VAULT>/runtime/inject-prompt.sh` and `<VAULT>/runtime/cron-prompts/*.md` into `<VAULT>/cron-prompts/`. `chmod +x inject-prompt.sh`.
+3. Install via `sudo crontab -u <BOT_NAME> -` with the entries piped in (NOPASSWD).
+4. Verify with `sudo crontab -u <BOT_NAME> -l`.
+5. Journal: `### Step 5 done — heartbeat + secretary + wake-up + midnight-maintenance crontabs installed; journal now self-populating`.
+6. Advance phase to `step-6-silverbullet`.
+
+### `step-6-silverbullet`
 
 **Probe (vault pages):** Before launching the container, confirm Step 2 copied the SB index pages and process docs into the vault. Run:
 
@@ -54,7 +74,7 @@ BLOCKER missing-vault-pages: Step 2's `cp $KIT/templates/vault-pages/*.md ./` an
 
 If the count is 4, advance to the container probe.
 
-**Probe (container):** `docker compose -f <VAULT>/docker-compose.yml ps silverbullet 2>/dev/null | grep -q running` → if true, advance phase.
+**Probe (container):** `docker compose -f <VAULT>/docker-compose.yml ps --status running --services 2>/dev/null | grep -qx silverbullet` → if true, advance phase.
 
 **Execute:**
 1. Generate two secrets: `openssl rand -base64 24` twice. Write them to `setup-state.md` Values block as `SB_USER_PASSWORD` and `SB_AUTH_TOKEN`. Use `Edit` with `replace_all: false` on the specific lines.
@@ -62,10 +82,10 @@ If the count is 4, advance to the container probe.
 3. Write `<VAULT>/docker-compose.yml` using the template in `silverbullet-setup.md` — substitute `<BOT_NAME>` (use Values BOT_NAME), `<long-random-password>` (SB_USER_PASSWORD), `<long-random-token>` (SB_AUTH_TOKEN), `<VAULT>` (VAULT path).
 4. `cd <VAULT> && docker compose up -d silverbullet`. Tail logs for ~10s with `docker compose logs --tail=20 silverbullet` to verify clean start.
 5. `sudo tailscale serve --bg --https=443 http://127.0.0.1:3001` (uses NOPASSWD entry). Verify with `sudo tailscale serve status`.
-6. Journal: append `### Step 5 done — SilverBullet at https://<TAILSCALE_HOSTNAME>.<tailnet>.ts.net; SB_USER credentials in setup-state.md Values block`.
-7. Advance phase to `step-6-web-shell`.
+6. Journal: append `### Step 6 done — SilverBullet at https://<TAILSCALE_HOSTNAME>.<tailnet>.ts.net; SB_USER credentials in setup-state.md Values block`.
+7. Advance phase to `step-7-web-shell`.
 
-### `step-6-web-shell`
+### `step-7-web-shell`
 
 **Probe:** `systemctl is-active <BOT_NAME>-web.service` returns `active` → advance phase.
 
@@ -81,25 +101,8 @@ If the count is 4, advance to the container probe.
 5. Substitute `<USER>` and `<VAULT>` in `<VAULT>/web-terminal/claude-web.service`. Copy to `/etc/systemd/system/<BOT_NAME>-web.service` via `sudo tee`.
 6. `sudo systemctl daemon-reload && sudo systemctl enable --now <BOT_NAME>-web.service`.
 7. `sudo tailscale serve --bg --https=8443 http://127.0.0.1:3000`.
-8. Journal: `### Step 6 done — web shell live at https://<TAILSCALE_HOSTNAME>.<tailnet>.ts.net:8443`.
-9. Advance phase to `step-7-cron`.
-
-### `step-7-cron`
-
-**Probe:** `crontab -u <BOT_NAME> -l 2>/dev/null | grep -q inject-prompt.sh` → if true, advance.
-
-**Execute:**
-1. Build the crontab entries (substitute `<VAULT>`):
-   ```
-   */10 7-23 * * * <VAULT>/cron-prompts/inject-prompt.sh /soul-loop
-   30 7 * * 1-5 <VAULT>/cron-prompts/inject-prompt.sh /wake-up
-   5 0 * * * <VAULT>/cron-prompts/inject-prompt.sh /midnight-maintenance
-   ```
-2. `mkdir -p <VAULT>/cron-prompts`. Copy `<VAULT>/runtime/inject-prompt.sh` and `<VAULT>/runtime/cron-prompts/*.md` into `<VAULT>/cron-prompts/`. `chmod +x inject-prompt.sh`.
-3. Install via `sudo crontab -u <BOT_NAME> -` with the entries piped in (NOPASSWD).
-4. Verify with `sudo crontab -u <BOT_NAME> -l`.
-5. Journal: `### Step 7 done — cron heartbeat installed (every 10min during 07–23h)`.
-6. Advance phase to `step-8-memory`.
+8. Journal: `### Step 7 done — web shell live at https://<TAILSCALE_HOSTNAME>.<tailnet>.ts.net:8443`.
+9. Advance phase to `step-8-memory`.
 
 ### `step-8-memory`
 
@@ -156,8 +159,8 @@ Should not be reached — the soul-loop checks before dispatching. If you're cal
 ## Return value
 
 Return one line: `<phase> — <one-line outcome>`. Examples:
-- `step-5-silverbullet — container up, tailscale serve at https://nlbot.foo.ts.net`
-- `step-6-web-shell — service active at port 8443`
+- `step-5-cron — crontab installed (soul-loop / secretary / wake-up / midnight-maintenance)`
+- `step-6-silverbullet — container up, tailscale serve at https://nlbot.foo.ts.net`
 - `step-9-telegram-creds-blocker — waiting on BotFather token`
 - `done — full setup complete`
 

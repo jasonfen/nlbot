@@ -270,7 +270,16 @@ REACHED=""
 if [ "$MODE" = "POST-SETUP" ]; then
   echo "${B}Bot-driven setup phases${N}"
 
-  # step-5-silverbullet
+  # step-5-cron — first bot-driven phase. Probed first because everything
+  # downstream becomes re-drivable once the heartbeat is alive.
+  if sudo -n crontab -u "$BOT_NAME" -l 2>/dev/null | grep -q inject-prompt.sh; then
+    pass "step-5-cron" "heartbeat entries installed"
+    REACHED="step-5-cron"
+  else
+    fail "step-5-cron" "no inject-prompt.sh in crontab"
+  fi
+
+  # step-6-silverbullet
   # `docker compose ps`'s default output shows the STATUS column ("Up 8m
   # (healthy)") not the STATE column ("running") — grepping for "running"
   # against that output is a false-negative even when the container is up.
@@ -281,29 +290,21 @@ if [ "$MODE" = "POST-SETUP" ]; then
      docker compose -f "$VAULT/docker-compose.yml" ps \
        --status running --services 2>/dev/null | grep -qx silverbullet; then
     if sudo -n tailscale serve status 2>/dev/null | grep -q 3001; then
-      pass "step-5-silverbullet" "container + tailscale serve"
+      pass "step-6-silverbullet" "container + tailscale serve"
     else
-      warn "step-5-silverbullet" "container running but no tailscale serve to 3001"
+      warn "step-6-silverbullet" "container running but no tailscale serve to 3001"
     fi
-    REACHED="step-5-silverbullet"
+    REACHED="step-6-silverbullet"
   else
-    fail "step-5-silverbullet" "container not running"
+    fail "step-6-silverbullet" "container not running"
   fi
 
-  # step-6-web-shell
+  # step-7-web-shell
   if systemctl is-active "${BOT_NAME}-web.service" >/dev/null 2>&1; then
-    pass "step-6-web-shell" "${BOT_NAME}-web.service active"
-    REACHED="step-6-web-shell"
+    pass "step-7-web-shell" "${BOT_NAME}-web.service active"
+    REACHED="step-7-web-shell"
   else
-    fail "step-6-web-shell" "${BOT_NAME}-web.service not active"
-  fi
-
-  # step-7-cron
-  if sudo -n crontab -u "$BOT_NAME" -l 2>/dev/null | grep -q inject-prompt.sh; then
-    pass "step-7-cron" "heartbeat entries installed"
-    REACHED="step-7-cron"
-  else
-    fail "step-7-cron" "no inject-prompt.sh in crontab"
+    fail "step-7-web-shell" "${BOT_NAME}-web.service not active"
   fi
 
   # step-8-memory
@@ -426,11 +427,13 @@ fi
 # names are kept as aliases for kits that hit those values before the
 # reorder landed.
 case "${REACHED:-pre-step-5}" in
-  "phase-0"|"pre-step-5"|"")          NEXT="step-5-silverbullet" ;;
-  "step-5-silverbullet")              NEXT="step-6-web-shell" ;;
-  "step-6-web-shell")                 NEXT="step-7-cron" ;;
-  "step-7-cron")                      NEXT="step-8-memory" ;;
-  "step-8-memory")                    NEXT="step-9-telegram-daemon" ;;
+  "phase-0"|"pre-step-5"|"")          NEXT="step-5-cron" ;;
+  "step-5-cron"|"step-7-cron")        NEXT="step-6-silverbullet" ;;
+  "step-6-silverbullet"|"step-5-silverbullet")
+                                      NEXT="step-7-web-shell" ;;
+  "step-7-web-shell"|"step-6-web-shell")
+                                      NEXT="step-8-memory" ;;
+  "step-8-memory"|"step-9-memory")    NEXT="step-9-telegram-daemon" ;;
   "step-9-telegram-daemon"|"step-6-telegram-daemon")
                                       NEXT="step-9-telegram-creds-blocker" ;;
   "step-9-telegram-creds-resolved"|"step-6-telegram-creds-resolved")

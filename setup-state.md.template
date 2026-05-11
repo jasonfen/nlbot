@@ -20,9 +20,9 @@ The bot's soul-loop reads the `Current phase:` line above and dispatches accordi
 | Phase | Driven by | What runs |
 |---|---|---|
 | `pre-step-5` | Assisting CC (or human DIY) | Collect the Values block (interview Nate), then Steps 1–4 of `first-time-setup.md`: vault, keybindings, `claude-code.service`, verification reboot. **The bot doesn't exist yet.** Older kits used `phase-0` as the seed value; that's treated as an alias. |
-| `step-5-silverbullet` | **Bot** (setup-runner) | Generate SB_USER_PASSWORD + SB_AUTH_TOKEN, write docker-compose.yml, `docker compose up -d silverbullet`, `tailscale serve` for HTTPS |
-| `step-6-web-shell` | **Bot** (setup-runner) | `npm install` in `web-terminal/`, generate WEB_SESSION_SECRET + WEB_UI_PASSWORD, write `.env` and `claude-web.service`, enable, `tailscale serve` |
-| `step-7-cron` | **Bot** (setup-runner) | Install the four crontab entries (soul-loop / wake-up / midnight-maintenance / brugs-diss if applicable) for the bot's unix user |
+| `step-5-cron` | **Bot** (setup-runner) | **First bot phase, intentionally.** Install crontab entries (soul-loop / secretary / wake-up / midnight-maintenance) so the heartbeat + journaling pipeline starts on minute one. Everything that follows can be re-driven from the heartbeat if a phase mid-fails. |
+| `step-6-silverbullet` | **Bot** (setup-runner) | Generate SB_USER_PASSWORD + SB_AUTH_TOKEN, write docker-compose.yml, `docker compose up -d silverbullet`, `tailscale serve` for HTTPS |
+| `step-7-web-shell` | **Bot** (setup-runner) | `npm install` in `web-terminal/`, generate WEB_SESSION_SECRET + WEB_UI_PASSWORD, write `.env` and `claude-web.service`, enable, `tailscale serve` |
 | `step-8-memory` | **Bot** (setup-runner) | Install memorious-mcp as the baseline memory backend; register in `~/.claude.json` |
 | `step-9-telegram-daemon` | **Bot** (setup-runner) | Copy `tg-bot.py` + `tg-post.sh` into `<VAULT>/.telegram/`, write `telegram-bot.service` (disabled). Post a BLOCKER asking for BotFather token. Last setup phase — by the time you hit this, the rest of the bot is fully operational, so the BotFather handoff isn't gating anything else. |
 | `step-9-telegram-creds-blocker` | **Human** | Talk to BotFather, paste TG_BOT_TOKEN + TG_BOT_USERNAME + TG_CHAT_ID into the Values block. Remove the BLOCKER line. |

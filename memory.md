@@ -271,7 +271,7 @@ None of these are wrong. The bundled secretary subagent is what fenbot uses beca
 
 ## Skip the memory backend entirely
 
-If you genuinely want grep-only with no MCP memory backend at all, edit `setup-state.md` Current phase from `step-8-memory` to `step-9-telegram-daemon` before the bot reaches it (or, if it already reached step-8, bump the phase forward manually). The bot will skip the memorious install and move on to the telegram phase. You can always add it back later by setting Current phase to `step-8-memory` and running `/setup` from the bot's tmux pane.
+If you genuinely want grep-only with no MCP memory backend at all, edit `setup-state.md` Current phase from `step-8-memory` to `step-9-telegram-daemon` before the bot reaches it. The bot will skip the memorious install and move on to the telegram phase. You can always add it back later by setting Current phase to `step-8-memory` and running `/setup` from the bot's tmux pane.
 
 The bot's CLAUDE-nate.md instructs it to fall back to `grep` if `recall()` isn't available, so a memorious-less bot still works — you just lose the semantic search layer.
 

@@ -198,9 +198,9 @@ After the Step 4 verification reboot, `claude-code.service` brings the bot onlin
 
 | Phase | What runs |
 |---|---|
-| `step-5-silverbullet` | Generates SB_USER_PASSWORD + SB_AUTH_TOKEN (`openssl rand`), writes `docker-compose.yml`, `docker compose up -d`, `sudo tailscale serve --https=443`. |
-| `step-6-web-shell` | `npm install`, generates `WEB_SESSION_SECRET` + `WEB_UI_PASSWORD`, writes `.env`, installs `<BOT_NAME>-web.service`, `sudo tailscale serve --https=8443`. |
-| `step-7-cron` | Installs the four crontab entries (soul-loop / wake-up / midnight-maintenance) for the bot's unix user. |
+| `step-5-cron` | **First bot phase, intentionally.** Installs crontab entries (soul-loop / secretary / wake-up / midnight-maintenance) for the bot's unix user so the heartbeat + journaling pipeline starts on minute one. Everything downstream becomes re-drivable from the heartbeat. |
+| `step-6-silverbullet` | Generates SB_USER_PASSWORD + SB_AUTH_TOKEN (`openssl rand`), writes `docker-compose.yml`, `docker compose up -d`, `sudo tailscale serve --https=443`. |
+| `step-7-web-shell` | `npm install`, generates `WEB_SESSION_SECRET` + `WEB_UI_PASSWORD`, writes `.env`, installs `<BOT_NAME>-web.service`, `sudo tailscale serve --https=8443`. |
 | `step-8-memory` | Installs memorious-mcp as the baseline memory backend. |
 | `step-9-telegram-daemon` | Copies `tg-bot.py` + `tg-post.sh` into `.telegram/`, drops the systemd unit, posts a BLOCKER asking for BotFather token. (Last phase — by the time you hit this, the rest of the bot is fully operational, so the BotFather handoff isn't gating anything else.) |
 | `step-9-telegram-creds-blocker` | **Waits on you.** See "What you still do" below. |
@@ -257,7 +257,31 @@ Common causes of phase failures are usually a missing prereq from bootstrap.md (
 
 The bot-driven flow above is the default. If you'd rather drive Steps 5–9 yourself or via the assisting CC instance (the `setup-orchestrator.md` flow before Step 4), the detailed instructions for each step follow.
 
-### Step 5 detail — SilverBullet (the vault editor)
+### Step 5 detail — Cron the heartbeat (first bot phase, intentionally)
+
+**Intentionally first.** Installing the heartbeat + journaling pipeline on minute one means soul-loop, secretary, wake-up, and midnight-maintenance all start running immediately. Every later phase becomes re-drivable from the heartbeat if it mid-fails; the journal silently auto-populates from minute one even if the rest of the install stalls.
+
+⚠ **Do this AFTER the verification reboot from Step 4 — not before.** If cron fires before the tmux session exists, `inject-prompt.sh` will silently noop.
+
+```bash
+mkdir -p $VAULT/cron-prompts
+cp $KIT/runtime/inject-prompt.sh $VAULT/cron-prompts/
+cp $KIT/runtime/cron-prompts/*.md $VAULT/cron-prompts/
+chmod +x $VAULT/cron-prompts/inject-prompt.sh
+```
+
+Then `crontab -e`:
+
+```cron
+*/10 7-23 * * * <VAULT>/cron-prompts/inject-prompt.sh /soul-loop
+*/30 * * * *   <VAULT>/cron-prompts/inject-prompt.sh /secretary
+30 7 * * 1-5   <VAULT>/cron-prompts/inject-prompt.sh /wake-up
+5 0 * * *      <VAULT>/cron-prompts/inject-prompt.sh /midnight-maintenance
+```
+
+Within 10 minutes you should see soul-loop fires in `cron-prompts/job-log.md`, and the secretary fires every 30 minutes capturing journal-worthy moments from your conversations.
+
+### Step 6 detail — SilverBullet (the vault editor)
 
 This is your daily interface to the bot's brain. Walked through fully in [silverbullet-setup.md](silverbullet-setup.md). The condensed version:
 
@@ -279,7 +303,7 @@ This is your daily interface to the bot's brain. Walked through fully in [silver
 
 When you first land on SilverBullet, [[index]] is the entry point (created from `templates/vault-pages/index.md` in Step 2) and [[dashboard]] shows live queries for open handoffs / tasks / recent activity. You can now read `journals/journal.md` from your phone and leave handoff tasks (`- [ ] do X #handoff`) for the bot.
 
-### Step 6 detail — Web shell
+### Step 7 detail — Web shell
 
 The web shell is a small Node.js server that attaches to your `claude` tmux session and renders it through xterm.js in the browser, login-protected and Tailscale-only. Walked through end-to-end in [web-shell.md](web-shell.md). The condensed version:
 
@@ -291,27 +315,6 @@ The web shell is a small Node.js server that attaches to your `claude` tmux sess
 6. Visit `https://<host>.<tailnet>.ts.net:8443`, log in, watch Claude type.
 
 On iOS, "Add to Home Screen" makes it behave like a native app (PWA manifest is included).
-
-### Step 7 detail — Cron the heartbeat
-
-⚠ **Do this AFTER the verification reboot from Step 4 — not before.** If cron fires before the tmux session exists, `inject-prompt.sh` will silently noop.
-
-```bash
-mkdir -p $VAULT/cron-prompts
-cp $KIT/runtime/inject-prompt.sh $VAULT/cron-prompts/
-cp $KIT/runtime/cron-prompts/*.md $VAULT/cron-prompts/
-chmod +x $VAULT/cron-prompts/inject-prompt.sh
-```
-
-Then `crontab -e`:
-
-```cron
-*/10 7-23 * * * <VAULT>/cron-prompts/inject-prompt.sh /soul-loop
-30 7 * * 1-5 <VAULT>/cron-prompts/inject-prompt.sh /wake-up
-5 0 * * * <VAULT>/cron-prompts/inject-prompt.sh /midnight-maintenance
-```
-
-Within 10 minutes you should see soul-loop fires in `cron-prompts/job-log.md`.
 
 ### Step 8 detail — Vector memory (memorious-mcp baseline)
 

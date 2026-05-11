@@ -10,7 +10,7 @@ Normally the soul-loop calls setup-runner automatically when `<VAULT>/setup-stat
 grep -E '^(Current phase|## (Done|In-progress|Blockers))' <VAULT>/setup-state.md 2>/dev/null || echo "(no setup-state.md — bot is already done)"
 ```
 
-If `Current phase: done` and you still want to re-run a specific phase, edit `<VAULT>/setup-state.md` to set Current phase to the phase name (e.g., `step-6-web-shell`) before invoking this command.
+If `Current phase: done` and you still want to re-run a specific phase, edit `<VAULT>/setup-state.md` to set Current phase to the phase name (e.g., `step-5-cron`) before invoking this command.
 
 Spawn the `setup-runner` sub-agent (Agent tool, `subagent_type: "setup-runner"`) with this prompt:
 
