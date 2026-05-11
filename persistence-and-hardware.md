@@ -48,6 +48,9 @@ All four are independently restartable. None depend on the others. If Claude cra
 Description=Claude Code persistent tmux session
 After=network-online.target
 Wants=network-online.target
+# Cap restart loops so a misconfigured start-claude.sh can't flood the journal.
+StartLimitBurst=10
+StartLimitIntervalSec=60
 
 [Service]
 Type=forking

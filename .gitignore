@@ -11,6 +11,9 @@
 .telegram/.last-update-id
 .telegram/pending-actions.txt
 .sidechat/
+# Populated per-bot from setup-state.md.template by first-time-setup.sh.
+# Live values (BOT_NAME, CANARY_PHRASE, secrets, etc.) never enter git.
+setup-state.md
 
 # Node / Python
 node_modules/

@@ -125,6 +125,32 @@ substitute_placeholders() {
     "$file"
 }
 
+# --- OAuth pre-flight (must happen before the systemd service can run) ------
+# claude --continue inside a detached tmux session silently exits if the
+# user hasn't done first-run OAuth at a real terminal — the TOS gate can't
+# be answered headlessly. Catch it here before we wire up the service.
+if [ ! -f "$HOME/.claude/.credentials.json" ]; then
+  echo
+  echo "  ✗ Claude Code first-run OAuth has not been completed."
+  echo "    \$HOME/.claude/.credentials.json is missing."
+  echo
+  echo "  Fix: at a real terminal (this SSH session is fine, NOT inside tmux),"
+  echo "       run:  claude"
+  echo "       Accept the TOS, walk the OAuth, then exit cleanly."
+  echo "       Re-run this script after."
+  exit 1
+fi
+
+# --- Bootstrap setup-state.md from the template if missing ------------------
+# The repo ships setup-state.md.template (versioned) and .gitignores
+# setup-state.md (per-bot live values). This means `git pull` never
+# clobbers Phase 0 answers a previous run wrote. First run copies once.
+if [ ! -f "$VAULT_DEFAULT/setup-state.md" ] \
+   && [ -f "$VAULT_DEFAULT/setup-state.md.template" ]; then
+  cp "$VAULT_DEFAULT/setup-state.md.template" "$VAULT_DEFAULT/setup-state.md"
+  echo "  Created setup-state.md from template (first run on this box)."
+fi
+
 # --- Phase 0: collect values ------------------------------------------------
 
 banner "Phase 0 — Collect setup values"
@@ -300,6 +326,12 @@ sudo tee /etc/systemd/system/claude-code.service > /dev/null <<EOF
 Description=Claude Code persistent tmux session
 After=network-online.target
 Wants=network-online.target
+# Cap restart loops at 10 within 60s so a genuine break doesn't flood the
+# journal — without this, RestartSec=5 will hammer indefinitely. Caught
+# during nlbot-test dry-run when a misconfigured start-claude.sh racked
+# up 34 restart attempts in seconds.
+StartLimitBurst=10
+StartLimitIntervalSec=60
 
 [Service]
 Type=forking
