@@ -34,12 +34,18 @@ Follow the prompts, accept the TOS. **Do this at a real terminal, not in a tmux 
 Verify the rest of the prereqs:
 
 ```bash
-claude --version          # Claude Code installed
-docker compose version    # Docker Engine + compose plugin (needed Step 5 — SilverBullet)
-tmux -V                   # tmux installed
-tailscale status          # Tailscale logged in (otherwise: sudo tailscale up)
-node --version            # Node 20+ — only if doing the optional web shell (Step 7)
+claude --version
+docker compose version
+tmux -V
+tailscale status
+node --version
 ```
+
+Each should print a version string. Notes:
+
+- `docker compose version` needs the compose plugin (needed by SilverBullet in Step 5).
+- `tailscale status` should show your tailnet — if it errors, run `sudo tailscale up`.
+- `node --version` only matters if you're doing the optional web shell (Step 7); Node 20+.
 
 Anything that fails: install the missing piece before continuing. `docker compose version` is the trickiest — modern installs use the compose plugin (`docker compose`, two words), not the old standalone binary (`docker-compose`, hyphen).
 
@@ -57,7 +63,8 @@ KIT=$(pwd)
 
 cp $KIT/CLAUDE-nate.md       CLAUDE.md
 cp -r $KIT/templates         templates
-cp -r $KIT/dot-claude        .claude     # NOTE the rename: dot-claude → .claude
+# NOTE the rename in the next command: dot-claude → .claude
+cp -r $KIT/dot-claude        .claude
 
 # Seed the bot's identity from the bundled templates
 cp templates/identity.md     identity.md
@@ -136,15 +143,20 @@ tmux attach -t claude           # see Claude Code running
 This is the privilege grant that lets the bot drive Steps 5–9 from inside the detached tmux session (where there's no terminal for sudo to prompt against). **Do this only after the steps above all worked** — by this point you have a working `claude-code.service`, a verified tmux session, and everything else from bootstrap.md sane. The NOPASSWD entry is the "I'm ready to hand the keys over" gate.
 
 ```bash
-# Substitute $BOTUSER with your bot's unix username (the one from bootstrap.md Step 2)
+# Substitute $BOTUSER with your bot's unix username
+# (the one from bootstrap.md Step 2)
 sudo tee /etc/sudoers.d/$BOTUSER >/dev/null <<EOF
-$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/systemctl, /usr/bin/crontab, /usr/bin/docker
+$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/systemctl
+$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/crontab
+$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/docker
 EOF
 sudo chmod 440 /etc/sudoers.d/$BOTUSER
-sudo visudo -cf /etc/sudoers.d/$BOTUSER     # should print "parsed OK"
+sudo visudo -cf /etc/sudoers.d/$BOTUSER
 
 # Verify the bot user can actually use it
-sudo -u $BOTUSER sudo -n /usr/bin/systemctl --version > /dev/null && echo "NOPASSWD OK" || echo "NOPASSWD FAILED"
+sudo -u $BOTUSER sudo -n /usr/bin/systemctl --version > /dev/null \
+  && echo "NOPASSWD OK" \
+  || echo "NOPASSWD FAILED"
 ```
 
 Anything outside `systemctl / crontab / docker` still prompts for the password and stays your job. If something feels off here, **don't reboot yet** — debug first. If you want to undo: `sudo rm /etc/sudoers.d/$BOTUSER`. If you'd rather grant blanket `NOPASSWD: ALL` instead of scoped (bigger blast radius if the bot ever runs amok), substitute `NOPASSWD: ALL` for the comma-list above. The kit's recommended path is scoped.

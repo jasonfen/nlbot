@@ -155,9 +155,18 @@ curl -fsSL https://download.docker.com/linux/$DOCKER_OS/gpg | \
   sudo gpg --dearmor --yes -o /etc/apt/keyrings/docker.gpg
 sudo chmod a+r /etc/apt/keyrings/docker.gpg
 
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-  https://download.docker.com/linux/$DOCKER_OS $DOCKER_CODENAME stable" | \
-  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+# deb822-style sources file: each field on its own short line, so nothing
+# wraps in a viewer's clipboard. apt on Debian 12+ / Ubuntu 22.04+ supports
+# both .list (one long line) and .sources (multi-line) — using the latter
+# here avoids the same paste-wrap hazard that bit the apt install above.
+sudo tee /etc/apt/sources.list.d/docker.sources > /dev/null <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/$DOCKER_OS
+Suites: $DOCKER_CODENAME
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.gpg
+EOF
 
 sudo apt update
 # Use `\` continuations: a single long line wraps in narrow terminals and
@@ -180,10 +189,13 @@ sudo usermod -aG docker $USER
 **Log out and back in** for the group change to take effect, then verify:
 
 ```bash
-docker compose version    # 'docker compose' (two words, plugin), not 'docker-compose'
+docker compose version
 docker run --rm hello-world
-id -nG | tr ' ' '\n' | grep -x docker    # MUST print 'docker' — confirms group is live in this login
+id -nG | tr ' ' '\n' | grep -x docker
 ```
+
+- `docker compose version` (two words, plugin) — not the legacy `docker-compose` binary.
+- `id -nG | ... | grep -x docker` MUST print `docker` — confirms the group membership from `usermod -aG` is live in this login (group changes only take effect on a new login).
 
 The third line is the load-bearing one for the rest of the kit. The bot's `claude-code.service` inherits whatever groups this login has at the time the service starts; if `docker` isn't in this `id` output, the bot will be unable to run `docker compose` once it boots, and Step 5 of `first-time-setup.md` will fail. If it's missing, `exit` the SSH session, reconnect, and re-run the `id` check.
 
