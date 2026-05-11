@@ -312,13 +312,14 @@ This is your daily interface to the bot's brain. Walked through fully in [silver
 2. Drop a `docker-compose.yml` in `$VAULT/` with the silverbullet service block (template in [silverbullet-setup.md](silverbullet-setup.md)) — set `SB_USER=<bot-name>:<password>`, `SB_AUTH_TOKEN=<token>`, mount `$VAULT:/space`, bind `127.0.0.1:3001:3000`.
 3. `docker compose up -d` and visit `http://localhost:3001`. Log in with the SB_USER credentials. You should see your vault.
 4. Expose via Tailscale: `sudo tailscale serve --bg --https=443 http://127.0.0.1:3001`. Now reachable from your phone at `https://<host>.<tailnet>.ts.net`.
-5. Install the **TreeView** plug — essential for vault navigation. In SilverBullet:
+5. Install the seeded plugs. `first-time-setup.sh` Step 2 already wrote `CONFIG.md` at the vault root with `config.set("plugs", {…})` declaring TreeView. In SilverBullet:
    1. Open the command palette (Ctrl/Cmd-K).
-   2. Type `Plugs: Add Plug`.
-   3. Paste: `github:silverbulletmd/silverbullet-treeview/treeview.plug.js`
-   4. Run `Plugs: Update`, then reload (Ctrl/Cmd-R). The folder sidebar should appear.
+   2. Run `Plugs: Update`. SB reads `CONFIG.md`, downloads + compiles each plug, writes them to `_plug/`.
+   3. Reload (Ctrl/Cmd-R). The TreeView folder sidebar should appear on the left.
 
-   Other plugs (e.g., `silverbullet-tasks` for richer task views) install the same way. Defaults are fine for everything else; skip a `SETTINGS.md` unless you have a specific reason.
+   Want more plugs later? Edit the `config.set("plugs", {…})` table in `CONFIG.md` and re-run `Plugs: Update` — no `Plugs: Add` flow needed. Other config defaults (`taskStates`, `treeview.position`) live in the same file.
+
+6. The kit also seeded a daily-handoff template at `_templates/handoff.md`. To create a new handoff page from SilverBullet: `Page: From Template` → pick `handoff`. SB stamps out `handoffs/YYYY/MM/DD.md` with the canonical structure (tasks, context, done). The bot's soul-loop sees the new `- [ ] … #handoff` checkboxes within 10 minutes.
 
 When you first land on SilverBullet, [[index]] is the entry point (created from `templates/vault-pages/index.md` in Step 2) and [[dashboard]] shows live queries for open handoffs / tasks / recent activity. You can now read `journals/journal.md` from your phone and leave handoff tasks (`- [ ] do X #handoff`) for the bot.
 

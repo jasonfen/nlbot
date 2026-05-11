@@ -62,19 +62,21 @@ The Phase 0 substitution map in `setup-orchestrator.md` is canonical for placeho
 
 ### `step-6-silverbullet`
 
-**Probe (vault pages):** Before launching the container, confirm Step 2 copied the SB index pages and process docs into the vault. Run:
+**Probe (vault pages):** Before launching the container, confirm Step 2 copied the SB index pages, process docs, CONFIG.md, and the page-template directory into the vault. Run:
 
 ```bash
-ls <VAULT>/index.md <VAULT>/dashboard.md <VAULT>/handoffs.md <VAULT>/processes/soul-loop.md 2>/dev/null | wc -l
+ls <VAULT>/index.md <VAULT>/dashboard.md <VAULT>/handoffs.md \
+   <VAULT>/CONFIG.md <VAULT>/processes/soul-loop.md \
+   <VAULT>/_templates/handoff.md 2>/dev/null | wc -l
 ```
 
-If the count is < 4, the human (or the assisting CC) skipped the new `cp $KIT/templates/vault-pages/*.md ./` and `cp $KIT/templates/processes/*.md ./processes/` lines from Step 2. **Do not synthesize the pages here** — post a BLOCKER and stop:
+If the count is < 6, the human (or the assisting CC) skipped (or ran an older version of) the Step 2 seed lines. **Do not synthesize the pages here** — post a BLOCKER and stop, paired with phase=`step-6-silverbullet-blocker`:
 
 ```
-BLOCKER missing-vault-pages: Step 2's `cp $KIT/templates/vault-pages/*.md ./` and `cp $KIT/templates/processes/*.md ./processes/` weren't run. Re-run them from the kit clone, apply Phase 0 substitution to <BOT_NAME> / <USER_NAME> / <VAULT>, then re-fire setup-runner.
+BLOCKER missing-vault-pages: Step 2 didn't seed all six required files. Re-run `bash <VAULT>/runtime/first-time-setup.sh` (it's idempotent and won't clobber existing pages), or manually `cp $KIT/templates/vault-pages/*.md ./`, `cp $KIT/templates/processes/*.md ./processes/`, `cp -r $KIT/templates/vault-pages/_templates ./`, apply Phase 0 substitution, then re-fire setup-runner.
 ```
 
-If the count is 4, advance to the container probe.
+If the count is 6, advance to the container probe.
 
 **Probe (container):** `docker compose -f <VAULT>/docker-compose.yml ps --status running --services 2>/dev/null | grep -qx silverbullet` → if true, advance phase.
 

@@ -222,6 +222,13 @@ mkdir -p "$VAULT/journals/fiction" "$VAULT/handoffs" "$VAULT/processes"
 # SilverBullet vault-page + process-doc seeds. -n on cp = no-clobber.
 cp -n "$VAULT/templates/vault-pages/"*.md "$VAULT/"            2>/dev/null || true
 cp -n "$VAULT/templates/processes/"*.md   "$VAULT/processes/"  2>/dev/null || true
+
+# SilverBullet page-template seeds (the _templates/ folder is SB's
+# Page-From-Template source; recurse to copy the subtree, -n preserves
+# any local edits on re-run).
+if [ -d "$VAULT/templates/vault-pages/_templates" ] && [ ! -d "$VAULT/_templates" ]; then
+  cp -rn "$VAULT/templates/vault-pages/_templates" "$VAULT/_templates"
+fi
 touch "$VAULT/journals/journal.md"
 
 echo "  Files seeded. Now substituting placeholders…"
@@ -229,12 +236,12 @@ echo "  Files seeded. Now substituting placeholders…"
 # Top-level seeded files
 for f in CLAUDE.md identity.md user-profile.md soul-loop.md \
          index.md dashboard.md handoffs.md journals.md \
-         processes.md inbox.md decisions.md; do
+         processes.md inbox.md decisions.md CONFIG.md; do
   substitute_placeholders "$VAULT/$f"
 done
 
-# Process docs (one-shot; user-facing pages, hand-edits expected).
-for f in "$VAULT/processes/"*.md; do
+# Process docs + SB page templates (one-shot; user-facing pages, hand-edits expected).
+for f in "$VAULT/processes/"*.md "$VAULT/_templates/"*.md; do
   substitute_placeholders "$f"
 done
 
@@ -293,7 +300,7 @@ while IFS= read -r f; do
   if grep -qE '\[Your Bot|\[Nate\]|\[CHOOSE YOUR|<USER>|<USER_NAME>|<VAULT>|<BOT_NAME>' "$f"; then
     LEFTOVER+="$f"$'\n'
   fi
-done < <(find "$VAULT/processes" "$VAULT/.claude" -name '*.md' 2>/dev/null)
+done < <(find "$VAULT/processes" "$VAULT/.claude" "$VAULT/_templates" -name '*.md' 2>/dev/null)
 
 if [ -n "$LEFTOVER" ]; then
   echo "  ⚠ Files still contain placeholders (edit by hand if needed):"

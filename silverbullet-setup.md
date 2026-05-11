@@ -68,13 +68,16 @@ After running `serve`, hit the URL from your phone (with the Tailscale app conne
 
 ## Recommended plugs
 
-SilverBullet has a plug system. The ones worth installing on day one:
+SilverBullet has a plug system. `first-time-setup.sh` seeds `CONFIG.md` at the vault root with the kit's recommended plug list (TreeView) and sensible config defaults (`taskStates`, sidebar position). On first login to SilverBullet, open the command palette (`Cmd/Ctrl-/`) and run **`Plugs: Update`** — SB reads `config.set("plugs", {…})` from `CONFIG.md`, downloads each plug, and installs them. After that, every subsequent change to the plugs list in `CONFIG.md` picks up with the same `Plugs: Update` invocation.
 
-- **TreeView** — sidebar showing the folder hierarchy. Essential. *(Per kit memory: always install this.)* Install via the SB command palette: `Plugs: Add` → `github:silverbulletmd/silverbullet-treeview/treeview.plug.js`.
-- **Tags** — auto-index for `#tag` references across the vault. Useful for finding all `#handoff` items. Built-in.
-- **Frontmatter / Tasks** — built-in; let you query open `[ ]` checkboxes across files. The bot uses this pattern for handoff tracking.
+What `CONFIG.md` declares out of the box:
 
-The `dashboard.md` page in this kit has example query blocks you can drop into your own vault.
+- **TreeView** — sidebar folder hierarchy. Essential for vault navigation.
+- **Tags / Frontmatter / Tasks** — built-in to SB; no plug install needed. Used for `#handoff` queries and `[ ]` task tracking.
+
+If you want more plugs (e.g. `silverbullet-explorer2`, `silversearch`), edit the `config.set("plugs", {…})` table in `CONFIG.md` and re-run `Plugs: Update`. The `dashboard.md` page in this kit has example query blocks you can drop into your own vault.
+
+The kit also seeds `_templates/handoff.md` — a SilverBullet page template. To create a new daily handoff: `Page: From Template` → pick `handoff` → SB stamps out `handoffs/YYYY/MM/DD.md` with the canonical structure (tasks list, context section, done section). The bot picks it up on the next soul-loop.
 
 ## What you'll see when you first open SilverBullet
 
