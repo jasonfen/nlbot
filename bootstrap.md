@@ -105,7 +105,7 @@ sudo su - $BOTUSER
 
 (You can also disconnect and `ssh $BOTUSER@<host>` instead. Either way works.)
 
-> **Note:** Bot-driven setup (Steps 5–9 of `first-time-setup.md`) requires scoped `NOPASSWD` sudo for `systemctl`, `crontab`, and `docker` so the bot can run them from inside a detached tmux session where there's no terminal to type a password into. **You'll grant that as the very last action of `first-time-setup.md` Step 4 — right before the verification reboot, after you've confirmed everything else works.** Don't grant it here. Doing it last means you've got a working setup to fall back on with normal password-prompted sudo if anything goes sideways.
+> **Note:** Bot-driven setup (Steps 5–9 of `first-time-setup.md`) requires scoped `NOPASSWD` sudo for the binaries the bot invokes from a detached tmux session — `systemctl/crontab/docker` for service+cron+container management, `tee/journalctl` for writing service files and tailing logs, `tailscale` for `tailscale serve` publishes, and `systemd-creds + install/mktemp/rm/test/ls` for the encrypted-secrets path (`/etc/<BOT_NAME>/secrets/`). **You'll grant the full list as the very last action of `first-time-setup.md` Step 4 — right before the verification reboot, after you've confirmed everything else works.** Don't grant it here. Doing it last means you've got a working setup to fall back on with normal password-prompted sudo if anything goes sideways.
 
 ## Step 3 — Run the bootstrap script
 
