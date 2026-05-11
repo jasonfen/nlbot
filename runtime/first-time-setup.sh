@@ -229,13 +229,34 @@ state_write USER_PREFS          "$USER_PREFS"
 sed -i "s|^Last updated:.*|Last updated: $(date '+%Y-%m-%d %H:%M')|" "$VAULT/setup-state.md"
 sed -i "s|^Current phase:.*|Current phase: pre-step-5|" "$VAULT/setup-state.md"
 
-# Verify no leftover placeholders.
-LEFTOVER=$(grep -rlE '\[Your Bot|\[Nate\]|\[CHOOSE YOUR|<USER>|<USER_NAME>|<VAULT>|<BOT_NAME>' \
-  "$VAULT"/*.md "$VAULT/processes/"*.md "$VAULT/.claude/" 2>/dev/null | \
-  grep -v node_modules || true)
+# Verify no leftover placeholders. Only inspect the files we actually
+# seeded into the vault — the kit's source docs (README.md, bootstrap.md,
+# setup-orchestrator.md, etc.) legitimately reference <BOT_NAME>/<VAULT>
+# as documentation and aren't templates the user needs to substitute.
+SEEDED_FILES=(
+  "$VAULT/CLAUDE.md" "$VAULT/identity.md" "$VAULT/user-profile.md"
+  "$VAULT/soul-loop.md" "$VAULT/index.md" "$VAULT/dashboard.md"
+  "$VAULT/handoffs.md" "$VAULT/journals.md" "$VAULT/processes.md"
+  "$VAULT/inbox.md" "$VAULT/decisions.md" "$VAULT/start-claude.sh"
+)
+LEFTOVER=""
+for f in "${SEEDED_FILES[@]}"; do
+  [ -f "$f" ] || continue
+  if grep -qE '\[Your Bot|\[Nate\]|\[CHOOSE YOUR|<USER>|<USER_NAME>|<VAULT>|<BOT_NAME>' "$f"; then
+    LEFTOVER+="$f"$'\n'
+  fi
+done
+# Also check the seeded processes/ and .claude/ trees
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  if grep -qE '\[Your Bot|\[Nate\]|\[CHOOSE YOUR|<USER>|<USER_NAME>|<VAULT>|<BOT_NAME>' "$f"; then
+    LEFTOVER+="$f"$'\n'
+  fi
+done < <(find "$VAULT/processes" "$VAULT/.claude" -name '*.md' 2>/dev/null)
+
 if [ -n "$LEFTOVER" ]; then
   echo "  ⚠ Files still contain placeholders (edit by hand if needed):"
-  echo "$LEFTOVER" | sed 's/^/      /'
+  printf '%s' "$LEFTOVER" | sed 's/^/      /'
 else
   echo "  ✓ All Phase 0 placeholders substituted."
 fi

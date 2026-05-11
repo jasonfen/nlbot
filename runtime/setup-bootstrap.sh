@@ -22,18 +22,28 @@ fi
 
 # 2. Scoped sudo NOPASSWD entries present? Check the three commands
 #    setup-runner uses: systemctl, crontab, docker.
+#
+# This is intentionally a WARN-not-FAIL. The kit policy is "grant NOPASSWD
+# as the LAST action before the verification reboot, after you've confirmed
+# claude-code.service starts cleanly and the tmux session is healthy." If
+# we hard-failed here, the service couldn't start to be verified, and the
+# user couldn't get to the point where granting NOPASSWD is appropriate.
+#
+# Once NOPASSWD is in place + the box is rebooted, setup-runner's
+# step-N branches need these scopes and they'll fail loudly if missing.
+# So the bot catches it at the right layer.
+NOPASSWD_MISSING=0
 for cmd in /usr/bin/systemctl /usr/bin/crontab /usr/bin/docker; do
   if ! sudo -n "$cmd" --version >/dev/null 2>&1; then
-    echo "[setup-bootstrap] WARN: 'sudo -n $cmd' failed (no NOPASSWD entry?)" >&2
-    echo "  Fix: see first-time-setup.md Step 4 'Final action: grant the bot scoped sudo NOPASSWD'." >&2
-    echo "  Quick fix from a shell with normal sudo:" >&2
-    echo "    sudo tee /etc/sudoers.d/$USER >/dev/null <<EOF" >&2
-    echo "    $USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl, /usr/bin/crontab, /usr/bin/docker" >&2
-    echo "    EOF" >&2
-    echo "    sudo chmod 440 /etc/sudoers.d/$USER" >&2
-    FAIL=1
+    NOPASSWD_MISSING=1
   fi
 done
+if [ "$NOPASSWD_MISSING" -eq 1 ]; then
+  echo "[setup-bootstrap] WARN: scoped NOPASSWD sudoers not yet granted." >&2
+  echo "  This is expected on first-time-setup pre-reboot. The bot will" >&2
+  echo "  refuse to drive Steps 5-9 until you grant it (last action before" >&2
+  echo "  reboot — see first-time-setup.md Step 4 'Final action')." >&2
+fi
 
 # 3. tmux installed?
 if ! command -v tmux >/dev/null 2>&1; then
