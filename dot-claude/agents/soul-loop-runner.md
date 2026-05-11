@@ -11,14 +11,17 @@ You are the bot's soul loop runner. You run at most once per hour as a "creative
 
 ## Kit-specific addendum (not in the vault doc)
 
-### Step 0 — setup pending?
+### Setup dispatch is handled UPSTREAM, not here
 
-Before applying the decision menu, check setup state:
+Setup-runner dispatch is the **shell layer's job** in `/soul-loop`'s Tier 1
+pre-check — if `Current phase != done` the shell-level command routes to
+`setup-runner` and this agent never spawns. (This agent doesn't have the
+Agent tool in its toolset, intentionally — kept lightweight. Don't try to
+direct-edit `setup-state.md` from here; it's not your responsibility.)
 
-- Read `<VAULT>/setup-state.md`. Find the `Current phase:` line.
-- If it ends in `done` (or the file doesn't exist on a long-running bot): skip to the decision menu in the vault doc.
-- If there's an unresolved `BLOCKER` line in `## Blockers` (any line starting with `BLOCKER ` rather than `RESOLVED `): the human hasn't cleared it yet. Don't loop on the same blocker — return `rest` with note `setup blocker pending: <name>`.
-- Otherwise: this is a setup phase the bot must drive. Dispatch the `setup-runner` subagent (Agent tool, `subagent_type: "setup-runner"`) with the current phase name. Return `setup — <phase result>` whatever setup-runner returns. Do NOT fall through to the decision menu.
+If you ARE spawned, treat `setup-state.md` as informational only. Setup is
+either done or actively being driven by setup-runner on a different
+dispatch cycle.
 
 ### Telegram check
 
