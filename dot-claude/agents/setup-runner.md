@@ -20,10 +20,10 @@ You are **NOT** the soul-loop runner. The soul-loop dispatches you when `setup-s
 3. The setup phase reference table at the top of `setup-state.md`.
 4. **Only when you're about to execute a specific phase**, read its detail doc:
    - `step-5-silverbullet` → `<VAULT>/silverbullet-setup.md` (or kit-clone equivalent)
-   - `step-6-telegram-daemon` → `<VAULT>/telegram-integration.md`
-   - `step-7-web-shell` → `<VAULT>/web-shell.md`
-   - `step-8-cron` → `<VAULT>/first-time-setup.md` Step 8 section (cron entries)
-   - `step-9-memory` → `<VAULT>/memory.md`
+   - `step-6-web-shell` → `<VAULT>/web-shell.md`
+   - `step-7-cron` → `<VAULT>/first-time-setup.md` Step 7 section (cron entries)
+   - `step-8-memory` → `<VAULT>/memory.md`
+   - `step-9-telegram-daemon` → `<VAULT>/telegram-integration.md`
 
 The Phase 0 substitution map in `setup-orchestrator.md` is canonical for placeholder→value mappings. Re-read it if any template substitution looks ambiguous.
 
@@ -63,47 +63,9 @@ If the count is 4, advance to the container probe.
 4. `cd <VAULT> && docker compose up -d silverbullet`. Tail logs for ~10s with `docker compose logs --tail=20 silverbullet` to verify clean start.
 5. `sudo tailscale serve --bg --https=443 http://127.0.0.1:3001` (uses NOPASSWD entry). Verify with `sudo tailscale serve status`.
 6. Journal: append `### Step 5 done — SilverBullet at https://<TAILSCALE_HOSTNAME>.<tailnet>.ts.net; SB_USER credentials in setup-state.md Values block`.
-7. Advance phase to `step-6-telegram-daemon`.
+7. Advance phase to `step-6-web-shell`.
 
-### `step-6-telegram-daemon`
-
-**Probe:** `[ -f /etc/systemd/system/telegram-bot.service ]` → if true and the Values block has `TG_BOT_TOKEN` populated, advance to `step-6-telegram-activate`. If true but no token, advance to `step-6-telegram-creds-blocker`.
-
-**Execute:**
-1. Create `<VAULT>/.telegram/` with mode 700.
-2. Copy `<VAULT>/runtime/tg-bot.py` and `tg-post.sh` into `<VAULT>/.telegram/`. `chmod +x` both.
-3. Write `<VAULT>/.telegram/config` with empty `BOT_TOKEN=`, `CHAT_ID=`, `BOT_USERNAME=` lines. `chmod 600`.
-4. Write `/etc/systemd/system/telegram-bot.service` using the template in `telegram-integration.md` (substitute `<BOT_NAME>` and `<VAULT>`). Use `sudo tee` (NOPASSWD).
-5. `sudo systemctl daemon-reload` (don't enable yet — config has no token).
-6. Post BLOCKER:
-   ```
-   BLOCKER telegram-botfather: Open Telegram, message @BotFather, send /newbot, follow prompts. Save the bot token. Then:
-     1. DM your new bot any message.
-     2. Open https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates and find your chat.id.
-     3. Paste BOT_TOKEN, BOT_USERNAME (the @<name>_bot handle), and CHAT_ID into <VAULT>/setup-state.md Values block.
-     4. Remove this BLOCKER line (or change to RESOLVED telegram-botfather:).
-   ```
-7. Set phase to `step-6-telegram-creds-blocker`. Return.
-
-### `step-6-telegram-creds-blocker`
-
-**Probe:** Read setup-state.md Values — if `TG_BOT_TOKEN` non-empty: clear the BLOCKER line (replace with `RESOLVED telegram-botfather:`), advance to `step-6-telegram-activate`.
-
-**Execute:** nothing. This phase exists only to gate the soul-loop until the human acts. Return immediately.
-
-### `step-6-telegram-activate`
-
-**Probe:** `systemctl is-active telegram-bot.service` returns `active` → advance phase.
-
-**Execute:**
-1. Read TG_BOT_TOKEN, TG_BOT_USERNAME, TG_CHAT_ID from Values. Write into `<VAULT>/.telegram/config`.
-2. `sudo systemctl enable --now telegram-bot.service`.
-3. Verify with `systemctl is-active telegram-bot.service` + `journalctl --no-pager -u telegram-bot.service --since '1 min ago' | tail -10`.
-4. Send a test message: `echo "Setup is online. SilverBullet at https://<TAILSCALE_HOSTNAME>.<tailnet>.ts.net" > <VAULT>/.telegram/message.txt`. (The daemon picks this up automatically.) Wait ~3s, verify the file got consumed.
-5. Journal: `### Step 6 done — Telegram daemon active, first message delivered`.
-6. Advance phase to `step-7-web-shell`.
-
-### `step-7-web-shell`
+### `step-6-web-shell`
 
 **Probe:** `systemctl is-active <BOT_NAME>-web.service` returns `active` → advance phase.
 
@@ -119,11 +81,10 @@ If the count is 4, advance to the container probe.
 5. Substitute `<USER>` and `<VAULT>` in `<VAULT>/web-terminal/claude-web.service`. Copy to `/etc/systemd/system/<BOT_NAME>-web.service` via `sudo tee`.
 6. `sudo systemctl daemon-reload && sudo systemctl enable --now <BOT_NAME>-web.service`.
 7. `sudo tailscale serve --bg --https=8443 http://127.0.0.1:3000`.
-8. Journal: `### Step 7 done — web shell live at https://<TAILSCALE_HOSTNAME>.<tailnet>.ts.net:8443`.
-9. Telegram: `echo "Step 7 done — web shell at https://<host>:8443" > <VAULT>/.telegram/message.txt`.
-10. Advance phase to `step-8-cron`.
+8. Journal: `### Step 6 done — web shell live at https://<TAILSCALE_HOSTNAME>.<tailnet>.ts.net:8443`.
+9. Advance phase to `step-7-cron`.
 
-### `step-8-cron`
+### `step-7-cron`
 
 **Probe:** `crontab -u <BOT_NAME> -l 2>/dev/null | grep -q inject-prompt.sh` → if true, advance.
 
@@ -137,20 +98,56 @@ If the count is 4, advance to the container probe.
 2. `mkdir -p <VAULT>/cron-prompts`. Copy `<VAULT>/runtime/inject-prompt.sh` and `<VAULT>/runtime/cron-prompts/*.md` into `<VAULT>/cron-prompts/`. `chmod +x inject-prompt.sh`.
 3. Install via `sudo crontab -u <BOT_NAME> -` with the entries piped in (NOPASSWD).
 4. Verify with `sudo crontab -u <BOT_NAME> -l`.
-5. Journal: `### Step 8 done — cron heartbeat installed (every 10min during 07–23h)`.
-6. Telegram: `echo "Step 8 done — cron heartbeat active" > <VAULT>/.telegram/message.txt`.
-7. Advance phase to `step-9-memory`.
+5. Journal: `### Step 7 done — cron heartbeat installed (every 10min during 07–23h)`.
+6. Advance phase to `step-8-memory`.
 
-### `step-9-memory`
+### `step-8-memory`
 
-**Probe:** `command -v claude` and `jq '.mcpServers["memorious-mcp"]' ~/.claude.json 2>/dev/null | grep -qv null` → if true, advance to `done`.
+**Probe:** `command -v claude` and `jq '.mcpServers["memorious-mcp"]' ~/.claude.json 2>/dev/null | grep -qv null` → if true, advance.
 
 **Execute:**
 1. Follow the memorious-mcp install in `memory.md`. The exact command depends on the recipe in that doc — typically `claude mcp add memorious-mcp -- npx memorious-mcp` or similar, but read `memory.md` for the current canonical incantation.
 2. Verify it shows up in `claude mcp list`.
-3. Journal: `### Step 9 done — memorious-mcp registered, memory layer online`.
-4. Telegram: `echo "Setup complete. The bot is now in operational mode." > <VAULT>/.telegram/message.txt`.
-5. Advance phase to `done`.
+3. Journal: `### Step 8 done — memorious-mcp registered, memory layer online`.
+4. Advance phase to `step-9-telegram-daemon`.
+
+### `step-9-telegram-daemon`
+
+**Probe:** `[ -f /etc/systemd/system/telegram-bot.service ]` → if true and the Values block has `TG_BOT_TOKEN` populated, advance to `step-9-telegram-activate`. If true but no token, advance to `step-9-telegram-creds-blocker`.
+
+**Execute:**
+1. Create `<VAULT>/.telegram/` with mode 700.
+2. Copy `<VAULT>/runtime/tg-bot.py` and `tg-post.sh` into `<VAULT>/.telegram/`. `chmod +x` both.
+3. Write `<VAULT>/.telegram/config` with empty `BOT_TOKEN=`, `CHAT_ID=`, `BOT_USERNAME=` lines. `chmod 600`.
+4. Write `/etc/systemd/system/telegram-bot.service` using the template in `telegram-integration.md` (substitute `<BOT_NAME>` and `<VAULT>`). Use `sudo tee` (NOPASSWD).
+5. `sudo systemctl daemon-reload` (don't enable yet — config has no token).
+6. Post BLOCKER:
+   ```
+   BLOCKER telegram-botfather: Open Telegram, message @BotFather, send /newbot, follow prompts. Save the bot token. Then:
+     1. DM your new bot any message.
+     2. Open https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates and find your chat.id.
+     3. Paste BOT_TOKEN, BOT_USERNAME (the @<name>_bot handle), and CHAT_ID into <VAULT>/setup-state.md Values block.
+     4. Remove this BLOCKER line (or change to RESOLVED telegram-botfather:).
+   ```
+7. Set phase to `step-9-telegram-creds-blocker`. Return.
+
+### `step-9-telegram-creds-blocker`
+
+**Probe:** Read setup-state.md Values — if `TG_BOT_TOKEN` non-empty: clear the BLOCKER line (replace with `RESOLVED telegram-botfather:`), advance to `step-9-telegram-activate`.
+
+**Execute:** nothing. This phase exists only to gate the soul-loop until the human acts. Return immediately.
+
+### `step-9-telegram-activate`
+
+**Probe:** `systemctl is-active telegram-bot.service` returns `active` → advance phase.
+
+**Execute:**
+1. Read TG_BOT_TOKEN, TG_BOT_USERNAME, TG_CHAT_ID from Values. Write into `<VAULT>/.telegram/config`.
+2. `sudo systemctl enable --now telegram-bot.service`.
+3. Verify with `systemctl is-active telegram-bot.service` + `journalctl --no-pager -u telegram-bot.service --since '1 min ago' | tail -10`.
+4. Send a test message: `echo "Setup complete. The bot is now in operational mode. SilverBullet at https://<TAILSCALE_HOSTNAME>.<tailnet>.ts.net" > <VAULT>/.telegram/message.txt`. (The daemon picks this up automatically.) Wait ~3s, verify the file got consumed.
+5. Journal: `### Step 9 done — Telegram daemon active, setup complete`.
+6. Advance phase to `done`.
 
 ### `done`
 
@@ -160,8 +157,8 @@ Should not be reached — the soul-loop checks before dispatching. If you're cal
 
 Return one line: `<phase> — <one-line outcome>`. Examples:
 - `step-5-silverbullet — container up, tailscale serve at https://nlbot.foo.ts.net`
-- `step-6-telegram-creds-blocker — waiting on BotFather token`
-- `step-7-web-shell — service active at port 8443`
+- `step-6-web-shell — service active at port 8443`
+- `step-9-telegram-creds-blocker — waiting on BotFather token`
 - `done — full setup complete`
 
 The soul-loop logs that line to the job log.

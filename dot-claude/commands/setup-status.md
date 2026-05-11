@@ -16,12 +16,12 @@ Run it:
 The script prints a column-aligned table of prereqs + phase probes, then a `=== Recommendation ===` block:
 
 ```
-setup-state.md says:  Current phase: step-6-telegram-daemon
-Reality reached:      step-6-telegram-activate
-Recommended next:     step-7-web-shell
+setup-state.md says:  Current phase: step-6-web-shell
+Reality reached:      step-7-cron
+Recommended next:     step-8-memory
 
-! Declared phase (step-6-telegram-daemon) doesn't match reality (step-7-web-shell).
-  To resync: edit /home/nlbot/nlbot/setup-state.md → 'Current phase: step-7-web-shell' → run /setup.
+! Declared phase (step-6-web-shell) doesn't match reality (step-8-memory).
+  To resync: edit /home/nlbot/nlbot/setup-state.md → 'Current phase: step-8-memory' → run /setup.
 ```
 
 Exit codes:

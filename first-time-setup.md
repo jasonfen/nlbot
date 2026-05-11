@@ -199,12 +199,12 @@ After the Step 4 verification reboot, `claude-code.service` brings the bot onlin
 | Phase | What runs |
 |---|---|
 | `step-5-silverbullet` | Generates SB_USER_PASSWORD + SB_AUTH_TOKEN (`openssl rand`), writes `docker-compose.yml`, `docker compose up -d`, `sudo tailscale serve --https=443`. |
-| `step-6-telegram-daemon` | Copies `tg-bot.py` + `tg-post.sh` into `.telegram/`, drops the systemd unit, posts a BLOCKER asking for BotFather token. |
-| `step-6-telegram-creds-blocker` | **Waits on you.** See "What you still do" below. |
-| `step-6-telegram-activate` | Enables + starts `telegram-bot.service`, sends a test message round-trip. |
-| `step-7-web-shell` | `npm install`, generates `WEB_SESSION_SECRET` + `WEB_UI_PASSWORD`, writes `.env`, installs `<BOT_NAME>-web.service`, `sudo tailscale serve --https=8443`. |
-| `step-8-cron` | Installs the four crontab entries (soul-loop / wake-up / midnight-maintenance) for the bot's unix user. |
-| `step-9-memory` | Installs memorious-mcp as the baseline memory backend. |
+| `step-6-web-shell` | `npm install`, generates `WEB_SESSION_SECRET` + `WEB_UI_PASSWORD`, writes `.env`, installs `<BOT_NAME>-web.service`, `sudo tailscale serve --https=8443`. |
+| `step-7-cron` | Installs the four crontab entries (soul-loop / wake-up / midnight-maintenance) for the bot's unix user. |
+| `step-8-memory` | Installs memorious-mcp as the baseline memory backend. |
+| `step-9-telegram-daemon` | Copies `tg-bot.py` + `tg-post.sh` into `.telegram/`, drops the systemd unit, posts a BLOCKER asking for BotFather token. (Last phase — by the time you hit this, the rest of the bot is fully operational, so the BotFather handoff isn't gating anything else.) |
+| `step-9-telegram-creds-blocker` | **Waits on you.** See "What you still do" below. |
+| `step-9-telegram-activate` | Enables + starts `telegram-bot.service`, sends a test message round-trip. |
 | `done` | Bot transitions to operational mode. |
 
 Each phase is **idempotent** — re-running is safe if anything mid-fails. The bot's soul-loop will keep retrying until the phase succeeds or hits a blocker.
@@ -213,7 +213,7 @@ Each phase is **idempotent** — re-running is safe if anything mid-fails. The b
 
 The bot writes `BLOCKER <name>: <instruction>` lines in `setup-state.md` `## Blockers` whenever it needs you. The soul-loop stops dispatching setup-runner until you remove (or `RESOLVED <name>:` the BLOCKER). Expected blockers:
 
-1. **`BLOCKER telegram-botfather`** — happens during `step-6-telegram-daemon`. Open Telegram, message `@BotFather`, `/newbot`, save the token. DM your new bot once. Visit `https://api.telegram.org/bot<TOKEN>/getUpdates` and find your `chat.id`. Paste `TG_BOT_TOKEN`, `TG_BOT_USERNAME` (`@<name>_bot`), and `TG_CHAT_ID` into `setup-state.md` Values. Remove the BLOCKER line.
+1. **`BLOCKER telegram-botfather`** — happens during `step-9-telegram-daemon` (the *last* phase, intentionally — everything else is already running by this point). Open Telegram, message `@BotFather`, `/newbot`, save the token. DM your new bot once. Visit `https://api.telegram.org/bot<TOKEN>/getUpdates` and find your `chat.id`. Paste `TG_BOT_TOKEN`, `TG_BOT_USERNAME` (`@<name>_bot`), and `TG_CHAT_ID` into `setup-state.md` Values. Remove the BLOCKER line.
 
 2. **`BLOCKER web-shell-credentials`** — informational, doesn't block progress. The bot generated a username + password for the web shell; write them down somewhere recoverable before continuing.
 
@@ -279,18 +279,7 @@ This is your daily interface to the bot's brain. Walked through fully in [silver
 
 When you first land on SilverBullet, [[index]] is the entry point (created from `templates/vault-pages/index.md` in Step 2) and [[dashboard]] shows live queries for open handoffs / tasks / recent activity. You can now read `journals/journal.md` from your phone and leave handoff tasks (`- [ ] do X #handoff`) for the bot.
 
-### Step 6 detail — Telegram
-
-Walked through end-to-end in [telegram-integration.md](telegram-integration.md). The condensed version:
-
-1. In Telegram, message `@BotFather`, send `/newbot`, follow prompts, save the token.
-2. DM your new bot once. Then visit `https://api.telegram.org/bot<TOKEN>/getUpdates` and find your `chat.id`.
-3. Create `$VAULT/.telegram/config` with `BOT_TOKEN=`, `CHAT_ID=`, `BOT_USERNAME=`. `chmod 600` it.
-4. Copy `tg-bot.py` and `tg-post.sh` from `runtime/` into `$VAULT/.telegram/`. Make them executable (`chmod +x`).
-5. Drop `/etc/systemd/system/telegram-bot.service` (template in [telegram-integration.md](telegram-integration.md)). Enable and start.
-6. DM your bot something — anything. `journalctl -u telegram-bot -f` should show the message arrive. The file `.telegram/new-messages.txt` should appear in your vault.
-
-### Step 7 detail — Web shell
+### Step 6 detail — Web shell
 
 The web shell is a small Node.js server that attaches to your `claude` tmux session and renders it through xterm.js in the browser, login-protected and Tailscale-only. Walked through end-to-end in [web-shell.md](web-shell.md). The condensed version:
 
@@ -303,7 +292,7 @@ The web shell is a small Node.js server that attaches to your `claude` tmux sess
 
 On iOS, "Add to Home Screen" makes it behave like a native app (PWA manifest is included).
 
-### Step 8 detail — Cron the heartbeat
+### Step 7 detail — Cron the heartbeat
 
 ⚠ **Do this AFTER the verification reboot from Step 4 — not before.** If cron fires before the tmux session exists, `inject-prompt.sh` will silently noop.
 
@@ -324,9 +313,20 @@ Then `crontab -e`:
 
 Within 10 minutes you should see soul-loop fires in `cron-prompts/job-log.md`.
 
-### Step 9 detail — Vector memory (memorious-mcp baseline)
+### Step 8 detail — Vector memory (memorious-mcp baseline)
 
 Installed by default during bot-driven setup. Walked through in [memory.md](memory.md). The doc covers the secretary note-capture pattern (cron-driven background note-taker) — useful once your conversations get long enough that you'd appreciate Claude writing the journal for you. If you want to *skip* the memory layer entirely (grep-only), see the bottom of `memory.md`.
+
+### Step 9 detail — Telegram
+
+**Intentionally last** — every other piece of the bot is operational by now, so the BotFather handoff (the only mid-flow human BLOCKER in the whole setup) doesn't gate anything else. Walked through end-to-end in [telegram-integration.md](telegram-integration.md). The condensed version:
+
+1. In Telegram, message `@BotFather`, send `/newbot`, follow prompts, save the token.
+2. DM your new bot once. Then visit `https://api.telegram.org/bot<TOKEN>/getUpdates` and find your `chat.id`.
+3. Create `$VAULT/.telegram/config` with `BOT_TOKEN=`, `CHAT_ID=`, `BOT_USERNAME=`. `chmod 600` it.
+4. Copy `tg-bot.py` and `tg-post.sh` from `runtime/` into `$VAULT/.telegram/`. Make them executable (`chmod +x`).
+5. Drop `/etc/systemd/system/telegram-bot.service` (template in [telegram-integration.md](telegram-integration.md)). Enable and start.
+6. DM your bot something — anything. `journalctl -u telegram-bot -f` should show the message arrive. The file `.telegram/new-messages.txt` should appear in your vault.
 
 *Aware-of-but-recommended-against: [Portainer](portainer.md) is a popular browser Docker UI, but it doesn't play well with a Claude-managed bot — Claude edits `docker-compose.yml` directly via `docker compose up -d`, which causes Portainer's stack definition to drift from reality. See [portainer.md](portainer.md) for the full reasoning.*
 

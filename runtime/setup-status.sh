@@ -290,51 +290,53 @@ if [ "$MODE" = "POST-SETUP" ]; then
     fail "step-5-silverbullet" "container not running"
   fi
 
-  # step-6 trio
+  # step-6-web-shell
+  if systemctl is-active "${BOT_NAME}-web.service" >/dev/null 2>&1; then
+    pass "step-6-web-shell" "${BOT_NAME}-web.service active"
+    REACHED="step-6-web-shell"
+  else
+    fail "step-6-web-shell" "${BOT_NAME}-web.service not active"
+  fi
+
+  # step-7-cron
+  if sudo -n crontab -u "$BOT_NAME" -l 2>/dev/null | grep -q inject-prompt.sh; then
+    pass "step-7-cron" "heartbeat entries installed"
+    REACHED="step-7-cron"
+  else
+    fail "step-7-cron" "no inject-prompt.sh in crontab"
+  fi
+
+  # step-8-memory
+  if command -v claude >/dev/null 2>&1 && claude mcp list 2>/dev/null | grep -q memorious; then
+    pass "step-8-memory" "memorious-mcp registered"
+    REACHED="step-8-memory"
+  elif command -v claude >/dev/null 2>&1 && claude mcp list 2>/dev/null | grep -qi memor; then
+    warn "step-8-memory" "non-memorious memory backend (treating as done)"
+    REACHED="step-8-memory"
+  else
+    fail "step-8-memory" "no memory backend"
+  fi
+
+  # step-9 telegram trio (moved to end so its BotFather BLOCKER doesn't gate
+  # the rest of the install). By the time we get here, web/cron/memory are
+  # all live and the box is fully operational.
   if [ -f /etc/systemd/system/telegram-bot.service ]; then
-    pass "step-6-telegram-daemon" "systemd unit installed"
-    REACHED="step-6-telegram-daemon"
+    pass "step-9-telegram-daemon" "systemd unit installed"
+    REACHED="step-9-telegram-daemon"
     if [ -n "$(state_value TG_BOT_TOKEN)" ]; then
-      pass "step-6-telegram-creds" "TG_BOT_TOKEN populated"
-      REACHED="step-6-telegram-creds-resolved"
+      pass "step-9-telegram-creds" "TG_BOT_TOKEN populated"
+      REACHED="step-9-telegram-creds-resolved"
     else
-      warn "step-6-telegram-creds" "BLOCKER pending: BotFather token"
+      warn "step-9-telegram-creds" "BLOCKER pending: BotFather token"
     fi
     if systemctl is-active telegram-bot.service >/dev/null 2>&1; then
-      pass "step-6-telegram-activate" "service active"
-      REACHED="step-6-telegram-activate"
+      pass "step-9-telegram-activate" "service active"
+      REACHED="step-9-telegram-activate"
     else
-      fail "step-6-telegram-activate" "service inactive"
+      fail "step-9-telegram-activate" "service inactive"
     fi
   else
-    fail "step-6-telegram-daemon" "no systemd unit"
-  fi
-
-  # step-7-web-shell
-  if systemctl is-active "${BOT_NAME}-web.service" >/dev/null 2>&1; then
-    pass "step-7-web-shell" "${BOT_NAME}-web.service active"
-    REACHED="step-7-web-shell"
-  else
-    fail "step-7-web-shell" "${BOT_NAME}-web.service not active"
-  fi
-
-  # step-8-cron
-  if sudo -n crontab -u "$BOT_NAME" -l 2>/dev/null | grep -q inject-prompt.sh; then
-    pass "step-8-cron" "heartbeat entries installed"
-    REACHED="step-8-cron"
-  else
-    fail "step-8-cron" "no inject-prompt.sh in crontab"
-  fi
-
-  # step-9-memory
-  if command -v claude >/dev/null 2>&1 && claude mcp list 2>/dev/null | grep -q memorious; then
-    pass "step-9-memory" "memorious-mcp registered"
-    REACHED="step-9-memory"
-  elif command -v claude >/dev/null 2>&1 && claude mcp list 2>/dev/null | grep -qi memor; then
-    warn "step-9-memory" "non-memorious memory backend (treating as done)"
-    REACHED="step-9-memory"
-  else
-    fail "step-9-memory" "no memory backend"
+    fail "step-9-telegram-daemon" "no systemd unit"
   fi
   echo
 fi
@@ -400,7 +402,7 @@ echo "Reality reached:      ${REACHED:-pre-step-5}"
 echo
 
 # All-done case
-if [ "$REACHED" = "step-9-memory" ] && \
+if [ "$REACHED" = "step-9-telegram-activate" ] && \
    systemctl is-active "${BOT_NAME}-web.service" >/dev/null 2>&1 && \
    sudo -n crontab -u "$BOT_NAME" -l 2>/dev/null | grep -q inject-prompt.sh; then
   if [ "$DECLARED" = "done" ]; then
@@ -419,14 +421,20 @@ fi
 
 # Compute next-phase suggestion. `phase-0` is the legacy alias of `pre-step-5`
 # kept for back-compat with kits seeded before the schema collapse.
+# Telegram trio moved to the end of the walk (step-9-*) so its BotFather
+# BLOCKER doesn't gate web/cron/memory; legacy `step-6-telegram-*` phase
+# names are kept as aliases for kits that hit those values before the
+# reorder landed.
 case "${REACHED:-pre-step-5}" in
   "phase-0"|"pre-step-5"|"")          NEXT="step-5-silverbullet" ;;
-  "step-5-silverbullet")              NEXT="step-6-telegram-daemon" ;;
-  "step-6-telegram-daemon")           NEXT="step-6-telegram-creds-blocker" ;;
-  "step-6-telegram-creds-resolved")   NEXT="step-6-telegram-activate" ;;
-  "step-6-telegram-activate")         NEXT="step-7-web-shell" ;;
-  "step-7-web-shell")                 NEXT="step-8-cron" ;;
-  "step-8-cron")                      NEXT="step-9-memory" ;;
+  "step-5-silverbullet")              NEXT="step-6-web-shell" ;;
+  "step-6-web-shell")                 NEXT="step-7-cron" ;;
+  "step-7-cron")                      NEXT="step-8-memory" ;;
+  "step-8-memory")                    NEXT="step-9-telegram-daemon" ;;
+  "step-9-telegram-daemon"|"step-6-telegram-daemon")
+                                      NEXT="step-9-telegram-creds-blocker" ;;
+  "step-9-telegram-creds-resolved"|"step-6-telegram-creds-resolved")
+                                      NEXT="step-9-telegram-activate" ;;
   *)                                  NEXT="${REACHED}" ;;
 esac
 
