@@ -212,7 +212,9 @@ mkdir -p "$VAULT/journals/fiction" "$VAULT/handoffs" "$VAULT/processes"
 
 # Seed top-level identity files. -n = don't clobber an edited file.
 [ -f "$VAULT/CLAUDE.md" ]       || cp "$VAULT/CLAUDE-nate.md" "$VAULT/CLAUDE.md"
-[ -d "$VAULT/.claude" ]         || cp -r "$VAULT/dot-claude" "$VAULT/.claude"
+# .claude/ is regenerated from dot-claude/ by refresh-claude-dir.sh after
+# Phase 0 values are written below. Don't pre-create it here — the
+# refresh script handles both first-install and re-sync.
 [ -f "$VAULT/identity.md" ]     || cp "$VAULT/templates/identity.md"     "$VAULT/identity.md"
 [ -f "$VAULT/user-profile.md" ] || cp "$VAULT/templates/user-profile.md" "$VAULT/user-profile.md"
 [ -f "$VAULT/soul-loop.md" ]    || cp "$VAULT/templates/soul-loop.md"    "$VAULT/soul-loop.md"
@@ -231,10 +233,8 @@ for f in CLAUDE.md identity.md user-profile.md soul-loop.md \
   substitute_placeholders "$VAULT/$f"
 done
 
-# Process docs + agents + commands
-for f in "$VAULT/processes/"*.md \
-         "$VAULT/.claude/agents/"*.md \
-         "$VAULT/.claude/commands/"*.md; do
+# Process docs (one-shot; user-facing pages, hand-edits expected).
+for f in "$VAULT/processes/"*.md; do
   substitute_placeholders "$f"
 done
 
@@ -254,6 +254,21 @@ state_write USER_HOURS          "$USER_HOURS"
 state_write USER_PREFS          "$USER_PREFS"
 sed -i "s|^Last updated:.*|Last updated: $(date '+%Y-%m-%d %H:%M')|" "$VAULT/setup-state.md"
 sed -i "s|^Current phase:.*|Current phase: pre-step-5|" "$VAULT/setup-state.md"
+
+# Generate <VAULT>/.claude/ from dot-claude/ now that setup-state.md has
+# the Phase 0 values. This replaces the old one-shot copy+substitute —
+# refresh-claude-dir.sh handles both first-install and re-sync, and the
+# post-merge hook (installed just below) will re-run it on every git pull.
+bash "$VAULT/runtime/refresh-claude-dir.sh"
+
+# Install the post-merge hook so kit updates (new soul-loop logic, new
+# agents, fixed slash commands) propagate to .claude/ automatically on
+# every `git pull`. Without this, .claude/ goes stale silently and the
+# bot keeps running the install-time snapshot of every agent and command.
+GIT_DIR_PATH=$(git -C "$VAULT" rev-parse --git-dir 2>/dev/null || echo "$VAULT/.git")
+mkdir -p "$GIT_DIR_PATH/hooks"
+install -m 755 "$VAULT/runtime/hooks/post-merge" "$GIT_DIR_PATH/hooks/post-merge"
+echo "  ✓ .claude/ generated and post-merge hook installed (auto-refresh on git pull)"
 
 # Verify no leftover placeholders. Only inspect the files we actually
 # seeded into the vault — the kit's source docs (README.md, bootstrap.md,

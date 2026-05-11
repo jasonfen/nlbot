@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Git post-merge hook installed by first-time-setup.sh Step 4 into
+# .git/hooks/post-merge. Fires after `git pull` / `git merge` brings new
+# commits into the kit clone (= the vault).
+#
+# Re-syncs <VAULT>/.claude/ from the latest dot-claude/ so kit updates
+# to slash commands and agents propagate without manual intervention.
+# Silent on no-op; reports changes when they happen.
+
+exec "$(git rev-parse --show-toplevel)/runtime/refresh-claude-dir.sh"

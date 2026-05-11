@@ -23,7 +23,7 @@ If you have no idea what any of that means, start with **[INTRO-FOR-HUMANS.md](I
 
 - **Top-level docs** — the read-order above.
 - **`runtime/`** — `start-claude.sh`, `inject-prompt.sh`, `tg-bot.py`, `tg-post.sh`, single-line `cron-prompts/*.md` invocations. These get copied into your vault during setup.
-- **`dot-claude/`** — Claude Code config (custom agents + slash commands). The leading dot is dropped so it's not hidden by `ls`; the orchestrator renames it to `.claude/` when copying to your vault root.
+- **`dot-claude/`** — Claude Code config (custom agents + slash commands). The leading dot is dropped so it's not hidden by `ls`; `first-time-setup.sh` renders it into `<VAULT>/.claude/` via `runtime/refresh-claude-dir.sh`, applying Phase-0 substitution. A git `post-merge` hook re-runs the refresh on every `git pull`, so kit updates to slash commands and agents propagate automatically. **`.claude/` is kit-owned — don't hand-edit; the hook will overwrite. Fork the kit and edit `dot-claude/` at the source if you need to override.**
 - **`web-terminal/`** — the optional browser shell (Express + WebSocket + node-pty + xterm.js, login-protected, Tailscale-only). Skip if you only want Telegram + SilverBullet.
 - **`templates/`** — fresh copies of `identity.md`, `user-profile.md`, `soul-loop.md`, `secretary-agent.md` to seed your vault.
 - **`templates/vault-pages/`** — SilverBullet index pages (`index.md`, `dashboard.md`, `handoffs.md`, `journals.md`, `processes.md`, `inbox.md`, `decisions.md`) copied to the vault root during Step 2. Without these the vault renders empty on first SB load.
