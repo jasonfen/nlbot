@@ -19,11 +19,37 @@ If you have no idea what any of that means, start with **[INTRO-FOR-HUMANS.md](I
 
 **TL;DR of the setup flow:** you walk `bootstrap.md` end-to-end on a fresh box (~15 min), then `first-time-setup.md` Steps 1–4 (~15 min, ending in a reboot). The bot wakes up, drives Steps 5–9 itself (~5–10 min), and pings your Telegram when it's done. You handle BotFather mid-flow when the bot asks. Total: ~30–40 min of your attention.
 
+## Repo layout
+
+The clone you check out has three concerns separated at the directory level:
+
+```
+<repo_root>/
+├── kit/              ← read-only kit source (this is what you pull from upstream)
+│   ├── *.md          ← walkthrough docs (you're reading them now)
+│   ├── runtime/      ← bash helpers, systemd-creds, hooks
+│   ├── templates/    ← vault-page + identity seeds
+│   ├── dot-claude/   ← source for the bot's .claude/ at install time
+│   ├── web-terminal/ ← Express+xterm web shell
+│   └── docker-compose.yml
+├── vault/            ← SilverBullet space (docker mounts here as /space)
+│   ├── CLAUDE.md, identity.md, user-profile.md, CONFIG.md
+│   ├── journals/, handoffs/, processes/
+│   └── _plug/, _templates/
+└── .claude/          ← bot's slash commands + agents (kit-rendered, OVERWRITES on git pull)
+    .telegram/        ← Telegram daemon state
+    cron-prompts/     ← cron invocation files + bot logs
+    setup-state.md    ← live setup phase + Phase-0 values
+    start-claude.sh   ← rendered from kit/runtime/start-claude.sh
+```
+
+You only ever edit files under `vault/` (your bot's content) and bot-runtime state at the repo root (mostly `setup-state.md` and `CLAUDE.md`, the latter symlinkable). Everything under `kit/` is upstream-managed.
+
 ## What's bundled
 
 - **Top-level docs** — the read-order above.
 - **`runtime/`** — `start-claude.sh`, `inject-prompt.sh`, `tg-bot.py`, `tg-post.sh`, single-line `cron-prompts/*.md` invocations. These get copied into your vault during setup.
-- **`dot-claude/`** — Claude Code config (custom agents + slash commands). The leading dot is dropped so it's not hidden by `ls`; `first-time-setup.sh` renders it into `<VAULT>/.claude/` via `runtime/refresh-claude-dir.sh`, applying Phase-0 substitution. A git `post-merge` hook re-runs the refresh on every `git pull`, so kit updates to slash commands and agents propagate automatically. **`.claude/` is kit-owned — don't hand-edit; the hook will overwrite. Fork the kit and edit `dot-claude/` at the source if you need to override.**
+- **`dot-claude/`** — Claude Code config (custom agents + slash commands). The leading dot is dropped so it's not hidden by `ls`; `first-time-setup.sh` renders it into `<REPO_ROOT>/.claude/` via `runtime/refresh-claude-dir.sh`, applying Phase-0 substitution. A git `post-merge` hook re-runs the refresh on every `git pull`, so kit updates to slash commands and agents propagate automatically. **`.claude/` is kit-owned — don't hand-edit; the hook will overwrite. Fork the kit and edit `dot-claude/` at the source if you need to override.**
 - **`web-terminal/`** — the optional browser shell (Express + WebSocket + node-pty + xterm.js, login-protected, Tailscale-only). Skip if you only want Telegram + SilverBullet.
 - **`templates/`** — fresh copies of `identity.md`, `user-profile.md`, `soul-loop.md`, `secretary-agent.md` to seed your vault.
 - **`templates/vault-pages/`** — SilverBullet index pages (`index.md`, `dashboard.md`, `handoffs.md`, `journals.md`, `processes.md`, `inbox.md`, `decisions.md`) copied to the vault root during Step 2. Without these the vault renders empty on first SB load.

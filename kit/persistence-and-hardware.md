@@ -56,7 +56,7 @@ StartLimitIntervalSec=60
 [Service]
 Type=forking
 User=<BOT_NAME>
-ExecStart=<VAULT>/start-claude.sh
+ExecStart=<REPO_ROOT>/start-claude.sh
 ExecStop=/usr/bin/tmux kill-session -t claude
 Restart=on-failure
 RestartSec=5
@@ -82,7 +82,7 @@ export PATH="$HOME/.local/bin:$PATH"
 # --continue, NOT --resume main
 # (--resume can drop you in the Ink session-picker TUI, which doesn't
 #  respond to `tmux send-keys` — the boot then hangs)
-tmux new-session -d -s claude -c <VAULT> \
+tmux new-session -d -s claude -c <REPO_ROOT> \
   claude --permission-mode bypassPermissions --continue
 
 tmux select-pane -t claude:0.0 -T "<BOT_NAME>"
@@ -117,7 +117,7 @@ For a multi-tenant or production deployment, you'd want the alternative — a gr
 ### What this means in practice
 
 - **Pick a dedicated user.** the bot user (created in [bootstrap.md](bootstrap.md) Step 2) if you want it isolated from your own login.
-- **Set the vault dir owner accordingly.** `chown -R <BOT_NAME>:<BOT_NAME> <VAULT>`.
+- **Set the vault dir owner accordingly.** `chown -R <BOT_NAME>:<BOT_NAME> <REPO_ROOT>`.
 - **Don't run anything else as that user.** Then the user account *is* the bot's sandbox.
 - **Watch the journal periodically.** Bot-driven file writes and shell commands all show up there if Claude does its job (and the soul-loop is set up to journal real actions).
 
@@ -165,13 +165,13 @@ The right way: system cron entries that fire a small shell script which writes a
 
 ```cron
 # Heartbeat every 10 min during active hours
-*/10 8-23 * * * <VAULT>/cron-prompts/inject-prompt.sh /soul-loop
+*/10 8-23 * * * <REPO_ROOT>/cron-prompts/inject-prompt.sh /soul-loop
 
 # Morning wake-up, weekdays
-0 7 * * 1-5 <VAULT>/cron-prompts/inject-prompt.sh /wake-up
+0 7 * * 1-5 <REPO_ROOT>/cron-prompts/inject-prompt.sh /wake-up
 
 # Midnight journal sync
-5 0 * * * <VAULT>/cron-prompts/inject-prompt.sh /midnight-maintenance
+5 0 * * * <REPO_ROOT>/cron-prompts/inject-prompt.sh /midnight-maintenance
 ```
 
 `inject-prompt.sh` is one small script — about 20 lines — that finds the tmux pane and types the command. Copy it from this kit; don't reinvent it.
