@@ -409,6 +409,37 @@ fi
 
 state_write PASSWORD_MODE "$PASSWORD_MODE"
 
+# --- Machine-only credentials ----------------------------------------------
+#
+# sb-auth-token (SilverBullet API/sync token) and web-session-secret (web
+# shell session signing key) are credentials the operator never needs to
+# see — services consume them, humans don't. setup-runner Steps 6/7 are
+# the canonical generation path, but those don't fire if Claude OAuth
+# is blocked. Generate them here so the box is fully credential-equipped
+# after Phase 0.5 alone and SilverBullet + the web shell can come up
+# without waiting on OAuth (kit-e2e-test-3 / nlbot0 F18).
+#
+# Idempotent: skip if the cred is already on disk.
+banner "Phase 0.5 — Machine-only credentials"
+for entry in "sb-auth-token|24" "web-session-secret|32"; do
+  name="${entry%%|*}"
+  length="${entry##*|}"
+  if slot_exists "$name"; then
+    echo "  $name: already stored, skipping."
+  else
+    BOT_NAME="$BOT_NAME" bash "$KIT/runtime/bot-secrets.sh" generate "$name" "$length"
+  fi
+done
+
+# Also store web-ui-username if unset. Defaults to BOT_NAME; encrypted
+# blob so the service unit can LoadCredentialEncrypted= it like any
+# other secret. Stays a one-line constant; the operator can override
+# later via `echo "<name>" | bot-secrets.sh store web-ui-username`.
+if ! slot_exists "web-ui-username"; then
+  printf '%s' "$BOT_NAME" \
+    | BOT_NAME="$BOT_NAME" bash "$KIT/runtime/bot-secrets.sh" store web-ui-username
+fi
+
 # --- Step 1: prereq check ---------------------------------------------------
 #
 # setup-status.sh exits 1 whenever ANY part of the kit is incomplete —
@@ -725,6 +756,16 @@ cat <<EOF
   1. tmux attach -t claude
      Verify the ❯ prompt renders correctly (not __ or ??).
      Ctrl-b then d to detach — DO NOT exit the session.
+
+     **IMPORTANT: walk Claude Code's first-run flow (theme picker + OAuth)
+     INSIDE this attached tmux session, not at a separate terminal.**
+     The bot's parked \`claude\` is the live process the systemd unit
+     started; finishing its first-run setup at a separate terminal makes
+     this one exit (and tmux follows when the inner command exits). If
+     that happens, claude-code.service may hit its 10-restarts-in-60s
+     restart-limit cap and give up — \`tmux ls\` will then show no
+     \`claude\` session. Recovery: \`sudo systemctl reset-failed
+     claude-code.service && sudo systemctl start claude-code.service\`.
 
   2. Grant scoped NOPASSWD sudo (the kit's "hand over the keys" gate):
 
