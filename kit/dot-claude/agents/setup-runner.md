@@ -136,12 +136,12 @@ If the count is 6, advance to the container probe.
 
 ### `step-8-memory`
 
-**Probe:** `command -v claude` and `jq '.mcpServers["memorious-mcp"]' ~/.claude.json 2>/dev/null | grep -qv null` → if true, advance.
+**Probe:** `command -v claude` and `claude mcp list 2>&1 | grep memorious-mcp | grep -q '✓ Connected'` → if true, advance. The probe checks the live connection status, not just registration; a `✗ Failed to connect` row means the MCP subprocess can't actually launch (e.g. uvx not on the service PATH — F39) and the phase needs to re-run to fix it. Note: claude's MCP registration is project-scoped, so run the probe from `<REPO_ROOT>` (where setup-state.md lives, and the dispatching session is rooted), not from a generic shell — different cwds see different registrations.
 
 **Execute:**
-1. Follow the memorious-mcp install in `memory.md`. The exact command depends on the recipe in that doc — typically `claude mcp add memorious-mcp -- npx memorious-mcp` or similar, but read `memory.md` for the current canonical incantation.
-2. Verify it shows up in `claude mcp list`.
-3. Journal: `### Step 8 done — memorious-mcp registered, memory layer online`.
+1. Follow the memorious-mcp install in `memory.md`. **Use the absolute-path form of the `claude mcp add` line in that doc** (`UVX=$(command -v uvx || echo "$HOME/.local/bin/uvx"); claude mcp add memorious-mcp -- "$UVX" memorious-mcp`). Bare `uvx` works at your interactive shell but fails when the systemd-managed claude-code.service spawns the MCP subprocess without `~/.local/bin` on PATH.
+2. **Verify the live connection**, not just registration: `claude mcp list 2>&1 | grep memorious-mcp` must show `✓ Connected`. If it shows `✗ Failed to connect`, do NOT advance phase — re-resolve the uvx path (try `which uvx`), re-run `claude mcp remove memorious-mcp` + the add line above, re-verify. The previous version of this step accepted bare-registration as success (F39, fenbot00 walk 2026-05-12) which silently shipped a non-functional memory layer.
+3. Journal: `### Step 8 done — memorious-mcp registered AND connected, memory layer online`.
 4. **Check the Telegram opt-out before advancing.** Read `TELEGRAM_ENABLED` from setup-state.md Values block:
    - If `TELEGRAM_ENABLED: no` → Telegram is opted out. Skip all `step-9-*` phases. Advance directly to `done`. Add to `## Notes`: `Telegram integration skipped per Phase 0 opt-out (TELEGRAM_ENABLED=no). Operator can opt back in later by setting TELEGRAM_ENABLED=yes in setup-state.md and re-firing setup-runner with phase=step-9-telegram-daemon.` Then return.
    - If `TELEGRAM_ENABLED: yes` or unset (legacy installs default to yes for backwards compatibility) → advance phase to `step-9-telegram-daemon`.
