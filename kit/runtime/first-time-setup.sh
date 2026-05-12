@@ -127,35 +127,14 @@ prompt_value() {
   eval "$var_name=$(printf '%q' "$answer")"
 }
 
-# Replace Phase 0 placeholders in one file.
-#
-# All variable expansions use ${VAR:-} defaults so the function is safe
-# under `set -u` even when called from a code path that didn't populate
-# every optional identity value (e.g. --reinstall-services-only mode,
-# which only loads BOT_NAME/USER_NAME/VAULT from setup-state.md). Without
-# the defaults, bash's pre-sed parameter expansion would abort on the
-# first unset var even when the corresponding placeholder isn't present
-# in the target file. Caught by ansi on nlbot0 (kit-e2e F22).
-substitute_placeholders() {
-  local file="$1"
-  [ -f "$file" ] || return 0
-  sed -i \
-    -e "s|\[Your Bot's Name\]|${BOT_NAME:-}|g" \
-    -e "s|\[Nate's\]|${USER_NAME:-}'s|g" \
-    -e "s|\[Nate\]|${USER_NAME:-}|g" \
-    -e "s|\[Nate: Fill this in\. What are your non-negotiable preferences?\]|${USER_PREFS:-}|g" \
-    -e "s|\[CHOOSE YOUR CANARY PHRASE\]|${CANARY_PHRASE:-}|g" \
-    -e "s|\[YOUR CANARY PHRASE\]|${CANARY_PHRASE:-}|g" \
-    -e "s|\[reading/coding/writing/exploring\]|${IDLE_PREFS:-}|g" \
-    -e "s|\[poems/stories/technical docs/music reviews\]|${CREATIVE_OUTPUT:-}|g" \
-    -e "s|\[direct/gentle/playful/formal\]|${COMM_STYLE:-}|g" \
-    -e "s|\[quality/speed/creativity/accuracy\]|${VALUES_CARES_ABOUT:-}|g" \
-    -e "s|<BOT_NAME>|${BOT_NAME:-}|g" \
-    -e "s|<USER_NAME>|${USER_NAME:-}|g" \
-    -e "s|<VAULT>|${VAULT:-}|g" \
-    -e "s|<USER>|${BOT_NAME:-}|g" \
-    "$file"
-}
+# Replace Phase 0 placeholders in one file. Delegated to the standalone
+# `substitute-placeholders.sh` (sourced for in-process function access)
+# so the same substitution logic is also reusable by the `/setup` interview
+# command at /setup time, AFTER Nate has typed his answers into setup-
+# state.md. The function reads shell vars first, falls back to setup-
+# state.md if env unset, and uses ${VAR:-} defaults under `set -u`.
+# shellcheck source=/dev/null
+. "$SCRIPT_DIR/substitute-placeholders.sh"
 
 # --- OAuth pre-flight (must happen before the systemd service can run) ------
 # claude --continue inside a detached tmux session silently exits if the
