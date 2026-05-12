@@ -192,7 +192,7 @@ If you want to run the bootstrap steps manually instead of via the script (becau
 | Step 4 — Core tools | `apt install git tmux curl jq unzip ca-certificates python3 python3-pip python3-venv build-essential` |
 | Step 5 — Node 20+ | `curl https://deb.nodesource.com/setup_20.x \| sudo -E bash -`, then `apt install nodejs` |
 | Step 6 — Docker | Fetch GPG keyring, write deb822 sources file, `apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin`, `usermod -aG docker` |
-| Step 7 — Claude Code | `sudo npm install -g @anthropic-ai/claude-code` (skips if already installed) |
+| Step 7 — Claude Code | `sudo npm install -g @anthropic-ai/claude-code` (skips if already installed). Will warn about auto-update permissions on first run — after `first-time-setup.md` Step 1's OAuth login, run `claude install` once to switch to the user-scoped native binary at `~/.local/bin/claude` (this enables auto-updates). |
 | Step 8 — Swap | If RAM < 4 GB and no swap yet: 2 GB `/swapfile`, persisted in `/etc/fstab` |
 | Step 9 — Timezone | If currently UTC, prints the `timedatectl set-timezone` command for you to run later |
 

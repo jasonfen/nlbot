@@ -372,7 +372,10 @@ if [ -f "$KB" ] && grep -q 'ctrl+x ctrl+e' "$KB"; then
 else
   cat > "$KB" <<'KBEOF'
 {
-  "disabled": ["ctrl+x ctrl+e", "ctrl+x ctrl+k"]
+  "bindings": [
+    { "keys": "ctrl+x ctrl+e", "action": "none" },
+    { "keys": "ctrl+x ctrl+k", "action": "none" }
+  ]
 }
 KBEOF
   echo "  Wrote $KB"

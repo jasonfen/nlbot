@@ -114,9 +114,14 @@ Edit `~/.claude/keybindings.json`:
 
 ```json
 {
-  "disabled": ["ctrl+x ctrl+e", "ctrl+x ctrl+k"]
+  "bindings": [
+    { "keys": "ctrl+x ctrl+e", "action": "none" },
+    { "keys": "ctrl+x ctrl+k", "action": "none" }
+  ]
 }
 ```
+
+The `"action": "none"` form is the current Claude Code schema. (Older docs and older kit versions used a top-level `"disabled": [...]` array — that's now rejected with a `keybindings.json must have a "bindings" array` warning. If you see that error on `claude` startup, your file is in the legacy format; replace it with the block above.)
 
 Skip this and you'll discover why on day three. See [persistence-and-hardware.md](persistence-and-hardware.md) for the story.
 
