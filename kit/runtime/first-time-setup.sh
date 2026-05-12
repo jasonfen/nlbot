@@ -622,16 +622,26 @@ fi
 banner "Step 3 — Disable session-killing keybindings"
 mkdir -p "$HOME/.claude"
 KB="$HOME/.claude/keybindings.json"
+# Claude Code's current parser expects a top-level array of blocks, each
+# with `context` (string) and `bindings` (object mapping key → action
+# string or `null` to disable). Older kit revisions wrote the v0 shape
+# (top-level object with a `bindings` array of {keys, action} pairs)
+# which Claude flagged via /doctor as "invalid block structure". Caught
+# on nlbot0 (F23, sidechat 2735). The check-existing-and-skip guard
+# stays string-based so it works against either schema for upgrade.
 if [ -f "$KB" ] && grep -q 'ctrl+x ctrl+e' "$KB"; then
   skip "keybindings.json already disables ctrl+x ctrl+e / ctrl+x ctrl+k"
 else
   cat > "$KB" <<'KBEOF'
-{
-  "bindings": [
-    { "keys": "ctrl+x ctrl+e", "action": "none" },
-    { "keys": "ctrl+x ctrl+k", "action": "none" }
-  ]
-}
+[
+  {
+    "context": "input",
+    "bindings": {
+      "ctrl+x ctrl+e": null,
+      "ctrl+x ctrl+k": null
+    }
+  }
+]
 KBEOF
   echo "  Wrote $KB"
 fi
