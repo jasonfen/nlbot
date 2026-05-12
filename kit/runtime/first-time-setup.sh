@@ -715,6 +715,15 @@ sudo tee /etc/systemd/system/${BOT_NAME}-shell.service > /dev/null <<EOF
 Description=Bot user persistent shell tmux session
 After=network-online.target claude-code.service
 Wants=network-online.target
+# PartOf= ties this unit's lifecycle to claude-code.service. When
+# claude-code restarts (e.g., the F21 wrapper respawns claude after a
+# clean exit, taking the underlying tmux server with it), systemd
+# propagates the restart here so the shell session gets re-created in
+# the new tmux server. Without this, the unit stayed in active(exited)
+# from its first successful run and the shell tmux session disappeared
+# silently — web shell's ?session=shell URL then hit "can't find
+# session: shell". Caught on nlbot0 (F24, sidechat msg 2737).
+PartOf=claude-code.service
 StartLimitBurst=10
 StartLimitIntervalSec=60
 
