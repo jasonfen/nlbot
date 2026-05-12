@@ -622,26 +622,37 @@ fi
 banner "Step 3 — Disable session-killing keybindings"
 mkdir -p "$HOME/.claude"
 KB="$HOME/.claude/keybindings.json"
-# Claude Code's current parser expects a top-level array of blocks, each
-# with `context` (string) and `bindings` (object mapping key → action
-# string or `null` to disable). Older kit revisions wrote the v0 shape
-# (top-level object with a `bindings` array of {keys, action} pairs)
-# which Claude flagged via /doctor as "invalid block structure". Caught
-# on nlbot0 (F23, sidechat 2735). The check-existing-and-skip guard
-# stays string-based so it works against either schema for upgrade.
+# Claude Code 2.1.139's parser wants:
+#   - Top-level OBJECT with a `bindings` array (NOT a bare top-level array).
+#   - Each block has a `context` from the documented enum (Global, Chat,
+#     Autocomplete, Confirmation, Help, Transcript, HistorySearch, Task,
+#     ThemePicker, Settings, Tabs, Attachments, Footer, MessageSelector,
+#     DiffDialog, ModelPicker, Select, Plugin, Scroll, Doctor) — strings
+#     like "input" are rejected as "Unknown context".
+#   - `bindings` value inside each block is an object mapping key → action
+#     string or `null` to disable.
+# Earlier kit revisions (F23 first pass / e707f8f) shipped the wrong
+# shape because the /doctor error message only described the inner-block
+# requirement, not the outer wrapper. ansi empirically validated the
+# correct shape on nlbot0 by iterating against the live parser until
+# /doctor went clean (F25, sidechat 2741). The check-existing-and-skip
+# guard stays string-based so it works against any prior schema for
+# upgrade.
 if [ -f "$KB" ] && grep -q 'ctrl+x ctrl+e' "$KB"; then
   skip "keybindings.json already disables ctrl+x ctrl+e / ctrl+x ctrl+k"
 else
   cat > "$KB" <<'KBEOF'
-[
-  {
-    "context": "input",
-    "bindings": {
-      "ctrl+x ctrl+e": null,
-      "ctrl+x ctrl+k": null
+{
+  "bindings": [
+    {
+      "context": "Global",
+      "bindings": {
+        "ctrl+x ctrl+e": null,
+        "ctrl+x ctrl+k": null
+      }
     }
-  }
-]
+  ]
+}
 KBEOF
   echo "  Wrote $KB"
 fi
