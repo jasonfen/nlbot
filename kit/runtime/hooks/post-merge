@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
-# Git post-merge hook installed by first-time-setup.sh Step 4 into
+# Git post-merge hook installed by first-time-setup.sh into
 # .git/hooks/post-merge. Fires after `git pull` / `git merge` brings new
-# commits into the kit clone (= the vault).
+# commits into the kit clone (the repo root).
 #
-# Re-syncs <VAULT>/.claude/ from the latest dot-claude/ so kit updates
-# to slash commands and agents propagate without manual intervention.
+# Re-syncs:
+#   1. <repo_root>/.claude/ ← <repo_root>/kit/dot-claude/ (overwrite)
+#   2. <repo_root>/vault/*.md ← <repo_root>/kit/templates/vault-pages/*.md
+#      (no-clobber, only seeds missing files)
+#   3. <repo_root>/vault/_plug/*.plug.js — fetches per
+#      <repo_root>/kit/runtime/install-plugs.sh (no-clobber)
+#
 # Silent on no-op; reports changes when they happen.
 
-exec "$(git rev-parse --show-toplevel)/runtime/refresh-claude-dir.sh"
+exec "$(git rev-parse --show-toplevel)/kit/runtime/refresh-claude-dir.sh"

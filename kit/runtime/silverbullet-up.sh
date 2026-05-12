@@ -21,11 +21,14 @@
 
 set -euo pipefail
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+KIT=$(cd "$SCRIPT_DIR/.." && pwd)
 BOT_NAME="${BOT_NAME:-$USER}"
-VAULT="${VAULT:-$HOME/${BOT_NAME}}"
 SECRETS_DIR="/etc/${BOT_NAME}/secrets"
 
-COMPOSE_FILE="${COMPOSE_FILE:-$VAULT/docker-compose.yml}"
+# docker-compose.yml lives in kit/ (kit-managed). The compose file mounts
+# ../vault:/space so SilverBullet only sees the vault subset of the tree.
+COMPOSE_FILE="${COMPOSE_FILE:-$KIT/docker-compose.yml}"
 if [ ! -f "$COMPOSE_FILE" ]; then
   echo "ERROR: docker-compose.yml not found at $COMPOSE_FILE" >&2
   exit 1

@@ -18,7 +18,8 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-VAULT=${VAULT:-$(cd "$SCRIPT_DIR/.." && pwd)}
+# kit/runtime/ → kit/ → repo root → vault/
+VAULT=${VAULT:-$(cd "$SCRIPT_DIR/../.." && pwd)/vault}
 DST="$VAULT/_plug"
 mkdir -p "$DST"
 

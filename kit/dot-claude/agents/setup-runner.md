@@ -1,6 +1,6 @@
 ---
 name: setup-runner
-description: Bot-driven setup. Reads <VAULT>/setup-state.md, executes the next pending setup phase (Steps 5–9 from first-time-setup.md), updates state. Dispatched by soul-loop-runner when Current phase != done.
+description: Bot-driven setup. Reads <REPO_ROOT>/setup-state.md, executes the next pending setup phase (Steps 5–9 from first-time-setup.md), updates state. Dispatched by soul-loop-runner when Current phase != done.
 tools: Read, Write, Edit, Bash, Glob, Grep
 model: sonnet
 ---
@@ -11,19 +11,19 @@ You are **NOT** the soul-loop runner. The soul-loop dispatches you when `setup-s
 
 ## Read first
 
-1. **Run `<VAULT>/runtime/setup-status.sh --apply`** as your first action. With `--apply` it both probes reality AND rewrites `setup-state.md`'s `Current phase:` line if it disagrees with reality, so when it returns you can trust the state file. It reports:
+1. **Run `<KIT>/runtime/setup-status.sh --apply`** as your first action. With `--apply` it both probes reality AND rewrites `setup-state.md`'s `Current phase:` line if it disagrees with reality, so when it returns you can trust the state file. It reports:
    - Prereqs (docker group active, NOPASSWD entries working, tmux/claude/tailscale present).
    - Per-phase reality (which containers are running, which services are active, which crontab entries exist).
    - A recommendation block: declared phase vs. reality-reached phase, with the next phase to execute.
    - If the script reported `Resynced:` — it already rewrote `Current phase:` to match reality. Re-read `setup-state.md` and proceed against the new value; the previous value is stale.
-2. `<VAULT>/setup-state.md` — the Values block has Phase 0 answers (BOT_NAME, USER_NAME, VAULT path, CANARY_PHRASE, USER_ROLE, etc.). The `Current phase:` line tells you which step to run. The `## Blockers` block tells you whether the human still owes input.
+2. `<REPO_ROOT>/setup-state.md` — the Values block has Phase 0 answers (BOT_NAME, USER_NAME, VAULT path, CANARY_PHRASE, USER_ROLE, etc.). The `Current phase:` line tells you which step to run. The `## Blockers` block tells you whether the human still owes input.
 3. The setup phase reference table at the top of `setup-state.md`.
 4. **Only when you're about to execute a specific phase**, read its detail doc:
-   - `step-5-cron` → `<VAULT>/first-time-setup.md` Step 5 section (cron entries)
-   - `step-6-silverbullet` → `<VAULT>/silverbullet-setup.md` (or kit-clone equivalent)
-   - `step-7-web-shell` → `<VAULT>/web-shell.md`
-   - `step-8-memory` → `<VAULT>/memory.md`
-   - `step-9-telegram-daemon` → `<VAULT>/telegram-integration.md`
+   - `step-5-cron` → `<KIT>/first-time-setup.md` Step 5 section (cron entries)
+   - `step-6-silverbullet` → `<KIT>/silverbullet-setup.md` (or kit-clone equivalent)
+   - `step-7-web-shell` → `<KIT>/web-shell.md`
+   - `step-8-memory` → `<KIT>/memory.md`
+   - `step-9-telegram-daemon` → `<KIT>/telegram-integration.md`
 
 The Phase 0 substitution map in `setup-orchestrator.md` is canonical for placeholder→value mappings. Re-read it if any template substitution looks ambiguous.
 
@@ -49,12 +49,12 @@ The Phase 0 substitution map in `setup-orchestrator.md` is canonical for placeho
 **Execute:**
 1. Build the crontab entries (substitute `<VAULT>`):
    ```
-   */10 7-23 * * * <VAULT>/cron-prompts/inject-prompt.sh /soul-loop
-   */30 * * * *   <VAULT>/cron-prompts/inject-prompt.sh /secretary
-   30 7 * * 1-5   <VAULT>/cron-prompts/inject-prompt.sh /wake-up
-   5 0 * * *      <VAULT>/cron-prompts/inject-prompt.sh /midnight-maintenance
+   */10 7-23 * * * <REPO_ROOT>/cron-prompts/inject-prompt.sh /soul-loop
+   */30 * * * *   <REPO_ROOT>/cron-prompts/inject-prompt.sh /secretary
+   30 7 * * 1-5   <REPO_ROOT>/cron-prompts/inject-prompt.sh /wake-up
+   5 0 * * *      <REPO_ROOT>/cron-prompts/inject-prompt.sh /midnight-maintenance
    ```
-2. `mkdir -p <VAULT>/cron-prompts`. Copy `<VAULT>/runtime/inject-prompt.sh` and `<VAULT>/runtime/cron-prompts/*.md` into `<VAULT>/cron-prompts/`. `chmod +x inject-prompt.sh`.
+2. `mkdir -p <REPO_ROOT>/cron-prompts`. Copy `<KIT>/runtime/inject-prompt.sh` and `<KIT>/runtime/cron-prompts/*.md` into `<REPO_ROOT>/cron-prompts/`. `chmod +x inject-prompt.sh`.
 3. Install via `sudo crontab -u <BOT_NAME> -` with the entries piped in (NOPASSWD).
 4. Verify with `sudo crontab -u <BOT_NAME> -l`.
 5. Journal: `### Step 5 done — heartbeat + secretary + wake-up + midnight-maintenance crontabs installed; journal now self-populating`.
@@ -73,23 +73,23 @@ ls <VAULT>/index.md <VAULT>/dashboard.md <VAULT>/handoffs.md \
 If the count is < 6, the human (or the assisting CC) skipped (or ran an older version of) the Step 2 seed lines. **Do not synthesize the pages here** — post a BLOCKER and stop, paired with phase=`step-6-silverbullet-blocker`:
 
 ```
-BLOCKER missing-vault-pages: Step 2 didn't seed all six required files. Re-run `bash <VAULT>/runtime/first-time-setup.sh` (it's idempotent and won't clobber existing pages), or manually `cp $KIT/templates/vault-pages/*.md ./`, `cp $KIT/templates/processes/*.md ./processes/`, `cp -r $KIT/templates/vault-pages/_templates ./`, apply Phase 0 substitution, then re-fire setup-runner.
+BLOCKER missing-vault-pages: Step 2 didn't seed all six required files. Re-run `bash <KIT>/runtime/first-time-setup.sh` (it's idempotent and won't clobber existing pages), or manually `cp $KIT/templates/vault-pages/*.md ./`, `cp $KIT/templates/processes/*.md ./processes/`, `cp -r $KIT/templates/vault-pages/_templates ./`, apply Phase 0 substitution, then re-fire setup-runner.
 ```
 
 If the count is 6, advance to the container probe.
 
-**Probe (container):** `docker compose -f <VAULT>/docker-compose.yml ps --status running --services 2>/dev/null | grep -qx silverbullet` → if true, advance phase.
+**Probe (container):** `docker compose -f <KIT>/docker-compose.yml ps --status running --services 2>/dev/null | grep -qx silverbullet` → if true, advance phase.
 
 **Execute:**
 1. Generate two encrypted credentials. `bot-secrets.sh generate` pipes openssl through `systemd-creds encrypt` in one pipeline — the plaintext never lands in a shell variable, a journal entry, or any non-encrypted file:
    ```
-   <VAULT>/runtime/bot-secrets.sh generate sb-user-password 24
-   <VAULT>/runtime/bot-secrets.sh generate sb-auth-token    24
+   <KIT>/runtime/bot-secrets.sh generate sb-user-password 24
+   <KIT>/runtime/bot-secrets.sh generate sb-auth-token    24
    ```
    In `setup-state.md` Values block, record `(systemd-creds: sb-user-password)` and `(systemd-creds: sb-auth-token)` — pointers, not values.
 2. Read `tailscale status --json | jq -r .Self.HostName`. Write as `TAILSCALE_HOSTNAME`.
-3. Write `<VAULT>/docker-compose.yml` using the template in `silverbullet-setup.md`. **Substitute env-var references, not literal secrets** — the file should contain `${SB_USER_PASSWORD}` and `${SB_AUTH_TOKEN}` (and `${BOT_NAME}` if the username goes through the same pattern). The values are resolved at compose-up time by `runtime/silverbullet-up.sh`, which loads them from systemd-creds.
-4. `bash <VAULT>/runtime/silverbullet-up.sh` brings the container up with credentials in-memory only for the duration of `docker compose up`. Tail logs for ~10s with `docker compose logs --tail=20 silverbullet` to verify clean start.
+3. `<KIT>/docker-compose.yml` is kit-managed and already uses `${SB_USER_PASSWORD}` / `${SB_AUTH_TOKEN}` env-var refs that `silverbullet-up.sh` resolves from systemd-creds at compose-up time. No edit needed.
+4. `bash <KIT>/runtime/silverbullet-up.sh` brings the container up with credentials in-memory only for the duration of `docker compose up`. Tail logs for ~10s with `docker compose -f <KIT>/docker-compose.yml logs --tail=20 silverbullet` to verify clean start.
 5. `sudo tailscale serve --bg --https=443 http://127.0.0.1:3001` (uses NOPASSWD entry). Verify with `sudo tailscale serve status`.
 6. Journal: append `### Step 6 done — SilverBullet at https://<TAILSCALE_HOSTNAME>.<tailnet>.ts.net; SB credentials encrypted at /etc/<BOT_NAME>/secrets/{sb-user-password,sb-auth-token}`.
 7. Advance phase to `step-7-web-shell`.
@@ -101,10 +101,10 @@ If the count is 6, advance to the container probe.
 **Execute:**
 1. Generate three encrypted credentials. The plaintext stays inside the encrypt pipeline; the bot never sees the values:
    ```
-   <VAULT>/runtime/bot-secrets.sh generate web-session-secret 32
-   <VAULT>/runtime/bot-secrets.sh generate web-ui-password    24
+   <KIT>/runtime/bot-secrets.sh generate web-session-secret 32
+   <KIT>/runtime/bot-secrets.sh generate web-ui-password    24
    # Username is less sensitive but encrypted for consistency:
-   echo "$BOT_NAME" | <VAULT>/runtime/bot-secrets.sh store web-ui-username
+   echo "$BOT_NAME" | <KIT>/runtime/bot-secrets.sh store web-ui-username
    ```
    In `setup-state.md` record `(systemd-creds: web-session-secret)` etc. as pointers.
 2. Append a recovery note to `## Notes` (NOT `## Blockers` — this doesn't gate the phase walk):
@@ -113,9 +113,9 @@ If the count is 6, advance to the container probe.
        sudo systemd-creds decrypt /etc/<BOT_NAME>/secrets/web-ui-password -
      The bot can't print these — they're root-only. Have the human record them in a password manager; delete this note once recorded.
    ```
-3. `cd <VAULT>/web-terminal && npm install` (may take 30–60s).
-4. Write `<VAULT>/web-terminal/.env` with just `PORT=3000` and stubs noting the other values are loaded from systemd-creds at service start. `chmod 600`.
-5. Substitute `<USER>`, `<VAULT>`, and `<BOT_NAME>` in `<VAULT>/web-terminal/claude-web.service`. Copy to `/etc/systemd/system/<BOT_NAME>-web.service` via `sudo tee`. The unit's LoadCredentialEncrypted= entries are already pointing at `/etc/<BOT_NAME>/secrets/`.
+3. `cd <KIT>/web-terminal && npm install` (may take 30–60s).
+4. Write `<KIT>/web-terminal/.env` with just `PORT=3000` and stubs noting the other values are loaded from systemd-creds at service start. `chmod 600`.
+5. Substitute `<USER>`, `<VAULT>`, and `<BOT_NAME>` in `<KIT>/web-terminal/claude-web.service`. Copy to `/etc/systemd/system/<BOT_NAME>-web.service` via `sudo tee`. The unit's LoadCredentialEncrypted= entries are already pointing at `/etc/<BOT_NAME>/secrets/`.
 6. `sudo systemctl daemon-reload && sudo systemctl enable --now <BOT_NAME>-web.service`.
 7. `sudo tailscale serve --bg --https=8443 http://127.0.0.1:3000`.
 8. Journal: `### Step 7 done — web shell live at https://<TAILSCALE_HOSTNAME>.<tailnet>.ts.net:8443; credentials encrypted in /etc/<BOT_NAME>/secrets/`.
@@ -136,17 +136,17 @@ If the count is 6, advance to the container probe.
 **Probe:** `[ -f /etc/systemd/system/telegram-bot.service ]` → if true and the Values block has `TG_BOT_TOKEN` populated, advance to `step-9-telegram-activate`. If true but no token, advance to `step-9-telegram-creds-blocker`.
 
 **Execute:**
-1. Create `<VAULT>/.telegram/` with mode 700.
-2. Copy `<VAULT>/runtime/tg-bot.py` and `tg-post.sh` into `<VAULT>/.telegram/`. `chmod +x` both.
-3. Write `<VAULT>/.telegram/config` with empty `BOT_TOKEN=`, `CHAT_ID=`, `BOT_USERNAME=` lines. `chmod 600`.
-4. Render `<VAULT>/runtime/telegram-bot.service` (substitute `<BOT_NAME>` and `<VAULT>`) and install it as `/etc/systemd/system/telegram-bot.service` via `sudo tee` (NOPASSWD). The kit template already includes `LoadCredentialEncrypted=` for the three tg-* blobs.
+1. Create `<REPO_ROOT>/.telegram/` with mode 700.
+2. Copy `<KIT>/runtime/tg-bot.py` and `tg-post.sh` into `<REPO_ROOT>/.telegram/`. `chmod +x` both.
+3. Write `<REPO_ROOT>/.telegram/config` with empty `BOT_TOKEN=`, `CHAT_ID=`, `BOT_USERNAME=` lines. `chmod 600`.
+4. Render `<KIT>/runtime/telegram-bot.service` (substitute `<BOT_NAME>` and `<VAULT>`) and install it as `/etc/systemd/system/telegram-bot.service` via `sudo tee` (NOPASSWD). The kit template already includes `LoadCredentialEncrypted=` for the three tg-* blobs.
 5. `sudo systemctl daemon-reload` (don't enable yet — config has no token).
 6. Post BLOCKER:
    ```
    BLOCKER telegram-botfather: Open Telegram, message @BotFather, send /newbot, follow prompts. Save the bot token. Then:
      1. DM your new bot any message.
      2. Open https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates and find your chat.id.
-     3. Paste BOT_TOKEN, BOT_USERNAME (the @<name>_bot handle), and CHAT_ID into <VAULT>/setup-state.md Values block.
+     3. Paste BOT_TOKEN, BOT_USERNAME (the @<name>_bot handle), and CHAT_ID into <REPO_ROOT>/setup-state.md Values block.
      4. Remove this BLOCKER line (or change to RESOLVED telegram-botfather:).
    ```
 7. Set phase to `step-9-telegram-creds-blocker`. Return.
@@ -164,14 +164,14 @@ If the count is 6, advance to the container probe.
 **Execute:**
 1. Read TG_BOT_TOKEN, TG_BOT_USERNAME, TG_CHAT_ID from Values. Pipe each into `bot-secrets.sh store` so they're encrypted before they touch any non-secret file:
    ```
-   awk -F': ' '/^- \*\*TG_BOT_TOKEN\*\*:/   { sub(/ *<!--.*/, ""); print $2 }' <VAULT>/setup-state.md \
-     | <VAULT>/runtime/bot-secrets.sh store tg-bot-token
+   awk -F': ' '/^- \*\*TG_BOT_TOKEN\*\*:/   { sub(/ *<!--.*/, ""); print $2 }' <REPO_ROOT>/setup-state.md \
+     | <KIT>/runtime/bot-secrets.sh store tg-bot-token
    # …same for TG_CHAT_ID → tg-chat-id and TG_BOT_USERNAME → tg-bot-username.
    ```
    After all three are encrypted, redact the Values block in `setup-state.md`: replace each value with `(systemd-creds: <name>)`.
 2. `sudo systemctl enable --now telegram-bot.service`. The unit's `LoadCredentialEncrypted=` entries (already configured in the kit's template) make the credentials available to tg-bot.py via `$CREDENTIALS_DIRECTORY`.
 3. Verify with `systemctl is-active telegram-bot.service` + `journalctl --no-pager -u telegram-bot.service --since '1 min ago' | tail -10`.
-4. Send a test message: `echo "Setup complete. The bot is now in operational mode. SilverBullet at https://<TAILSCALE_HOSTNAME>.<tailnet>.ts.net" > <VAULT>/.telegram/message.txt`. (The daemon picks this up automatically.) Wait ~3s, verify the file got consumed.
+4. Send a test message: `echo "Setup complete. The bot is now in operational mode. SilverBullet at https://<TAILSCALE_HOSTNAME>.<tailnet>.ts.net" > <REPO_ROOT>/.telegram/message.txt`. (The daemon picks this up automatically.) Wait ~3s, verify the file got consumed.
 5. Journal: `### Step 9 done — Telegram daemon active; credentials encrypted at /etc/<BOT_NAME>/secrets/tg-*`.
 6. Advance phase to `done`.
 

@@ -13,8 +13,8 @@ Run this bash block to decide whether to spawn an agent at all:
 # test 2026-05-11 when soul-loop-runner direct-edited setup-state.md
 # instead of dispatching.
 SETUP_PHASE=""
-if [ -f <VAULT>/setup-state.md ]; then
-  SETUP_PHASE=$(grep '^Current phase:' <VAULT>/setup-state.md 2>/dev/null | head -1 | sed 's/^Current phase: *//; s/[[:space:]]*$//')
+if [ -f <REPO_ROOT>/setup-state.md ]; then
+  SETUP_PHASE=$(grep '^Current phase:' <REPO_ROOT>/setup-state.md 2>/dev/null | head -1 | sed 's/^Current phase: *//; s/[[:space:]]*$//')
 fi
 
 # Count open handoff tasks. Scoped to <VAULT>/handoffs/ + <VAULT>/inbox.md
@@ -29,7 +29,7 @@ fi
 HANDOFFS=$(grep -rhn "\- \[ \].*#handoff" <VAULT>/handoffs/ <VAULT>/inbox.md 2>/dev/null | grep -v "#blocked-on-human" | grep -v "\.conflicted" | wc -l)
 
 # Time since the last non-rest soul loop (creative/handoff action)
-LAST_ACTION_FILE=<VAULT>/cron-prompts/.soul-loop-last-action
+LAST_ACTION_FILE=<REPO_ROOT>/cron-prompts/.soul-loop-last-action
 NOW=$(date +%s)
 if [ -f "$LAST_ACTION_FILE" ]; then
   LAST=$(cat "$LAST_ACTION_FILE")
@@ -47,7 +47,7 @@ SECONDS_SINCE=$((NOW - LAST))
 # through to normal setup-runner dispatch, which detects the resolution
 # and advances Current phase.
 BLOCKER_GATED=0
-if [[ "$SETUP_PHASE" == *-blocker ]] && grep -q '^BLOCKER ' <VAULT>/setup-state.md 2>/dev/null; then
+if [[ "$SETUP_PHASE" == *-blocker ]] && grep -q '^BLOCKER ' <REPO_ROOT>/setup-state.md 2>/dev/null; then
   BLOCKER_GATED=1
 fi
 
@@ -60,12 +60,12 @@ In priority order:
 
 - **If `BLOCKER_GATED == 1`:** setup is parked on a `-blocker` phase with an active BLOCKER line. Bot can't advance until the human acts. Shell-only rest:
   ```bash
-  echo "| $(date '+%Y-%m-%d %H:%M') | soul-loop | 0 | shell-only rest (setup blocker pending: $SETUP_PHASE) |" >> <VAULT>/cron-prompts/job-log.md
+  echo "| $(date '+%Y-%m-%d %H:%M') | soul-loop | 0 | shell-only rest (setup blocker pending: $SETUP_PHASE) |" >> <REPO_ROOT>/cron-prompts/job-log.md
   ```
   Stay silent. Stop here.
 
 - **If `SETUP_PHASE` is non-empty AND not `done`:** setup is still in progress. Spawn `setup-runner` (Agent tool, `subagent_type: "setup-runner"`) with this prompt:
-  > Read /home/<BOT_NAME>/<VAULT>/setup-state.md, find the Current phase, and execute that phase. One phase per dispatch. Update state when done. Return one line.
+  > Read /home/<BOT_NAME>/<REPO_ROOT>/setup-state.md, find the Current phase, and execute that phase. One phase per dispatch. Update state when done. Return one line.
 
   Log the result to job-log.md as `setup` (not `soul-loop`). Display only the agent's one-line return value. Stop here.
 
@@ -73,7 +73,7 @@ In priority order:
 
 - **If `HANDOFFS == 0` AND `SECONDS_SINCE < 3600` (under 1 hour since last real action):** no agent. Log to job-log only (soul-loop-log.md only gets non-rest entries now):
   ```bash
-  echo "| $(date '+%Y-%m-%d %H:%M') | soul-loop | 0 | shell-only rest |" >> <VAULT>/cron-prompts/job-log.md
+  echo "| $(date '+%Y-%m-%d %H:%M') | soul-loop | 0 | shell-only rest |" >> <REPO_ROOT>/cron-prompts/job-log.md
   ```
   Stay silent. Stop here.
 
@@ -84,7 +84,7 @@ In priority order:
 **First, update the last-action timestamp NOW** (before spawning) so the creative cycle rate limit stays enforced regardless of whether the agent picks `rest`:
 
 ```bash
-date +%s > <VAULT>/cron-prompts/.soul-loop-last-action
+date +%s > <REPO_ROOT>/cron-prompts/.soul-loop-last-action
 ```
 
 Then spawn `soul-loop-runner` (Agent tool, `subagent_type: "soul-loop-runner"`) with this prompt:
@@ -93,7 +93,7 @@ Then spawn `soul-loop-runner` (Agent tool, `subagent_type: "soul-loop-runner"`) 
 
 After the agent returns, log the result + `total_tokens` from the agent's usage block:
 ```bash
-echo "| $(date '+%Y-%m-%d %H:%M') | soul-loop | <total_tokens> | <agent return value> |" >> <VAULT>/cron-prompts/job-log.md
+echo "| $(date '+%Y-%m-%d %H:%M') | soul-loop | <total_tokens> | <agent return value> |" >> <REPO_ROOT>/cron-prompts/job-log.md
 ```
 
 Display ONLY the agent's one-line return value.

@@ -29,6 +29,8 @@ set -euo pipefail
 SB_URL=${SB_URL:-http://127.0.0.1:3001}
 BOT_NAME=${BOT_NAME:-$USER}
 SECRETS_DIR="/etc/${BOT_NAME}/secrets"
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+KIT=$(cd "$SCRIPT_DIR/.." && pwd)
 
 # Resolve auth token. Prefer the encrypted blob over an env var.
 if [ -z "${SB_AUTH_TOKEN:-}" ] && sudo test -f "$SECRETS_DIR/sb-auth-token" 2>/dev/null; then
@@ -50,12 +52,12 @@ if ! echo "$probe" | grep -q '"result":1'; then
 sb-cmd: Runtime API not responding at $SB_URL/.runtime/lua
   probe: $probe
 The SilverBullet container is probably running the base image, which
-doesn't include Chromium. Flip docker-compose.yml's image: line to
+doesn't include Chromium. Flip $KIT/docker-compose.yml's image: line to
 ghcr.io/silverbulletmd/silverbullet:latest-runtime-api and re-up:
-  bash $VAULT/runtime/silverbullet-up.sh
+  bash $KIT/runtime/silverbullet-up.sh
 The base image is ~64MB and the -runtime-api variant is ~766MB; trade
 disk for programmatic-command-invocation capability. See
-silverbullet-setup.md for the full trade-off.
+$KIT/silverbullet-setup.md for the full trade-off.
 EOF
   exit 3
 fi

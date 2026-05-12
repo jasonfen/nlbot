@@ -3,13 +3,13 @@
 # compare to setup-state.md Current phase (if it exists), recommend the next step.
 #
 # Two modes:
-#   PRE-SETUP   — no <VAULT>/setup-state.md yet. Probes system prereqs +
-#                 bootstrap.md / first-time-setup.md Steps 1–4 progress.
+#   PRE-SETUP   — no <REPO_ROOT>/setup-state.md yet. Probes system prereqs
+#                 + bootstrap.md / first-time-setup.md Steps 1–4 progress.
 #                 Use this while you're still manually working through
 #                 bootstrap.md.
-#   POST-SETUP  — <VAULT>/setup-state.md exists. Probes everything above
-#                 plus per-phase reality (containers, services, cron, MCP)
-#                 and compares to Current phase.
+#   POST-SETUP  — <REPO_ROOT>/setup-state.md exists. Probes everything
+#                 above plus per-phase reality (containers, services,
+#                 cron, MCP) and compares to Current phase.
 #
 # Exit codes:
 #   0 — state-file and reality agree (or setup is `done`, or --apply
@@ -47,8 +47,10 @@ for arg in "$@"; do
 done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VAULT="${VAULT_DIR:-${VAULT:-$(cd "$SCRIPT_DIR/.." && pwd)}}"
-SETUP_STATE="$VAULT/setup-state.md"
+KIT=$(cd "$SCRIPT_DIR/.." && pwd)            # kit/runtime/ → kit/
+REPO_ROOT=$(cd "$KIT/.." && pwd)             # kit/ → repo root
+VAULT="${VAULT_DIR:-${VAULT:-$REPO_ROOT/vault}}"
+SETUP_STATE="$REPO_ROOT/setup-state.md"
 
 # Atomically rewrite the `Current phase:` line and bump `Last updated:`.
 # Called from the POST-SETUP recommendation block when --apply is set.
@@ -253,7 +255,7 @@ if [ -d "$VAULT" ]; then
   else
     fail "CLAUDE.md present" "(first-time-setup.md Step 2)"
   fi
-  if [ -d "$VAULT/.claude" ]; then
+  if [ -d "$REPO_ROOT/.claude" ]; then
     pass ".claude/ dir present" "(renamed from dot-claude/)"
   else
     fail ".claude/ dir present" "(first-time-setup.md Step 2 — the dot-claude → .claude rename)"
@@ -268,22 +270,22 @@ if [ -d "$VAULT" ]; then
   # the rendered .claude/ matches what dot-claude/ would produce right
   # now. If they drift, kit updates aren't reaching the bot — every git
   # pull leaves orphan-stale slash commands and agents.
-  if [ -x "$VAULT/.git/hooks/post-merge" ] && grep -q refresh-claude-dir.sh "$VAULT/.git/hooks/post-merge" 2>/dev/null; then
+  if [ -x "$REPO_ROOT/.git/hooks/post-merge" ] && grep -q refresh-claude-dir.sh "$REPO_ROOT/.git/hooks/post-merge" 2>/dev/null; then
     pass ".claude/ auto-refresh hook installed" "(.git/hooks/post-merge)"
   else
-    warn ".claude/ auto-refresh hook" "(install: install -m 755 $VAULT/runtime/hooks/post-merge $VAULT/.git/hooks/post-merge)"
+    warn ".claude/ auto-refresh hook" "(install: install -m 755 $KIT/runtime/hooks/post-merge $REPO_ROOT/.git/hooks/post-merge)"
   fi
-  if [ -d "$VAULT/dot-claude" ] && [ -d "$VAULT/.claude" ] && [ -x "$VAULT/runtime/refresh-claude-dir.sh" ]; then
+  if [ -d "$KIT/dot-claude" ] && [ -d "$REPO_ROOT/.claude" ] && [ -x "$KIT/runtime/refresh-claude-dir.sh" ]; then
     drift_tmpdir=$(mktemp -d)
     # Dry-run the refresh into a scratch dir, then diff to find drift.
-    if (cd "$drift_tmpdir" && cp -r "$VAULT/dot-claude" "$drift_tmpdir/.claude" 2>/dev/null) ; then
+    if (cd "$drift_tmpdir" && cp -r "$KIT/dot-claude" "$drift_tmpdir/.claude" 2>/dev/null) ; then
       # Re-apply substitution to the scratch copy and compare. Cheaper
       # than calling refresh-claude-dir.sh directly because we don't
       # want to touch the live .claude/ from a probe.
-      _BOT_NAME=$(grep "^- \*\*BOT_NAME\*\*:" "$VAULT/setup-state.md" 2>/dev/null | sed 's/^[^:]*: *//; s/ *<!--.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' | head -1)
-      _USER_NAME=$(grep "^- \*\*USER_NAME\*\*:" "$VAULT/setup-state.md" 2>/dev/null | sed 's/^[^:]*: *//; s/ *<!--.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' | head -1)
-      _VAULT=$(grep "^- \*\*VAULT\*\*:" "$VAULT/setup-state.md" 2>/dev/null | sed 's/^[^:]*: *//; s/ *<!--.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' | head -1)
-      _OS_USER=$(grep "^- \*\*OS_USER\*\*:" "$VAULT/setup-state.md" 2>/dev/null | sed 's/^[^:]*: *//; s/ *<!--.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' | head -1)
+      _BOT_NAME=$(grep "^- \*\*BOT_NAME\*\*:" "$REPO_ROOT/setup-state.md" 2>/dev/null | sed 's/^[^:]*: *//; s/ *<!--.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' | head -1)
+      _USER_NAME=$(grep "^- \*\*USER_NAME\*\*:" "$REPO_ROOT/setup-state.md" 2>/dev/null | sed 's/^[^:]*: *//; s/ *<!--.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' | head -1)
+      _VAULT=$(grep "^- \*\*VAULT\*\*:" "$REPO_ROOT/setup-state.md" 2>/dev/null | sed 's/^[^:]*: *//; s/ *<!--.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' | head -1)
+      _OS_USER=$(grep "^- \*\*OS_USER\*\*:" "$REPO_ROOT/setup-state.md" 2>/dev/null | sed 's/^[^:]*: *//; s/ *<!--.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' | head -1)
       [ -n "$_OS_USER" ] || _OS_USER="$_BOT_NAME"
       if [ -n "$_BOT_NAME" ] && [ -n "$_VAULT" ]; then
         find "$drift_tmpdir/.claude" -type f -exec sed -i \
@@ -292,11 +294,11 @@ if [ -d "$VAULT" ]; then
           -e "s|<VAULT>|$_VAULT|g" \
           -e "s|<USER>|$_OS_USER|g" \
           {} \;
-        if diff -rq "$drift_tmpdir/.claude" "$VAULT/.claude" >/dev/null 2>&1; then
+        if diff -rq "$drift_tmpdir/.claude" "$REPO_ROOT/.claude" >/dev/null 2>&1; then
           pass ".claude/ in sync with dot-claude/"
         else
-          drift_count=$(diff -rq "$drift_tmpdir/.claude" "$VAULT/.claude" 2>/dev/null | wc -l)
-          warn ".claude/ drift" "($drift_count file(s) differ — run bash $VAULT/runtime/refresh-claude-dir.sh)"
+          drift_count=$(diff -rq "$drift_tmpdir/.claude" "$REPO_ROOT/.claude" 2>/dev/null | wc -l)
+          warn ".claude/ drift" "($drift_count file(s) differ — run bash $KIT/runtime/refresh-claude-dir.sh)"
         fi
       fi
     fi
@@ -346,8 +348,8 @@ if [ "$MODE" = "POST-SETUP" ]; then
   # Use the explicit `--status running` filter + `--services` to get an
   # unambiguous match: a service name on stdout means it's running, else
   # empty.
-  if [ -f "$VAULT/docker-compose.yml" ] && \
-     docker compose -f "$VAULT/docker-compose.yml" ps \
+  if [ -f "$KIT/docker-compose.yml" ] && \
+     docker compose -f "$KIT/docker-compose.yml" ps \
        --status running --services 2>/dev/null | grep -qx silverbullet; then
     if sudo -n tailscale serve status 2>/dev/null | grep -q 3001; then
       pass "step-6-silverbullet" "container + tailscale serve"

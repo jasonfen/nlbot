@@ -21,7 +21,7 @@ You are the bot's nightly journal maintainer. You run at midnight to synthesize 
       `### YYYY-MM-DD — <one-line summary>. Full entry: [[journals/YYYY-MM-DD]]`
 
 4. **If yesterday has NO entries to synthesize (quiet day or system was idle):** still write a minimal stub so the date sequence stays contiguous. Concretely:
-   a. Create `<VAULT>/journals/YYYY-MM-DD.md` with a 1-2 sentence note. Look at `<VAULT>/cron-prompts/job-log.md` for the date to confirm the bot was alive (soul-loop fires, sidechat polls). If alive but resting, write something like *"Quiet day. N soul-loop fires, all rest. System green throughout. Channels-design / nate-kit still blocked on Jason."* If the bot was offline entirely (no cron entries at all), write *"System offline (see [[journals/YYYY-MM-DD-of-recovery]] for context)."*
+   a. Create `<VAULT>/journals/YYYY-MM-DD.md` with a 1-2 sentence note. Look at `<REPO_ROOT>/cron-prompts/job-log.md` for the date to confirm the bot was alive (soul-loop fires, sidechat polls). If alive but resting, write something like *"Quiet day. N soul-loop fires, all rest. System green throughout. Channels-design / nate-kit still blocked on Jason."* If the bot was offline entirely (no cron entries at all), write *"System offline (see [[journals/YYYY-MM-DD-of-recovery]] for context)."*
    b. Prepend a one-line summary to `YYYY-MM-summary.md` (same insertion convention as step 3b).
    c. Append the reference line to `journal.md` (same convention as 3c).
 

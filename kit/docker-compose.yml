@@ -1,0 +1,30 @@
+# Kit-managed compose file. Lives at kit/docker-compose.yml; refreshed
+# by kit pulls. Don't hand-edit — fork the kit and bump the SHA pin if
+# you need to override.
+#
+# Brought up by kit/runtime/silverbullet-up.sh which:
+#   1. Decrypts /etc/<BOT_NAME>/secrets/{sb-user-password,sb-auth-token}
+#      via systemd-creds (root-only).
+#   2. Exports SB_USER_PASSWORD / SB_AUTH_TOKEN / BOT_NAME into the env.
+#   3. Runs `docker compose -f kit/docker-compose.yml up -d silverbullet`.
+#      Compose substitutes the env vars below at parse time.
+#
+# Plaintext secrets never land in this file or in any other on-disk
+# file — they live in process env only for the lifetime of the
+# compose-up command.
+
+services:
+  silverbullet:
+    image: ghcr.io/silverbulletmd/silverbullet:latest
+    container_name: silverbullet
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:3000"
+    environment:
+      - SB_USER=${BOT_NAME}:${SB_USER_PASSWORD}
+      - SB_AUTH_TOKEN=${SB_AUTH_TOKEN}
+    volumes:
+      # ../vault is repo_root/vault — the SilverBullet space. SB sees only
+      # vault content; kit/ and bot-runtime files at repo root are
+      # invisible to TreeView / silversearch / etc.
+      - ../vault:/space

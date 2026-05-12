@@ -8,7 +8,7 @@ The pane scrolls with every cron fire, so a full-pane hash never matches. Instea
 PANE=$(tmux list-panes -t claude -F '#{pane_id} #{pane_current_command}' | grep ' claude$' | head -1 | cut -d' ' -f1)
 tmux capture-pane -p -t "$PANE" -S -300 > /tmp/secretary-context.txt
 
-HASH_FILE=<VAULT>/cron-prompts/.secretary-last-hash
+HASH_FILE=<REPO_ROOT>/cron-prompts/.secretary-last-hash
 # Hash only the MOST RECENT non-slash user input line. (Hashing all user lines
 # doesn't work because the 300-line window scrolls forward and old messages
 # fall off the top, changing the hash even when nothing new was typed.)
@@ -16,7 +16,7 @@ NEW_HASH=$(grep -E '^❯' /tmp/secretary-context.txt | grep -v -E '^❯ ?/' | ta
 LAST_HASH=$(cat "$HASH_FILE" 2>/dev/null || echo "")
 
 if [ "$NEW_HASH" = "$LAST_HASH" ]; then
-  echo "| $(date '+%Y-%m-%d %H:%M') | secretary | 0 | noop (no new user input) |" >> <VAULT>/cron-prompts/job-log.md
+  echo "| $(date '+%Y-%m-%d %H:%M') | secretary | 0 | noop (no new user input) |" >> <REPO_ROOT>/cron-prompts/job-log.md
   rm -f /tmp/secretary-context.txt
   # Stay silent and stop here
 fi
@@ -40,7 +40,7 @@ After the agent finishes:
 - Run `rm -f /tmp/secretary-context.txt`
 - Log the result + `total_tokens` from the agent's usage block:
   ```bash
-  echo "| $(date '+%Y-%m-%d %H:%M') | secretary | <total_tokens> | <agent return value> |" >> <VAULT>/cron-prompts/job-log.md
+  echo "| $(date '+%Y-%m-%d %H:%M') | secretary | <total_tokens> | <agent return value> |" >> <REPO_ROOT>/cron-prompts/job-log.md
   ```
 - If the agent returned `nothing new`, stay silent.
 - Otherwise display the agent's one-line summary.

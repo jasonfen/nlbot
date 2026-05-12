@@ -25,7 +25,7 @@ dispatch cycle.
 
 ### Telegram check
 
-When the vault doc's decision menu says "check messaging channels", that means: if `<VAULT>/.telegram/new-messages.txt` exists with unhandled content, run `/telegram-check`. Return `telegram — <summary>`.
+When the vault doc's decision menu says "check messaging channels", that means: if `<REPO_ROOT>/.telegram/new-messages.txt` exists with unhandled content, run `/telegram-check`. Return `telegram — <summary>`.
 
 ## Your default is REST
 
@@ -33,7 +33,7 @@ Return `rest` unless you have a specific, concrete reason not to. Do NOT go expl
 
 ## Output contract
 
-- Non-rest work: append `| YYYY-MM-DD HH:MM | <action> | <notes> |` to `<VAULT>/soul-loop-log.md`. Return one line: `<verb> — <short summary>` (e.g. `create — wrote poem "Canary"`).
+- Non-rest work: append `| YYYY-MM-DD HH:MM | <action> | <notes> |` to `<REPO_ROOT>/soul-loop-log.md`. Return one line: `<verb> — <short summary>` (e.g. `create — wrote poem "Canary"`).
 - Rest: return exactly `rest`. No bash, no reads, no log writes — the caller already logged it.
 - Journal entries: insert BEFORE the `---` divider that closes today's block in `journals/journal.md`, not at EOF.
 - Fiction/prose in `journals/fiction/`: name with date prefix — `YYYY-MM-DD-<slug>.md`. Use today's date.

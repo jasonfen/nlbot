@@ -36,15 +36,32 @@ skip() {
   echo "  [skip] $1"
 }
 
-# Resolve VAULT default from script location: <VAULT>/runtime/first-time-setup.sh
+# Path triple resolution. Script lives at kit/runtime/first-time-setup.sh,
+# so two levels up is the repo root; vault is repo_root/vault.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VAULT_DEFAULT="$(cd "$SCRIPT_DIR/.." && pwd)"
+KIT="$(cd "$SCRIPT_DIR/.." && pwd)"           # kit/runtime/ → kit/
+REPO_ROOT="$(cd "$KIT/.." && pwd)"            # kit/ → repo root
+VAULT_DEFAULT="$REPO_ROOT/vault"
+
+# --reinstall-services-only: skip Phase 0/Steps 1–3 and jump straight to
+# Step 4. Used by migrate-layout.sh on existing installs whose Phase 0
+# values are already in setup-state.md and whose vault is already seeded.
+REINSTALL_SERVICES_ONLY=0
+for arg in "$@"; do
+  case "$arg" in
+    --reinstall-services-only) REINSTALL_SERVICES_ONLY=1 ;;
+    -h|--help)
+      sed -n '2,/^$/p' "$0" | sed 's/^# \?//'
+      exit 0 ;;
+  esac
+done
 
 # Read a value from setup-state.md Values block (returns empty if missing
-# or still has the placeholder comment).
+# or still has the placeholder comment). setup-state.md lives at the repo
+# root in the new layout (bot-runtime state, not vault content).
 state_read() {
   local key="$1"
-  local file="$VAULT_DEFAULT/setup-state.md"
+  local file="$REPO_ROOT/setup-state.md"
   [ -f "$file" ] || return 0
   local value
   value=$(grep "^- \*\*$key\*\*:" "$file" 2>/dev/null \
@@ -57,7 +74,7 @@ state_read() {
 state_write() {
   local key="$1"
   local value="$2"
-  local file="$VAULT/setup-state.md"
+  local file="$REPO_ROOT/setup-state.md"
   [ -f "$file" ] || return 0
   local escaped
   escaped=$(printf '%s' "$value" | sed 's/[\&|]/\\&/g')
@@ -153,6 +170,23 @@ fi
 
 # --- Phase 0: collect values ------------------------------------------------
 
+if [ "$REINSTALL_SERVICES_ONLY" = "1" ]; then
+  banner "Reinstall-services-only mode — loading Phase 0 from setup-state.md"
+  [ -f "$REPO_ROOT/setup-state.md" ] || {
+    echo "  ERROR: $REPO_ROOT/setup-state.md missing; can't reinstall services without Phase 0 values." >&2
+    exit 1
+  }
+  BOT_NAME=$(state_read BOT_NAME)
+  USER_NAME=$(state_read USER_NAME)
+  VAULT=$(state_read VAULT)
+  [ -n "$BOT_NAME" ] && [ -n "$VAULT" ] || {
+    echo "  ERROR: setup-state.md missing required values (BOT_NAME, VAULT)." >&2
+    exit 1
+  }
+  echo "  BOT_NAME=$BOT_NAME  USER_NAME=$USER_NAME  VAULT=$VAULT"
+  echo "  Jumping to Step 4 (systemd units + tmux verification)."
+else
+
 banner "Phase 0 — Collect setup values"
 echo "  (env var > setup-state.md > prompt — first hit wins)"
 echo
@@ -184,8 +218,8 @@ prompt_value USER_PREFS         "Non-negotiable preferences (one short line)" "b
 # things bootstrap.md owns; everything else is what we're here to do).
 
 banner "Step 1 — Prereqs (delegating to setup-status.sh)"
-if [ -x "$VAULT/runtime/setup-status.sh" ]; then
-  PROBE=$(bash "$VAULT/runtime/setup-status.sh" 2>&1 || true)
+if [ -x "$KIT/runtime/setup-status.sh" ]; then
+  PROBE=$(bash "$KIT/runtime/setup-status.sh" 2>&1 || true)
   echo "$PROBE"
   echo
   # Extract just the System + Bot-user sections (between their headers
@@ -208,28 +242,42 @@ fi
 # --- Step 2: vault skeleton + identity seed + placeholder substitution ------
 
 banner "Step 2 — Vault skeleton + identity seed"
-mkdir -p "$VAULT/journals/fiction" "$VAULT/handoffs" "$VAULT/processes"
+mkdir -p "$VAULT" "$VAULT/journals/fiction" "$VAULT/handoffs" "$VAULT/processes"
 
-# Seed top-level identity files. -n = don't clobber an edited file.
-[ -f "$VAULT/CLAUDE.md" ]       || cp "$VAULT/CLAUDE-nate.md" "$VAULT/CLAUDE.md"
+# Seed setup-state.md at repo root from the kit's template if absent.
+if [ ! -f "$REPO_ROOT/setup-state.md" ]; then
+  cp "$KIT/setup-state.md.template" "$REPO_ROOT/setup-state.md"
+fi
+
+# Seed top-level identity files into the vault. -n = don't clobber edits.
+[ -f "$VAULT/CLAUDE.md" ]       || cp "$KIT/CLAUDE-nate.md"            "$VAULT/CLAUDE.md"
 # .claude/ is regenerated from dot-claude/ by refresh-claude-dir.sh after
-# Phase 0 values are written below. Don't pre-create it here — the
-# refresh script handles both first-install and re-sync.
-[ -f "$VAULT/identity.md" ]     || cp "$VAULT/templates/identity.md"     "$VAULT/identity.md"
-[ -f "$VAULT/user-profile.md" ] || cp "$VAULT/templates/user-profile.md" "$VAULT/user-profile.md"
-[ -f "$VAULT/soul-loop.md" ]    || cp "$VAULT/templates/soul-loop.md"    "$VAULT/soul-loop.md"
+# Phase 0 values are written below. Lives at repo root, not in vault.
+[ -f "$VAULT/identity.md" ]     || cp "$KIT/templates/identity.md"     "$VAULT/identity.md"
+[ -f "$VAULT/user-profile.md" ] || cp "$KIT/templates/user-profile.md" "$VAULT/user-profile.md"
+[ -f "$VAULT/soul-loop.md" ]    || cp "$KIT/templates/soul-loop.md"    "$VAULT/soul-loop.md"
 
 # SilverBullet vault-page + process-doc seeds. -n on cp = no-clobber.
-cp -n "$VAULT/templates/vault-pages/"*.md "$VAULT/"            2>/dev/null || true
-cp -n "$VAULT/templates/processes/"*.md   "$VAULT/processes/"  2>/dev/null || true
+cp -n "$KIT/templates/vault-pages/"*.md "$VAULT/"            2>/dev/null || true
+cp -n "$KIT/templates/processes/"*.md   "$VAULT/processes/"  2>/dev/null || true
 
-# SilverBullet page-template seeds (the _templates/ folder is SB's
-# Page-From-Template source; recurse to copy the subtree, -n preserves
-# any local edits on re-run).
-if [ -d "$VAULT/templates/vault-pages/_templates" ] && [ ! -d "$VAULT/_templates" ]; then
-  cp -rn "$VAULT/templates/vault-pages/_templates" "$VAULT/_templates"
+# SilverBullet page-template seeds (_templates/ is SB's Page-From-Template
+# source). Recurse to copy the subtree; -n preserves any local edits.
+if [ -d "$KIT/templates/vault-pages/_templates" ] && [ ! -d "$VAULT/_templates" ]; then
+  cp -rn "$KIT/templates/vault-pages/_templates" "$VAULT/_templates"
 fi
 touch "$VAULT/journals/journal.md"
+
+# Seed bot-runtime cron-prompts at repo root (NOT in vault). These are
+# slash-command invocations the cron fires + the inject script. They're
+# kit-managed source at $KIT/runtime/cron-prompts/ but the runtime copies
+# live at $REPO_ROOT/cron-prompts/ so the bot can write state files
+# (.soul-loop-last-action, job-log.md) next to them.
+mkdir -p "$REPO_ROOT/cron-prompts"
+cp -n "$KIT/runtime/cron-prompts/"*.md "$REPO_ROOT/cron-prompts/" 2>/dev/null || true
+[ -f "$REPO_ROOT/cron-prompts/inject-prompt.sh" ] || \
+  cp "$KIT/runtime/inject-prompt.sh" "$REPO_ROOT/cron-prompts/inject-prompt.sh"
+chmod +x "$REPO_ROOT/cron-prompts/inject-prompt.sh"
 
 echo "  Files seeded. Now substituting placeholders…"
 
@@ -259,29 +307,27 @@ state_write USER_ROLE           "$USER_ROLE"
 state_write USER_HOBBIES        "$USER_HOBBIES"
 state_write USER_HOURS          "$USER_HOURS"
 state_write USER_PREFS          "$USER_PREFS"
-sed -i "s|^Last updated:.*|Last updated: $(date '+%Y-%m-%d %H:%M')|" "$VAULT/setup-state.md"
-sed -i "s|^Current phase:.*|Current phase: pre-step-5|" "$VAULT/setup-state.md"
+sed -i "s|^Last updated:.*|Last updated: $(date '+%Y-%m-%d %H:%M')|" "$REPO_ROOT/setup-state.md"
+sed -i "s|^Current phase:.*|Current phase: pre-step-5|" "$REPO_ROOT/setup-state.md"
 
-# Generate <VAULT>/.claude/ from dot-claude/ now that setup-state.md has
-# the Phase 0 values. This replaces the old one-shot copy+substitute —
-# refresh-claude-dir.sh handles both first-install and re-sync, and the
-# post-merge hook (installed just below) will re-run it on every git pull.
-bash "$VAULT/runtime/refresh-claude-dir.sh"
+# Generate <REPO_ROOT>/.claude/ from kit/dot-claude/ now that setup-state.md
+# has the Phase 0 values. refresh-claude-dir.sh handles first-install and
+# re-sync uniformly; the post-merge hook installed below re-runs it on
+# every git pull, so kit updates to agents + slash commands propagate
+# automatically.
+bash "$KIT/runtime/refresh-claude-dir.sh"
 
 # Pre-install SilverBullet plug bundles into <VAULT>/_plug/ so TreeView
-# (and any other kit-recommended plugs) are present at SB's first startup
-# without requiring a manual "Plugs: Update" command-palette action.
-# Idempotent: skips downloads when the destination file already exists.
-VAULT="$VAULT" bash "$VAULT/runtime/install-plugs.sh" || \
+# is present at SB's first startup without requiring a manual
+# "Plugs: Update" command-palette action.
+VAULT="$VAULT" bash "$KIT/runtime/install-plugs.sh" || \
   echo "  WARN: plug install reported failures — open SB and run \"Plugs: Update\" once to recover"
 
-# Install the post-merge hook so kit updates (new soul-loop logic, new
-# agents, fixed slash commands) propagate to .claude/ automatically on
-# every `git pull`. Without this, .claude/ goes stale silently and the
-# bot keeps running the install-time snapshot of every agent and command.
-GIT_DIR_PATH=$(git -C "$VAULT" rev-parse --git-dir 2>/dev/null || echo "$VAULT/.git")
+# Install the post-merge hook at <REPO_ROOT>/.git/hooks/post-merge so kit
+# pulls auto-refresh .claude/ + vault-page seeds + plug bundles.
+GIT_DIR_PATH=$(git -C "$REPO_ROOT" rev-parse --git-dir 2>/dev/null || echo "$REPO_ROOT/.git")
 mkdir -p "$GIT_DIR_PATH/hooks"
-install -m 755 "$VAULT/runtime/hooks/post-merge" "$GIT_DIR_PATH/hooks/post-merge"
+install -m 755 "$KIT/runtime/hooks/post-merge" "$GIT_DIR_PATH/hooks/post-merge"
 echo "  ✓ .claude/ generated and post-merge hook installed (auto-refresh on git pull)"
 
 # Verify no leftover placeholders. Only inspect the files we actually
@@ -292,22 +338,22 @@ SEEDED_FILES=(
   "$VAULT/CLAUDE.md" "$VAULT/identity.md" "$VAULT/user-profile.md"
   "$VAULT/soul-loop.md" "$VAULT/index.md" "$VAULT/dashboard.md"
   "$VAULT/handoffs.md" "$VAULT/journals.md" "$VAULT/processes.md"
-  "$VAULT/inbox.md" "$VAULT/decisions.md" "$VAULT/start-claude.sh"
+  "$VAULT/inbox.md" "$VAULT/decisions.md" "$REPO_ROOT/start-claude.sh"
 )
 LEFTOVER=""
 for f in "${SEEDED_FILES[@]}"; do
   [ -f "$f" ] || continue
-  if grep -qE '\[Your Bot|\[Nate\]|\[CHOOSE YOUR|<USER>|<USER_NAME>|<VAULT>|<BOT_NAME>' "$f"; then
+  if grep -qE '\[Your Bot|\[Nate\]|\[CHOOSE YOUR|<USER>|<USER_NAME>|<VAULT>|<BOT_NAME>|<KIT>|<REPO_ROOT>' "$f"; then
     LEFTOVER+="$f"$'\n'
   fi
 done
-# Also check the seeded processes/ and .claude/ trees
+# Also check the seeded processes/ + .claude/ (at repo root) + _templates/ trees
 while IFS= read -r f; do
   [ -z "$f" ] && continue
-  if grep -qE '\[Your Bot|\[Nate\]|\[CHOOSE YOUR|<USER>|<USER_NAME>|<VAULT>|<BOT_NAME>' "$f"; then
+  if grep -qE '\[Your Bot|\[Nate\]|\[CHOOSE YOUR|<USER>|<USER_NAME>|<VAULT>|<BOT_NAME>|<KIT>|<REPO_ROOT>' "$f"; then
     LEFTOVER+="$f"$'\n'
   fi
-done < <(find "$VAULT/processes" "$VAULT/.claude" "$VAULT/_templates" -name '*.md' 2>/dev/null)
+done < <(find "$VAULT/processes" "$REPO_ROOT/.claude" "$VAULT/_templates" -name '*.md' 2>/dev/null)
 
 if [ -n "$LEFTOVER" ]; then
   echo "  ⚠ Files still contain placeholders (edit by hand if needed):"
@@ -332,6 +378,8 @@ KBEOF
   echo "  Wrote $KB"
 fi
 
+fi   # end of "if not REINSTALL_SERVICES_ONLY" block (matches the `else` above Phase 0)
+
 # --- Step 4: persistence (start-claude.sh + systemd unit + enable) ----------
 
 banner "Step 4 — Persistence (start-claude.sh + systemd unit)"
@@ -342,27 +390,23 @@ banner "Step 4 — Persistence (start-claude.sh + systemd unit)"
 sudo install -d -m 700 -o root -g root "/etc/$BOT_NAME/secrets"
 echo "  Ensured /etc/$BOT_NAME/secrets exists (root:root, 700)"
 
-# Stage the helper + migration scripts into the vault so they're invocable
-# by setup-runner and by the human post-install.
-cp "$VAULT/runtime/bot-secrets.sh" "$VAULT/bot-secrets.sh"
-chmod +x "$VAULT/bot-secrets.sh"
-if [ -f "$VAULT/runtime/migrate-secrets.sh" ]; then
-  cp "$VAULT/runtime/migrate-secrets.sh" "$VAULT/migrate-secrets.sh"
-  chmod +x "$VAULT/migrate-secrets.sh"
-fi
-echo "  Staged bot-secrets.sh + migrate-secrets.sh at \$VAULT/"
+# bot-secrets.sh + migrate-secrets.sh stay in $KIT/runtime/ and are
+# invoked directly from there. No staging into the vault — keeps the
+# kit-source / runtime-state boundary clean.
 
-# Copy + substitute start-claude.sh into the vault root
-cp "$VAULT/runtime/start-claude.sh" "$VAULT/start-claude.sh"
-substitute_placeholders "$VAULT/start-claude.sh"
-chmod +x "$VAULT/start-claude.sh"
-echo "  Wrote $VAULT/start-claude.sh"
+# Render + substitute start-claude.sh into the repo root (bot CWD).
+# claude-code.service ExecStart points here. The script template at
+# $KIT/runtime/start-claude.sh stays untouched.
+cp "$KIT/runtime/start-claude.sh" "$REPO_ROOT/start-claude.sh"
+substitute_placeholders "$REPO_ROOT/start-claude.sh"
+chmod +x "$REPO_ROOT/start-claude.sh"
+echo "  Wrote $REPO_ROOT/start-claude.sh"
 
-# Optional setup-bootstrap.sh sidecar (start-claude.sh probes for it)
-if [ -f "$VAULT/runtime/setup-bootstrap.sh" ]; then
-  cp "$VAULT/runtime/setup-bootstrap.sh" "$VAULT/setup-bootstrap.sh"
-  chmod +x "$VAULT/setup-bootstrap.sh"
-  echo "  Wrote $VAULT/setup-bootstrap.sh"
+# Optional setup-bootstrap.sh sidecar (start-claude.sh probes for it).
+if [ -f "$KIT/runtime/setup-bootstrap.sh" ]; then
+  cp "$KIT/runtime/setup-bootstrap.sh" "$REPO_ROOT/setup-bootstrap.sh"
+  chmod +x "$REPO_ROOT/setup-bootstrap.sh"
+  echo "  Wrote $REPO_ROOT/setup-bootstrap.sh"
 fi
 
 # Drop the systemd unit
@@ -381,7 +425,8 @@ StartLimitIntervalSec=60
 [Service]
 Type=forking
 User=$BOT_NAME
-ExecStart=$VAULT/start-claude.sh
+WorkingDirectory=$REPO_ROOT
+ExecStart=$REPO_ROOT/start-claude.sh
 ExecStop=/usr/bin/tmux kill-session -t claude
 Restart=on-failure
 RestartSec=5
@@ -493,6 +538,6 @@ EOS
      Verify the box comes back clean and claude-code.service auto-starts.
 
   4. After reboot, the bot drives Steps 5-9 via setup-runner.
-     Watch progress:  bash $VAULT/runtime/setup-status.sh
+     Watch progress:  bash $KIT/runtime/setup-status.sh
 
 EOF

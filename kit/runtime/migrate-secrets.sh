@@ -8,11 +8,11 @@
 # from setup-runner and don't need this script.
 #
 # What it touches:
-#   <VAULT>/setup-state.md Values block — TG_BOT_TOKEN, TG_CHAT_ID,
+#   <REPO_ROOT>/setup-state.md Values block — TG_BOT_TOKEN, TG_CHAT_ID,
 #       TG_BOT_USERNAME, SB_USER_PASSWORD, SB_AUTH_TOKEN,
 #       WEB_SESSION_SECRET, WEB_UI_USERNAME, WEB_UI_PASSWORD.
-#   <VAULT>/web-terminal/.env — SESSION_SECRET, UI_USERNAME, UI_PASSWORD.
-#   <VAULT>/.telegram/config — BOT_TOKEN, CHAT_ID, BOT_USERNAME.
+#   <KIT>/web-terminal/.env — SESSION_SECRET, UI_USERNAME, UI_PASSWORD.
+#   <REPO_ROOT>/.telegram/config — BOT_TOKEN, CHAT_ID, BOT_USERNAME.
 #
 # What it does NOT touch (yet):
 #   - docker-compose.yml inline SB_USER / SB_AUTH_TOKEN (those need a
@@ -28,9 +28,11 @@
 set -euo pipefail
 
 BOT_NAME="${BOT_NAME:-$USER}"
-VAULT="${VAULT:-$HOME/${BOT_NAME}}"
-SECRETS_DIR="/etc/${BOT_NAME}/secrets"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+KIT=$(cd "$SCRIPT_DIR/.." && pwd)             # kit/runtime/ → kit/
+REPO_ROOT=$(cd "$KIT/.." && pwd)              # kit/ → repo root
+VAULT="${VAULT:-$REPO_ROOT/vault}"            # SilverBullet space subdir
+SECRETS_DIR="/etc/${BOT_NAME}/secrets"
 BOT_SECRETS="$SCRIPT_DIR/bot-secrets.sh"
 
 if [ ! -x "$BOT_SECRETS" ]; then
@@ -78,7 +80,7 @@ encrypt_one() {
 # a redaction comment, no BOT_TOKEN= match).
 state_value() {
   local key="$1"
-  local file="$VAULT/setup-state.md"
+  local file="$REPO_ROOT/setup-state.md"
   [ -f "$file" ] || return 0
   { grep "^- \*\*$key\*\*:" "$file" 2>/dev/null || true; } \
     | sed 's/^[^:]*: *//; s/ *<!--.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' \
@@ -100,7 +102,7 @@ envfile_value() {
 state_redact() {
   local key="$1"
   local cred_name="$2"
-  local file="$VAULT/setup-state.md"
+  local file="$REPO_ROOT/setup-state.md"
   [ -f "$file" ] || return 0
   sed -i "s|^- \*\*$key\*\*:.*|- **$key**: (systemd-creds: $cred_name)|" "$file"
 }
@@ -120,23 +122,23 @@ echo "  VAULT=$VAULT"
 echo "  SECRETS_DIR=$SECRETS_DIR"
 echo
 echo "  Will pull plaintext from:"
-echo "    $VAULT/setup-state.md (Values block)"
-echo "    $VAULT/web-terminal/.env"
-echo "    $VAULT/.telegram/config"
+echo "    $REPO_ROOT/setup-state.md (Values block)"
+echo "    $KIT/web-terminal/.env"
+echo "    $REPO_ROOT/.telegram/config"
 
 banner "Phase 1 — Encrypt"
 
 # Telegram
 TG_TOKEN=$(state_value TG_BOT_TOKEN)
-[ -z "$TG_TOKEN" ] && TG_TOKEN=$(envfile_value "$VAULT/.telegram/config" BOT_TOKEN)
+[ -z "$TG_TOKEN" ] && TG_TOKEN=$(envfile_value "$REPO_ROOT/.telegram/config" BOT_TOKEN)
 encrypt_one tg-bot-token       "$TG_TOKEN"
 
 TG_CHAT=$(state_value TG_CHAT_ID)
-[ -z "$TG_CHAT" ] && TG_CHAT=$(envfile_value "$VAULT/.telegram/config" CHAT_ID)
+[ -z "$TG_CHAT" ] && TG_CHAT=$(envfile_value "$REPO_ROOT/.telegram/config" CHAT_ID)
 encrypt_one tg-chat-id         "$TG_CHAT"
 
 TG_USERNAME=$(state_value TG_BOT_USERNAME)
-[ -z "$TG_USERNAME" ] && TG_USERNAME=$(envfile_value "$VAULT/.telegram/config" BOT_USERNAME)
+[ -z "$TG_USERNAME" ] && TG_USERNAME=$(envfile_value "$REPO_ROOT/.telegram/config" BOT_USERNAME)
 encrypt_one tg-bot-username    "$TG_USERNAME"
 
 # SilverBullet
@@ -148,16 +150,16 @@ encrypt_one sb-auth-token      "$SB_TOKEN"
 
 # Web shell
 WEB_SECRET=$(state_value WEB_SESSION_SECRET)
-[ -z "$WEB_SECRET" ] && WEB_SECRET=$(envfile_value "$VAULT/web-terminal/.env" SESSION_SECRET)
+[ -z "$WEB_SECRET" ] && WEB_SECRET=$(envfile_value "$KIT/web-terminal/.env" SESSION_SECRET)
 encrypt_one web-session-secret "$WEB_SECRET"
 
 WEB_PASS=$(state_value WEB_UI_PASSWORD)
-[ -z "$WEB_PASS" ] && WEB_PASS=$(envfile_value "$VAULT/web-terminal/.env" UI_PASSWORD)
+[ -z "$WEB_PASS" ] && WEB_PASS=$(envfile_value "$KIT/web-terminal/.env" UI_PASSWORD)
 encrypt_one web-ui-password    "$WEB_PASS"
 
 # UI_USERNAME is less sensitive but still encrypted for consistency.
 WEB_USER=$(state_value WEB_UI_USERNAME)
-[ -z "$WEB_USER" ] && WEB_USER=$(envfile_value "$VAULT/web-terminal/.env" UI_USERNAME)
+[ -z "$WEB_USER" ] && WEB_USER=$(envfile_value "$KIT/web-terminal/.env" UI_USERNAME)
 encrypt_one web-ui-username    "$WEB_USER"
 
 banner "Phase 2 — Verify"
@@ -189,7 +191,7 @@ fi
 # Replace a systemd unit file from a kit template, substituting placeholders.
 # Idempotent: if the running unit already loads encrypted credentials, skip.
 #   $1 = unit file name in /etc/systemd/system (e.g. nlbot-web.service)
-#   $2 = path to kit template (e.g. $VAULT/web-terminal/claude-web.service)
+#   $2 = path to kit template (e.g. $KIT/web-terminal/claude-web.service)
 #   $3 = (optional) human label for the banner
 replace_unit_if_stale() {
   local unit_name="$1"
@@ -232,7 +234,7 @@ echo
 
 units_changed=0
 replace_unit_if_stale "${BOT_NAME}-web.service" \
-  "$VAULT/web-terminal/claude-web.service" \
+  "$KIT/web-terminal/claude-web.service" \
   "web-terminal" || units_changed=$((units_changed+1))
 
 replace_unit_if_stale "telegram-bot.service" \
@@ -255,23 +257,23 @@ state_redact SB_AUTH_TOKEN       sb-auth-token
 state_redact WEB_SESSION_SECRET  web-session-secret
 state_redact WEB_UI_USERNAME     web-ui-username
 state_redact WEB_UI_PASSWORD     web-ui-password
-echo "  [redact] $VAULT/setup-state.md Values block updated"
+echo "  [redact] $REPO_ROOT/setup-state.md Values block updated"
 
 # web-terminal/.env
-envfile_redact "$VAULT/web-terminal/.env" SESSION_SECRET    web-session-secret
-envfile_redact "$VAULT/web-terminal/.env" UI_USERNAME       web-ui-username
-envfile_redact "$VAULT/web-terminal/.env" UI_PASSWORD       web-ui-password
-[ -f "$VAULT/web-terminal/.env" ] && echo "  [redact] $VAULT/web-terminal/.env"
+envfile_redact "$KIT/web-terminal/.env" SESSION_SECRET    web-session-secret
+envfile_redact "$KIT/web-terminal/.env" UI_USERNAME       web-ui-username
+envfile_redact "$KIT/web-terminal/.env" UI_PASSWORD       web-ui-password
+[ -f "$KIT/web-terminal/.env" ] && echo "  [redact] $KIT/web-terminal/.env"
 
 # .telegram/config
-envfile_redact "$VAULT/.telegram/config" BOT_TOKEN          tg-bot-token
-envfile_redact "$VAULT/.telegram/config" CHAT_ID            tg-chat-id
-envfile_redact "$VAULT/.telegram/config" BOT_USERNAME       tg-bot-username
-[ -f "$VAULT/.telegram/config" ] && echo "  [redact] $VAULT/.telegram/config"
+envfile_redact "$REPO_ROOT/.telegram/config" BOT_TOKEN          tg-bot-token
+envfile_redact "$REPO_ROOT/.telegram/config" CHAT_ID            tg-chat-id
+envfile_redact "$REPO_ROOT/.telegram/config" BOT_USERNAME       tg-bot-username
+[ -f "$REPO_ROOT/.telegram/config" ] && echo "  [redact] $REPO_ROOT/.telegram/config"
 
 # Tighten setup-state.md perms — the file no longer holds secrets but
 # it does hold identity prefs and was world-readable before.
-chmod 600 "$VAULT/setup-state.md" 2>/dev/null || true
+chmod 600 "$REPO_ROOT/setup-state.md" 2>/dev/null || true
 
 banner "Phase 4 — Restart services"
 echo
