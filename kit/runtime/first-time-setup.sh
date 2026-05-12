@@ -805,6 +805,96 @@ if ! tmux ls 2>/dev/null | grep -q '^shell:'; then
   exit 1
 fi
 
+# --- Step 5: web shell (so Nate can connect at phase-0-interview-pending) ---
+#
+# The web shell used to be set up by setup-runner step-7-web-shell, which
+# runs only AFTER Nate has typed /setup. But the F34 provisioner-vs-Nate
+# split tells Nate his first action is to open the web shell URL and type
+# /setup THERE — so a web shell that only comes up post-/setup is a
+# chicken-and-egg (Nate cannot reach the bot to type the thing that
+# brings up the surface Nate is supposed to type into). Caught on the
+# fenbot01 walk 2026-05-12 (F41). Moving it into the provisioner makes
+# the URL in HANDOFF-TO-NATE.txt actually load when Nate opens it.
+#
+# step-7-web-shell in setup-runner becomes a probe-and-advance no-op
+# from this point on (it stays in the phase enum so re-runs against
+# older state files still walk cleanly).
+banner "Step 5: web shell"
+
+# Machine-only secret. Stored as a systemd-creds blob; the operator never
+# sees the plaintext. web-ui-username + web-ui-password were already
+# handled by Phase 0.5.
+if [ ! -f "/etc/${BOT_NAME}/secrets/web-session-secret" ]; then
+  bash "$KIT/runtime/bot-secrets.sh" generate web-session-secret 32 >/dev/null
+  echo "  Generated web-session-secret (encrypted blob at /etc/${BOT_NAME}/secrets/)"
+fi
+if [ ! -f "/etc/${BOT_NAME}/secrets/web-ui-username" ]; then
+  printf '%s' "$BOT_NAME" | bash "$KIT/runtime/bot-secrets.sh" store web-ui-username >/dev/null
+  echo "  Stored web-ui-username = $BOT_NAME"
+fi
+
+# npm install in the kit's web-terminal/. The systemd unit's
+# WorkingDirectory points here; node_modules lives alongside server.js.
+# Skip the install if node_modules is already populated (idempotent).
+if [ ! -d "$KIT/web-terminal/node_modules" ]; then
+  echo "  Running npm install in $KIT/web-terminal/ (may take 30-60s)…"
+  (cd "$KIT/web-terminal" && npm install --no-audit --no-fund --silent) || {
+    echo "  ✗ npm install failed in $KIT/web-terminal/" >&2
+    echo "    Check that node 20+ is installed and the directory is writable." >&2
+    exit 1
+  }
+  echo "  ✓ npm install complete"
+else
+  echo "  npm dependencies already installed (node_modules present)"
+fi
+
+# Write a minimal .env. The real credentials are loaded from systemd-creds
+# at service start; this file just pins PORT so server.js does not fall
+# back to a different default.
+cat > "$KIT/web-terminal/.env" <<EOF
+PORT=3000
+# SESSION_SECRET, UI_USERNAME, UI_PASSWORD are loaded from systemd-creds
+# blobs at service start. See $KIT/web-terminal/claude-web.service.
+EOF
+chmod 600 "$KIT/web-terminal/.env"
+echo "  Wrote $KIT/web-terminal/.env"
+
+# Render the systemd unit template into /etc/systemd/system/. Mirrors the
+# render-and-install pattern used by claude-code.service + shell.service.
+sudo tee "/etc/systemd/system/${BOT_NAME}-web.service" >/dev/null < <(
+  sed \
+    -e "s|<USER>|$BOT_NAME|g" \
+    -e "s|<BOT_NAME>|$BOT_NAME|g" \
+    -e "s|<KIT>|$KIT|g" \
+    -e "s|<VAULT>|$VAULT|g" \
+    "$KIT/web-terminal/claude-web.service"
+)
+echo "  Wrote /etc/systemd/system/${BOT_NAME}-web.service"
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now "${BOT_NAME}-web.service"
+
+# Verify the service came up.
+sleep 2
+if ! systemctl is-active --quiet "${BOT_NAME}-web.service"; then
+  echo "  ✗ ${BOT_NAME}-web.service did not become active." >&2
+  echo "    Check: sudo journalctl -u ${BOT_NAME}-web.service -n 50" >&2
+  exit 1
+fi
+echo "  ✓ ${BOT_NAME}-web.service active"
+
+# Publish via tailscale serve. --bg backgrounds the serve config; the
+# command returns immediately and the config persists across reboots.
+# If tailscale serve is already configured on :8443, this is idempotent
+# (tailscale will just confirm the existing route).
+if sudo tailscale serve --bg --https=8443 http://127.0.0.1:3000 >/dev/null 2>&1; then
+  echo "  ✓ tailscale serve published on :8443"
+else
+  echo "  ⚠ tailscale serve failed — web shell is up locally but not on the tailnet." >&2
+  echo "    The URL written into HANDOFF-TO-NATE.txt will not load until this is fixed:" >&2
+  echo "    sudo tailscale serve --bg --https=8443 http://127.0.0.1:3000" >&2
+fi
+
 # --- Done ------------------------------------------------------------------
 
 banner "Steps 1-4 complete — next, manual"
