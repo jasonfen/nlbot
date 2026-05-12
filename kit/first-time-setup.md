@@ -256,7 +256,7 @@ The bot's setup is idempotent. If a phase fails:
 
 ```bash
 # Reality check: what's actually running vs. what setup-state.md claims?
-<VAULT>/runtime/setup-status.sh
+<KIT>/runtime/setup-status.sh
 ```
 
 This probes every phase (docker container, systemd service, crontab entry, MCP registration) and prints a recommendation: "declared phase X, reality reached Y, run /setup to advance." Run it from any shell — it's read-only.
@@ -292,10 +292,10 @@ chmod +x $VAULT/cron-prompts/inject-prompt.sh
 Then `crontab -e`:
 
 ```cron
-*/10 7-23 * * * <VAULT>/cron-prompts/inject-prompt.sh /soul-loop
-*/30 * * * *   <VAULT>/cron-prompts/inject-prompt.sh /secretary
-30 7 * * 1-5   <VAULT>/cron-prompts/inject-prompt.sh /wake-up
-5 0 * * *      <VAULT>/cron-prompts/inject-prompt.sh /midnight-maintenance
+*/10 7-23 * * * <REPO_ROOT>/cron-prompts/inject-prompt.sh /soul-loop
+*/30 * * * *   <REPO_ROOT>/cron-prompts/inject-prompt.sh /secretary
+30 7 * * 1-5   <REPO_ROOT>/cron-prompts/inject-prompt.sh /wake-up
+5 0 * * *      <REPO_ROOT>/cron-prompts/inject-prompt.sh /midnight-maintenance
 ```
 
 Within 10 minutes you should see soul-loop fires in `cron-prompts/job-log.md`, and the secretary fires every 30 minutes capturing journal-worthy moments from your conversations.

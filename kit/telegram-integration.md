@@ -70,8 +70,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=<BOT_NAME>
-WorkingDirectory=<VAULT>
-ExecStart=/usr/bin/python3 <VAULT>/.telegram/tg-bot.py
+WorkingDirectory=<REPO_ROOT>
+ExecStart=/usr/bin/python3 <REPO_ROOT>/.telegram/tg-bot.py
 Restart=on-failure
 RestartSec=5
 

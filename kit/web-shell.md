@@ -153,7 +153,7 @@ wss.on('connection', (ws) => {
   const shell = pty.spawn('tmux', ['attach', '-t', 'claude'], {
     name: 'xterm-256color',
     cols: 120, rows: 40,
-    cwd: '<VAULT>',
+    cwd: '<REPO_ROOT>',
     env: { ...process.env, LANG: 'C.utf8' }
   });
   shell.onData((data) => ws.readyState === ws.OPEN && ws.send(data));
@@ -276,7 +276,7 @@ After=network.target claude-code.service
 [Service]
 Type=simple
 User=<BOT_NAME>
-WorkingDirectory=<VAULT>/web-terminal
+WorkingDirectory=<KIT>/web-terminal
 ExecStart=/usr/bin/node server.js
 Restart=on-failure
 RestartSec=10

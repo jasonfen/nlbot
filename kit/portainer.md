@@ -18,7 +18,7 @@ Portainer wants to be the source of truth for the stacks it manages. It stores s
 That's exactly the disagreement waiting to happen here:
 
 1. You ask Claude to update the SilverBullet stack — say, bump the image tag or add a new service.
-2. Claude does the obvious thing: edits `<VAULT>/docker-compose.yml` on disk, runs `docker compose up -d`. Containers update.
+2. Claude does the obvious thing: edits `<KIT>/docker-compose.yml` on disk, runs `docker compose up -d`. Containers update.
 3. Portainer's UI still shows the **old** stack definition (the one stored in its DB the last time the stack was deployed via the UI or its API), even though the actual containers reflect Claude's edit. Stack state on disk and stack state in Portainer's DB have diverged.
 4. The next time you click "Update the stack" in Portainer, it re-deploys the old definition — undoing Claude's edit.
 
@@ -48,7 +48,7 @@ Mitigations:
 You already have a `docker-compose.yml` in your vault from [silverbullet-setup.md](silverbullet-setup.md). Add a `portainer` service to it:
 
 ```yaml
-# <VAULT>/docker-compose.yml (additions only — keep the existing silverbullet block)
+# <KIT>/docker-compose.yml (additions only — keep the existing silverbullet block)
 services:
   portainer:
     image: portainer/portainer-ce:latest
@@ -67,7 +67,7 @@ volumes:
 Bring it up:
 
 ```bash
-cd <VAULT>
+cd <REPO_ROOT>
 docker compose up -d portainer
 docker compose ps portainer        # should show 'running'
 ```

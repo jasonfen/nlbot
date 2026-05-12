@@ -8,7 +8,7 @@ This is your primary day-to-day interface to the bot. You read its journal in Si
 
 > **What the bot does automatically vs. what needs your hands**
 >
-> During Step 5 of bot-driven setup, the bot generates the SilverBullet passwords (`openssl rand -base64 24`), writes `<VAULT>/docker-compose.yml`, runs `docker compose up -d silverbullet`, and exposes it via `sudo tailscale serve --https=443`. The credentials land in `setup-state.md` Values block — **read them from there the first time you log into SilverBullet from your phone, and write them somewhere recoverable.** The bot won't keep them anywhere else.
+> During Step 5 of bot-driven setup, the bot generates the SilverBullet passwords (`openssl rand -base64 24`), writes `<KIT>/docker-compose.yml`, runs `docker compose up -d silverbullet`, and exposes it via `sudo tailscale serve --https=443`. The credentials land in `setup-state.md` Values block — **read them from there the first time you log into SilverBullet from your phone, and write them somewhere recoverable.** The bot won't keep them anywhere else.
 >
 > If you're doing the assisting-CC fallback flow (Steps 5–9 by hand), the commands below are what you run yourself.
 
@@ -19,7 +19,7 @@ This is your primary day-to-day interface to the bot. You read its journal in Si
 The official image is `ghcr.io/silverbulletmd/silverbullet:latest`. The simplest setup is `docker compose`:
 
 ```yaml
-# <VAULT>/docker-compose.yml
+# <KIT>/docker-compose.yml
 services:
   silverbullet:
     image: ghcr.io/silverbulletmd/silverbullet:latest
@@ -28,7 +28,7 @@ services:
       - SB_USER=nate:<long-random-password>           # basic auth for the web UI
       - SB_AUTH_TOKEN=<long-random-token>             # sync token (different from password)
     volumes:
-      - <VAULT>:/space                     # the vault root
+      - ../vault:/space                     # the vault root
     ports:
       - "127.0.0.1:3001:3000"                         # bind to localhost only
 ```
@@ -38,7 +38,7 @@ Generate the password and token with `openssl rand -base64 24` (do it twice, the
 Bring it up:
 
 ```bash
-cd <VAULT>
+cd <KIT>
 docker compose up -d
 docker compose logs -f silverbullet     # verify clean start
 ```
@@ -90,8 +90,8 @@ The kit also seeds `_templates/handoff.md` — a SilverBullet page template. To 
 The kit ships `runtime/sb-cmd.sh`, a wrapper around SilverBullet's `POST /.runtime/lua` HTTP endpoint that lets scripts invoke any SB command without opening the UI:
 
 ```bash
-bash <VAULT>/runtime/sb-cmd.sh "Plugs: Update"
-bash <VAULT>/runtime/sb-cmd.sh --lua 'editor.getCurrentPage()'
+bash <KIT>/runtime/sb-cmd.sh "Plugs: Update"
+bash <KIT>/runtime/sb-cmd.sh --lua 'editor.getCurrentPage()'
 ```
 
 The Runtime API is **not enabled by default**. To turn it on, flip the SilverBullet container's image from the base variant to the `-runtime-api` variant:
