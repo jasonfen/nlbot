@@ -6,7 +6,7 @@ A pre-flight checklist for a fresh EC2 (or any clean Debian/Ubuntu box). This co
 
 - Ubuntu 22.04+ or Debian 12+. (Amazon Linux works too with `dnf` substituted for `apt`; flag in your head.)
 - You're logged in either as root or as the cloud's default user (`ubuntu` on Ubuntu AMIs, `admin` on Debian AMIs, `ec2-user` on Amazon Linux).
-- **Tailscale is already installed and logged in.** (`tailscale status` should show your tailnet.)
+- **Tailscale is already installed and logged in.** (`tailscale status` should show your tailnet.) If it's not on the box yet, install with `curl -fsSL https://tailscale.com/install.sh | sh` then `sudo tailscale up`. `first-time-setup.md` Step 5 needs Tailscale for SilverBullet ingress, so don't skip it.
 - Outbound HTTPS works (default on every cloud VM I've seen, but worth saying out loud).
 
 If your instance is smaller than ~2 GB RAM, the script's Step 8 (swap) handles it automatically.
@@ -16,9 +16,12 @@ If your instance is smaller than ~2 GB RAM, the script's Step 8 (swap) handles i
 ## TL;DR
 
 ```bash
-# 1. As root or cloud-default user, update + install git, clone the kit.
-sudo apt update
-sudo apt install -y sudo git
+# 1. Install sudo + git + clone the kit. If you're root on a fresh Debian
+#    minimal image (LXC, container), sudo isn't installed — drop the
+#    `sudo` prefix from the next two lines. On a cloud VM with a default
+#    user (ubuntu/admin/ec2-user), keep them as written.
+sudo apt update                # or: apt update         (if root)
+sudo apt install -y sudo git   # or: apt install -y …   (if root)
 git clone https://github.com/jasonfen/nlbot.git ~/nlbot
 
 # 2. Create the bot user — interactive, one prompt per stage. See Step 2.
@@ -54,12 +57,14 @@ Each shell command above is a single short line — safe to copy and paste one a
 
 ## Step 1 — System update + git + clone the kit
 
-You need `sudo` (some minimal Debian images don't ship it) and `git` to clone the kit. The script does the rest.
+You need `sudo` (Debian minimal LXC/container images don't ship it — caught on ansi's 2026-05-11 e2e test) and `git` to clone the kit. The script does the rest.
+
+If you're running as **root** on a fresh Debian image, omit the `sudo` prefix (it doesn't exist yet). If you're on a cloud VM as the default sudoer user (`ubuntu` / `admin` / `ec2-user`), keep the prefix:
 
 ```bash
-sudo apt update
-sudo apt upgrade -y
-sudo apt install -y sudo git
+sudo apt update                # or: apt update          (if running as root)
+sudo apt upgrade -y            # or: apt upgrade -y      (if running as root)
+sudo apt install -y sudo git   # or: apt install -y …    (if running as root)
 git clone https://github.com/jasonfen/nlbot.git ~/nlbot
 ```
 
