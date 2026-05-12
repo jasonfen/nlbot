@@ -109,9 +109,11 @@ If the count is 6, advance to the container probe.
 
 ### `step-7-web-shell`
 
-**Probe:** `systemctl is-active <BOT_NAME>-web.service` returns `active` → advance phase.
+**Note on ordering (F41, 2026-05-12):** the primary path for installing the web shell is now the bash provisioner's Phase 5 (`first-time-setup.sh` lines 808-ish, "Step 5: web shell"), which runs *before* the reboot — so by the time the user sees the URL in `HANDOFF-TO-NATE.txt` and tries to type `/setup` in it, the web shell is already serving. This phase becomes a probe-and-advance for the happy path. The Execute block below stays as a fallback for installs where Phase 5 was skipped or failed silently (older kit, partial git pull, manual install bypass).
 
-**Execute:**
+**Probe:** `systemctl is-active <BOT_NAME>-web.service` returns `active` → advance phase. (Phase 5 of the bash provisioner is what gets you here on a fresh install; this probe is just confirming Phase 5 succeeded.)
+
+**Execute (fallback only — only runs if probe failed):**
 1. Generate three encrypted credentials. The plaintext stays inside the encrypt pipeline; the bot never sees the values:
    ```
    <KIT>/runtime/bot-secrets.sh generate web-session-secret 32
