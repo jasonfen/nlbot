@@ -24,6 +24,13 @@
 #       when the value comes from outside (e.g., BotFather token typed
 #       into a prompt and piped in).
 #
+#   bot-secrets.sh store-interactive <name> [label]
+#       Prompt the operator (no echo) for a password, confirm via
+#       double-tap, and encrypt under `<name>`. Optional `label` is
+#       shown in the prompt instead of `<name>` for human-friendliness.
+#       Requires a TTY — fails closed if stdin isn't interactive so
+#       non-TTY contexts don't silently skip the prompt.
+#
 #   bot-secrets.sh list
 #       Print known secret names (file basenames only, no values).
 #
@@ -105,6 +112,51 @@ case "$cmd" in
     sudo systemd-creds encrypt --name="$name" - "$tmp"
     sudo install -m 400 -o root -g root "$tmp" "$SECRETS_DIR/$name"
     echo "stored: $name (from stdin) → $SECRETS_DIR/$name"
+    ;;
+
+  store-interactive)
+    require_arg "${1:-}"
+    name="$1"
+    label="${2:-$name}"
+    ensure_dir
+    # TTY required. Refuse to silently fall through to a non-prompt
+    # path: non-interactive callers should use `store` with a pipe or
+    # pre-set the value via env-var-driven `store` from the caller.
+    if [ ! -t 0 ]; then
+      echo "ERROR: store-interactive requires a TTY for password entry." >&2
+      echo "  For non-interactive use, pipe the value to 'bot-secrets.sh store $name'" >&2
+      echo "  or pre-set it via the caller's env-var convention before invoking." >&2
+      exit 1
+    fi
+    # Prompt + confirm-double-tap loop. `read -rs` suppresses echo;
+    # `IFS=` preserves leading/trailing whitespace; \r literal break
+    # after the silent read so the next prompt lands on a new line.
+    while true; do
+      printf "Enter password for %s: " "$label" >&2
+      IFS= read -rs pw1
+      printf "\n" >&2
+      printf "Confirm password for %s: " "$label" >&2
+      IFS= read -rs pw2
+      printf "\n" >&2
+      if [ -z "$pw1" ]; then
+        echo "ERROR: password cannot be empty — try again." >&2
+        continue
+      fi
+      if [ "$pw1" != "$pw2" ]; then
+        echo "ERROR: passwords don't match — try again." >&2
+        continue
+      fi
+      break
+    done
+    # Encrypt via stdin pipe. Plaintext exists in shell vars pw1/pw2
+    # for the duration of the read-confirm loop, but never lands on
+    # disk uncrypted and never echoes to the terminal. trap unsets the
+    # vars on every exit path (success, error, signal).
+    tmp=$(sudo mktemp -p "$SECRETS_DIR" ".${name}.XXXXXX")
+    trap 'sudo rm -f "$tmp"; unset pw1 pw2' EXIT
+    printf '%s' "$pw1" | sudo systemd-creds encrypt --name="$name" - "$tmp"
+    sudo install -m 400 -o root -g root "$tmp" "$SECRETS_DIR/$name"
+    echo "stored: $name (interactive) → $SECRETS_DIR/$name"
     ;;
 
   list)
