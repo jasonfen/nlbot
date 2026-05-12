@@ -168,7 +168,13 @@ if command -v tailscale >/dev/null 2>&1; then
 else
   fail "Tailscale installed" "(handled outside the kit; install before bootstrap.md)"
 fi
-if locale 2>/dev/null | grep -q 'C\.UTF-8\|en_US\.UTF-8'; then
+# Locale probe must accept both the canonical hyphenated form
+# (`C.UTF-8`) and Debian's lowercase short form (`C.utf8`) — they're
+# aliases for the same locale and the kit's systemd unit Environment
+# lines use the short form (LANG=C.utf8, LC_ALL=C.utf8), so probing
+# only the long form false-flagged on every kit-bootstrapped box.
+# Caught by jason on nlbot0 via /setup-status (F27, sidechat msg 2753).
+if locale 2>/dev/null | grep -qiE '(C|en_US)\.UTF-?8'; then
   pass "UTF-8 locale active" "($(locale | grep ^LANG | head -1))"
 else
   warn "UTF-8 locale" "(check 'locale' output; needed for glyph rendering in tmux)"
