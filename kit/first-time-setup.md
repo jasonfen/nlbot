@@ -14,18 +14,17 @@ A 30-minute path from "I want one of these" to "the box is running and ready to 
 
 ```bash
 cd ~/nlbot                                                  # <REPO_ROOT>
-claude                                                      # 1. OAuth walk — REQUIRED before the script runs
-                                                            #    (accept TOS, exit). The script aborts at a
-                                                            #    pre-flight gate if ~/.claude/.credentials.json
-                                                            #    is missing.
 BOT_NAME=nlbot BOT_PASSWORD=Welcome2026 \
-  bash kit/runtime/first-time-setup.sh --non-interactive    # 2. Env-var provisioner — Steps 1–4.
-sudo visudo -f /etc/sudoers.d/$BOT_NAME                     # 3. NOPASSWD sudoers grant (template printed by
+  bash kit/runtime/first-time-setup.sh --non-interactive    # 1. Env-var provisioner — Steps 1–5
+                                                            #    (Step 5 brings up the web shell).
+sudo visudo -f /etc/sudoers.d/$BOT_NAME                     # 2. NOPASSWD sudoers grant (template printed by
                                                             #    the script's end-of-run banner).
-sudo reboot                                                 # 4. Verification reboot.
+sudo reboot                                                 # 3. Verification reboot.
 ```
 
-That four-line sequence is the canonical happy path. Step 1 (OAuth) is non-skippable: Claude Code's CLI stores credentials at `$HOME/.claude/.credentials.json`, and the kit's pre-flight checks for that file before doing anything destructive — partly to fail loud rather than fail silent on a misconfigured box, partly because step 2 renders the systemd unit that immediately tries to launch `claude`, which will crashloop if creds are missing. The OAuth walk has to happen at a real interactive TTY (it opens a browser flow), so the provisioner does it once at the console before the env-var-driven phase.
+That three-line sequence is the canonical happy path. **The provisioner does NOT need to walk Claude Code OAuth** — F42 (fenbot02 walk 2026-05-12) moved the OAuth step into Nate's web-shell-driven onboarding. The bash provisioner starts `claude-code.service` even without `~/.claude/.credentials.json`; the wrapper-around-claude in `start-claude.sh` quietly crashloops the inner `claude` process until OAuth lands, but the wrapper survives, the tmux session stays alive, and the web shell (set up in Phase 5) stays reachable throughout. Nate connects via the web shell, switches to its `?session=shell` tab, runs `claude` there, walks OAuth in the browser, then jumps back to the default claude session and types `/setup`. End-to-end without anyone SSHing into the box.
+
+(The pre-F42 flow — operator walks OAuth at the console before running the bash provisioner — still works if you prefer it; the OAuth pre-flight at script start is now an advisory message instead of a hard abort. If the credentials file is already present, the OAuth block in `HANDOFF-TO-NATE.txt` is omitted and Nate's instructions collapse to "open URL, log in, type `/setup`.")
 
 The script no longer prompts for `USER_NAME`, `CANARY_PHRASE`, hobbies, communication style, or any of the eight personality values — those get collected by the bot during Nate's `/setup` interview after he logs in. The bash phase only collects what's truly load-bearing for getting the box up to the point where Nate can connect:
 

@@ -167,20 +167,38 @@ prompt_value() {
 # shellcheck source=/dev/null
 . "$SCRIPT_DIR/substitute-placeholders.sh"
 
-# --- OAuth pre-flight (must happen before the systemd service can run) ------
-# claude --continue inside a detached tmux session silently exits if the
-# user hasn't done first-run OAuth at a real terminal — the TOS gate can't
-# be answered headlessly. Catch it here before we wire up the service.
+# --- OAuth pre-flight (advisory only post-F42) ------------------------------
+# Before F42: this gate hard-aborted the script if ~/.claude/.credentials.json
+# was missing, on the theory that claude-code.service would crashloop without
+# OAuth done. That theory was right but the gate forced the provisioner to
+# SSH in and walk OAuth before bash could run — wiping out the kit's stated
+# UX promise that Nate's first action is opening the web shell URL in a
+# browser. F42 (fenbot02 walk 2026-05-12) inverts the order: bash provisioner
+# runs without OAuth, Phase 5 brings up the web shell, and Nate walks OAuth
+# via the web shell's bash session (`?session=shell`) AFTER opening the URL.
+# claude-code.service still crashloops in the background until OAuth lands,
+# but the start-claude.sh while-loop wrapper absorbs that (each iteration is
+# its own claude exit, not a systemd-visible failure) and once OAuth is
+# complete the next claude launch succeeds. Nate then switches to the claude
+# session and types /setup.
+#
+# The gate stays as an ADVISORY warning so an operator who *is* OAuth-walking
+# on the provisioner side (the old flow) still sees the prompt and knows
+# what to expect; the script no longer aborts.
 if [ ! -f "$HOME/.claude/.credentials.json" ]; then
   echo
-  echo "  ✗ Claude Code first-run OAuth has not been completed."
-  echo "    \$HOME/.claude/.credentials.json is missing."
+  echo "  ℹ Claude Code first-run OAuth has not been completed."
+  echo "    \$HOME/.claude/.credentials.json is missing — that is OK for the"
+  echo "    F42 zero-SSH flow. Nate walks OAuth via the web shell after the"
+  echo "    bash provisioner finishes: open the web shell URL, switch to the"
+  echo "    'shell' session (use the URL param ?session=shell), run \`claude\`"
+  echo "    and walk /login in the browser. claude-code.service will start"
+  echo "    succeeding from that point and /setup becomes available."
   echo
-  echo "  Fix: at a real terminal (this SSH session is fine, NOT inside tmux),"
-  echo "       run:  claude"
-  echo "       Accept the TOS, walk the OAuth, then exit cleanly."
-  echo "       Re-run this script after."
-  exit 1
+  echo "  If you would rather walk OAuth here on the provisioner side (the"
+  echo "  pre-F42 flow), Ctrl-C now, run \`claude\` at this same shell, walk"
+  echo "  /login, exit, and re-run this script."
+  echo
 fi
 
 # --- Bootstrap setup-state.md from the template if missing ------------------
@@ -997,6 +1015,38 @@ if command -v jq >/dev/null 2>&1; then
 fi
 INITIAL_PASSWORD_HINT="${BOT_PASSWORD:-(the password you typed during Phase 0.5 — check your scrollback or your password manager)}"
 WEB_URL="${TAILNET_HOST:+https://${TAILNET_HOST}:8443/}"
+SHELL_URL="${TAILNET_HOST:+https://${TAILNET_HOST}:8443/?session=shell}"
+
+# Compute whether OAuth has been walked on the provisioner side. When it has,
+# the claude session in the web shell is already usable and Nate jumps
+# straight to /setup. When it hasn't, Nate walks OAuth via the bash session
+# first (F42 zero-SSH flow), then switches to the claude session.
+if [ -f "$HOME/.claude/.credentials.json" ]; then
+  OAUTH_BLOCK=""
+else
+  OAUTH_BLOCK="
+
+Step 0 — OAuth (only the first time, then never again):
+
+  The bot's Claude Code needs to log in before it can talk to you. Walk
+  this once and you are done forever:
+
+  1. From the web shell login screen, click 'shell' (or open
+     ${SHELL_URL:-<URL>?session=shell}).
+  2. At the bash prompt, type:
+
+       claude
+
+     Claude Code will print a URL. Open it in a new browser tab. Sign in
+     with your Anthropic account, accept the TOS. The page will show a
+     code. Paste that code back into the web shell terminal.
+  3. Once Claude Code says 'Welcome', type 'exit' to return to bash, then
+     close the shell tab.
+
+  Now the bot's persistent session has live credentials. Switch to the
+  default ('claude') view and continue below.
+"
+fi
 
 cat > "$HANDOFF_FILE" <<EOF
 HANDOFF — your bot is ready
@@ -1007,15 +1057,15 @@ Hi! Someone set up an nlbot for you. Here's everything you need to start:
   Web shell URL:  ${WEB_URL:-https://<bot>.<your-tailnet>.ts.net:8443/}
   Username:       $BOT_NAME
   Initial password:  $INITIAL_PASSWORD_HINT
-
+${OAUTH_BLOCK}
 To start: open the URL above in a browser, log in with the username and
-password, and you'll see a Claude Code session ready for input. Type:
+password, and you will see a Claude Code session ready for input. Type:
 
   /setup
 
-The bot will walk you through a short conversational interview — your
-name, hobbies, communication style, etc. — and then bring up the rest of
-its services (SilverBullet vault, optional Telegram messaging). You'll be
+The bot walks you through a short conversational interview — your name,
+hobbies, communication style, etc. — and then brings up the rest of its
+services (SilverBullet vault, optional Telegram messaging). You will be
 operational in a few minutes.
 
 Questions? The bot answers them. Just talk.
