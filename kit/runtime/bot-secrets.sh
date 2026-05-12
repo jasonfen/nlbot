@@ -89,8 +89,14 @@ case "$cmd" in
     require_arg "${1:-}"
     name="$1"
     ensure_dir
+    # stdin is inherited from the caller; the explicit `< /dev/stdin`
+    # redirect previously here failed with `/dev/stdin: Permission
+    # denied` when invoked through `sudo -u <bot> bash -c '...'`
+    # because the inner sudo's pty seal made /dev/stdin unreadable.
+    # Leaving the redirect off lets systemd-creds read the inherited
+    # fd 0 directly (kit-e2e-test-2 F14).
     tmp=$(sudo mktemp -p "$SECRETS_DIR" ".${name}.XXXXXX")
-    sudo systemd-creds encrypt --name="$name" - "$tmp" < /dev/stdin
+    sudo systemd-creds encrypt --name="$name" - "$tmp"
     sudo install -m 400 -o root -g root "$tmp" "$SECRETS_DIR/$name"
     sudo rm -f "$tmp"
     echo "stored: $name (from stdin) → $SECRETS_DIR/$name"
