@@ -147,3 +147,10 @@ if [ -d "$PAGES_SRC" ]; then
     echo "refresh-claude-dir: $seeded_pages new vault-page(s) seeded"
   fi
 fi
+
+# Pull any new plug bundles declared in runtime/install-plugs.sh. Idempotent:
+# skips entries whose destination file already exists. Kit pulls that add a
+# new plug entry will fetch it here without manual intervention.
+if [ -x "$VAULT/runtime/install-plugs.sh" ]; then
+  VAULT="$VAULT" bash "$VAULT/runtime/install-plugs.sh"
+fi

@@ -68,16 +68,42 @@ After running `serve`, hit the URL from your phone (with the Tailscale app conne
 
 ## Recommended plugs
 
-SilverBullet has a plug system. `first-time-setup.sh` seeds `CONFIG.md` at the vault root with the kit's recommended plug list (TreeView) and sensible config defaults (`taskStates`, sidebar position). On first login to SilverBullet, open the command palette (`Cmd/Ctrl-/`) and run **`Plugs: Update`** — SB reads `config.set("plugs", {…})` from `CONFIG.md`, downloads each plug, and installs them. After that, every subsequent change to the plugs list in `CONFIG.md` picks up with the same `Plugs: Update` invocation.
+The kit pre-installs TreeView's compiled bundle into `<VAULT>/_plug/treeview.plug.js` at first-time setup (`runtime/install-plugs.sh`, version pinned to a specific commit SHA). SilverBullet loads anything in `_plug/` at startup, so TreeView is available the first time you open the UI — no manual `Plugs: Update` needed.
 
-What `CONFIG.md` declares out of the box:
+`CONFIG.md` at the vault root declares kit defaults using `config.define` (not `config.set`):
 
-- **TreeView** — sidebar folder hierarchy. Essential for vault navigation.
-- **Tags / Frontmatter / Tasks** — built-in to SB; no plug install needed. Used for `#handoff` queries and `[ ]` task tracking.
+- **`plugs`** — array of plug URLs, default is `["github:joekrill/silverbullet-treeview/treeview.plug.js"]`. Surfaces in the SB Configuration Manager UI; you can override (add more plugs, drop TreeView) without forking the kit.
+- **`treeview.position`** — `lhs` or `rhs`, default `lhs`.
+- **`taskStates`** — six custom states (`[ ]` open, `[>]` in-progress, `[x]` done, `[?]` blocked, `[~]` deferred, `[!]` urgent). Click a checkbox to cycle.
 
-If you want more plugs (e.g. `silverbullet-explorer2`, `silversearch`), edit the `config.set("plugs", {…})` table in `CONFIG.md` and re-run `Plugs: Update`. The `dashboard.md` page in this kit has example query blocks you can drop into your own vault.
+To add more plugs (e.g. `silverbullet-silversearch`, `silverbullet-graphview`):
+
+1. Edit `config.define("plugs", { …, default = {...} })` in `CONFIG.md` and add the URL.
+2. Open the command palette (`Cmd/Ctrl-/`) → **`Plugs: Update`**. SB fetches new entries, writes them to `_plug/`, reloads. Done.
+
+To pin a new plug into the kit's pre-install set (so fresh installs get it without `Plugs: Update`), append an entry to `PLUGS=( ... )` in `runtime/install-plugs.sh` using a SHA-pinned `raw.githubusercontent.com` URL.
 
 The kit also seeds `_templates/handoff.md` — a SilverBullet page template. To create a new daily handoff: `Page: From Template` → pick `handoff` → SB stamps out `handoffs/YYYY/MM/DD.md` with the canonical structure (tasks list, context section, done section). The bot picks it up on the next soul-loop.
+
+### Optional: programmatic SB commands via the Runtime API
+
+The kit ships `runtime/sb-cmd.sh`, a wrapper around SilverBullet's `POST /.runtime/lua` HTTP endpoint that lets scripts invoke any SB command without opening the UI:
+
+```bash
+bash <VAULT>/runtime/sb-cmd.sh "Plugs: Update"
+bash <VAULT>/runtime/sb-cmd.sh --lua 'editor.getCurrentPage()'
+```
+
+The Runtime API is **not enabled by default**. To turn it on, flip the SilverBullet container's image from the base variant to the `-runtime-api` variant:
+
+```yaml
+# docker-compose.yml
+silverbullet:
+  image: ghcr.io/silverbulletmd/silverbullet:latest-runtime-api   # was :latest
+  # … rest of the service block unchanged …
+```
+
+Trade-off: the `-runtime-api` image bundles Chromium (~766MB) versus the base image (~64MB). Worth it only if you want to script SB from the bot side (e.g. drive automated handoff-page creation from setup-runner). Most users should stick with the base image and run `Plugs: Update` from the UI.
 
 ## What you'll see when you first open SilverBullet
 

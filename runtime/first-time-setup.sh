@@ -268,6 +268,13 @@ sed -i "s|^Current phase:.*|Current phase: pre-step-5|" "$VAULT/setup-state.md"
 # post-merge hook (installed just below) will re-run it on every git pull.
 bash "$VAULT/runtime/refresh-claude-dir.sh"
 
+# Pre-install SilverBullet plug bundles into <VAULT>/_plug/ so TreeView
+# (and any other kit-recommended plugs) are present at SB's first startup
+# without requiring a manual "Plugs: Update" command-palette action.
+# Idempotent: skips downloads when the destination file already exists.
+VAULT="$VAULT" bash "$VAULT/runtime/install-plugs.sh" || \
+  echo "  WARN: plug install reported failures — open SB and run \"Plugs: Update\" once to recover"
+
 # Install the post-merge hook so kit updates (new soul-loop logic, new
 # agents, fixed slash commands) propagate to .claude/ automatically on
 # every `git pull`. Without this, .claude/ goes stale silently and the
