@@ -8,14 +8,26 @@ A 30-minute path from "I want one of these" to "the box is running and ready to 
 
 ## TL;DR — run the script with env vars, then hand over
 
-`runtime/first-time-setup.sh` automates Steps 1–4 end-to-end: vault skeleton, identity seed, placeholder substitution, keybindings, `start-claude.sh`, the systemd unit, the parallel `<BOT_NAME>-shell.service`, and bringing up both tmux sessions. It stops at the kit's explicit "hand over the keys" gate — the OAuth walk, NOPASSWD sudoers grant, and verification reboot stay with the provisioner. After reboot, *Nate's only step* is to open the web shell URL and type `/setup`.
+`runtime/first-time-setup.sh` automates Steps 1–4 end-to-end: vault skeleton, identity seed, placeholder substitution, keybindings, `start-claude.sh`, the systemd unit, the parallel `<BOT_NAME>-shell.service`, and bringing up both tmux sessions. It stops at the kit's explicit "hand over the keys" gate — the NOPASSWD sudoers grant and verification reboot stay with the provisioner. After reboot, *Nate's only step* is to open the web shell URL and type `/setup`.
+
+**Provisioner order of operations** (all run as the bot's unix user, e.g. `nlbot`):
 
 ```bash
-cd ~/nlbot       # or wherever you cloned the kit; this is your <REPO_ROOT>
-BOT_NAME=nlbot BOT_PASSWORD=Welcome2026 bash kit/runtime/first-time-setup.sh --non-interactive
+cd ~/nlbot                                                  # <REPO_ROOT>
+claude                                                      # 1. OAuth walk — REQUIRED before the script runs
+                                                            #    (accept TOS, exit). The script aborts at a
+                                                            #    pre-flight gate if ~/.claude/.credentials.json
+                                                            #    is missing.
+BOT_NAME=nlbot BOT_PASSWORD=Welcome2026 \
+  bash kit/runtime/first-time-setup.sh --non-interactive    # 2. Env-var provisioner — Steps 1–4.
+sudo visudo -f /etc/sudoers.d/$BOT_NAME                     # 3. NOPASSWD sudoers grant (template printed by
+                                                            #    the script's end-of-run banner).
+sudo reboot                                                 # 4. Verification reboot.
 ```
 
-That two-env-var invocation is the canonical happy path. The script no longer prompts for `USER_NAME`, `CANARY_PHRASE`, hobbies, communication style, or any of the eight personality values — those get collected by the bot during Nate's `/setup` interview after he logs in. The bash phase only collects what's truly load-bearing for getting the box up to the point where Nate can connect:
+That four-line sequence is the canonical happy path. Step 1 (OAuth) is non-skippable: Claude Code's CLI stores credentials at `$HOME/.claude/.credentials.json`, and the kit's pre-flight checks for that file before doing anything destructive — partly to fail loud rather than fail silent on a misconfigured box, partly because step 2 renders the systemd unit that immediately tries to launch `claude`, which will crashloop if creds are missing. The OAuth walk has to happen at a real interactive TTY (it opens a browser flow), so the provisioner does it once at the console before the env-var-driven phase.
+
+The script no longer prompts for `USER_NAME`, `CANARY_PHRASE`, hobbies, communication style, or any of the eight personality values — those get collected by the bot during Nate's `/setup` interview after he logs in. The bash phase only collects what's truly load-bearing for getting the box up to the point where Nate can connect:
 
 - **`BOT_NAME`** — required; unix user, systemd `User=`, secrets dir at `/etc/<BOT_NAME>/secrets/`, vault dirname.
 - **`VAULT`** — defaults to `$REPO_ROOT/vault`; rarely overridden.
