@@ -114,6 +114,13 @@ if command -v claude >/dev/null 2>&1; then
 else
   sudo npm install -g @anthropic-ai/claude-code
   echo "  claude:  $(claude --version 2>&1 | head -1)"
+  echo
+  echo "  NOTE: Claude Code is now installed globally via npm. On first run"
+  echo "        it may warn about auto-update permissions because the binary"
+  echo "        lives in a sudo-required directory (/usr/local/lib/...). After"
+  echo "        the initial OAuth login (first-time-setup.md Step 1), run"
+  echo "        \`claude install\` once to switch to the user-scoped native"
+  echo "        binary at ~/.local/bin/claude — this enables auto-updates."
 fi
 
 #
