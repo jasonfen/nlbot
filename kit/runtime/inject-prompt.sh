@@ -55,13 +55,23 @@ try_inject() {
     return 1
   fi
 
-  # Find the Claude pane by current command
+  # Find the Claude pane. Detect by EITHER pane_current_command (works when
+  # claude runs directly as the pane's foreground process) OR pane_title
+  # containing "Claude Code" (set by claude via OSC 0 — stable regardless
+  # of what process group claude ends up in). The pane_title path was
+  # added because Claude Code's Node runtime appears to do internal
+  # session creation (likely via node-pty's setsid call) that detaches
+  # from any outer bash job-control wrapper — so pane_current_command
+  # reports the wrapper's `bash` while claude is the visible UI. The
+  # OSC-set pane_title is stable across that detachment. Caught on nlbot0
+  # via F29's partial fix (sidechat msg 2766, F30).
   local pane
-  pane=$(tmux list-panes -t claude -F '#{pane_id} #{pane_current_command}' \
-    | awk '$2=="claude" {print $1; exit}')
+  pane=$(tmux list-panes -t claude \
+    -F '#{pane_id}|#{pane_current_command}|#{pane_title}' \
+    | awk -F'|' '$2 == "claude" || $3 ~ /Claude Code/ {print $1; exit}')
 
   if [[ -z "$pane" ]]; then
-    log "DEFER $name — no pane running 'claude' in session 'claude'"
+    log "DEFER $name — no pane running 'claude' or showing 'Claude Code' title in session 'claude'"
     return 1
   fi
 
