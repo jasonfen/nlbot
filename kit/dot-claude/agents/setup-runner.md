@@ -47,12 +47,17 @@ The Phase 0 substitution map in `setup-orchestrator.md` is canonical for placeho
 **Probe:** `crontab -u <BOT_NAME> -l 2>/dev/null | grep -q inject-prompt.sh` → if true, advance.
 
 **Execute:**
-1. Build the crontab entries (substitute `<VAULT>`):
+1. Build the crontab entries. `inject-prompt.sh` takes the filename
+   basename of the prompt file (e.g. `soul-loop.md`, matching the files
+   copied from `<KIT>/runtime/cron-prompts/`), NOT the slash-command form
+   `/soul-loop` — passing the latter logs `ERROR /soul-loop — prompt
+   file not found` on every fire and nothing actually runs. Caught on
+   nlbot0 (F28, sidechat msg 2755):
    ```
-   */10 7-23 * * * <REPO_ROOT>/cron-prompts/inject-prompt.sh /soul-loop
-   */30 * * * *   <REPO_ROOT>/cron-prompts/inject-prompt.sh /secretary
-   30 7 * * 1-5   <REPO_ROOT>/cron-prompts/inject-prompt.sh /wake-up
-   5 0 * * *      <REPO_ROOT>/cron-prompts/inject-prompt.sh /midnight-maintenance
+   */10 7-23 * * * <REPO_ROOT>/cron-prompts/inject-prompt.sh soul-loop.md
+   */30 * * * *   <REPO_ROOT>/cron-prompts/inject-prompt.sh secretary.md
+   30 7 * * 1-5   <REPO_ROOT>/cron-prompts/inject-prompt.sh wake-up.md
+   5 0 * * *      <REPO_ROOT>/cron-prompts/inject-prompt.sh midnight-maintenance.md
    ```
 2. `mkdir -p <REPO_ROOT>/cron-prompts`. Copy `<KIT>/runtime/inject-prompt.sh` and `<KIT>/runtime/cron-prompts/*.md` into `<REPO_ROOT>/cron-prompts/`. `chmod +x inject-prompt.sh`.
 3. Install via `sudo crontab -u <BOT_NAME> -` with the entries piped in (NOPASSWD).
