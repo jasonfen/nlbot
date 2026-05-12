@@ -57,12 +57,20 @@ VAULT_FROM_STATE=$(get_val VAULT)
 OS_USER=$(get_val OS_USER)
 [ -n "$OS_USER" ] || OS_USER="$BOT_NAME"
 
-for var in BOT_NAME USER_NAME VAULT_FROM_STATE OS_USER; do
+for var in BOT_NAME VAULT_FROM_STATE OS_USER; do
   if [ -z "${!var}" ]; then
     echo "refresh-claude-dir: missing $var in $STATE Values block" >&2
     exit 2
   fi
 done
+# USER_NAME is intentionally NOT required. The F34 provisioner-vs-Nate
+# split defers USER_NAME (along with CANARY_PHRASE and the personality
+# values) to Nate's `/setup` interview, which runs inside the bot's
+# tmux session post-reboot. refresh-claude-dir gets called from
+# first-time-setup.sh (provisioner-phase) BEFORE the interview happens,
+# so USER_NAME is legitimately blank. Substitution below treats it as
+# conditional — `<USER_NAME>` stays as a literal placeholder token in
+# any file that uses it until `/setup` re-runs the substitution pass.
 
 # Sanity-check: setup-state's VAULT should match where we just computed
 # it from the script location. Mismatch usually means the repo was moved
@@ -80,15 +88,22 @@ mkdir -p "$DST"
 # <KIT>, <VAULT>, <REPO_ROOT>. Other angle-bracket tokens
 # (<HANDOFFS>, <SECONDS_SINCE>, <TAILSCALE_HOSTNAME>, <YOUR_TOKEN>)
 # are runtime values and documentation examples — leave them alone.
+#
+# <USER_NAME> is conditionally substituted: empty value means the
+# /setup interview hasn't run yet, so we leave the token as a literal
+# in the rendered file. `/setup`'s substitute-placeholders.sh pass
+# resolves it later when USER_NAME has been collected. This matches
+# the F34 pattern in kit/runtime/substitute-placeholders.sh.
 substitute() {
-  sed \
-    -e "s|<BOT_NAME>|$BOT_NAME|g" \
-    -e "s|<USER_NAME>|$USER_NAME|g" \
-    -e "s|<USER>|$OS_USER|g" \
-    -e "s|<KIT>|$KIT|g" \
-    -e "s|<VAULT>|$VAULT|g" \
-    -e "s|<REPO_ROOT>|$REPO_ROOT|g" \
-    "$1"
+  local -a args=(
+    -e "s|<BOT_NAME>|$BOT_NAME|g"
+    -e "s|<USER>|$OS_USER|g"
+    -e "s|<KIT>|$KIT|g"
+    -e "s|<VAULT>|$VAULT|g"
+    -e "s|<REPO_ROOT>|$REPO_ROOT|g"
+  )
+  [ -n "$USER_NAME" ] && args+=(-e "s|<USER_NAME>|$USER_NAME|g")
+  sed "${args[@]}" "$1"
 }
 
 # Phase 1: render dot-claude/ → .claude/ (kit-owned, overwrites).
