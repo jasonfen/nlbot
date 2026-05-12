@@ -77,11 +77,16 @@ case "$cmd" in
     # to a tempfile, then atomic install. Plaintext never lands in a
     # variable or a non-encrypted file. The intermediate file is only
     # ever readable by root.
+    #
+    # trap-EXIT guarantees the encrypted tmp blob is removed even if
+    # encrypt or install fails partway. Without it, a partial-failure
+    # left `/etc/<bot>/secrets/.<name>.XXXXXX` behind on disk
+    # (kit-e2e-test-2 F15).
     tmp=$(sudo mktemp -p "$SECRETS_DIR" ".${name}.XXXXXX")
+    trap 'sudo rm -f "$tmp"' EXIT
     openssl rand -base64 "$length" \
       | sudo systemd-creds encrypt --name="$name" - "$tmp"
     sudo install -m 400 -o root -g root "$tmp" "$SECRETS_DIR/$name"
-    sudo rm -f "$tmp"
     echo "stored: $name ($length bytes, base64) → $SECRETS_DIR/$name"
     ;;
 
@@ -96,9 +101,9 @@ case "$cmd" in
     # Leaving the redirect off lets systemd-creds read the inherited
     # fd 0 directly (kit-e2e-test-2 F14).
     tmp=$(sudo mktemp -p "$SECRETS_DIR" ".${name}.XXXXXX")
+    trap 'sudo rm -f "$tmp"' EXIT
     sudo systemd-creds encrypt --name="$name" - "$tmp"
     sudo install -m 400 -o root -g root "$tmp" "$SECRETS_DIR/$name"
-    sudo rm -f "$tmp"
     echo "stored: $name (from stdin) → $SECRETS_DIR/$name"
     ;;
 
