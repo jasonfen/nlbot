@@ -1,5 +1,11 @@
-# Substitute <USER>, <VAULT>, and <BOT_NAME> for your actual values before
+# Substitute <USER>, <KIT>, and <BOT_NAME> for your actual values before
 # installing. Then: sudo cp this file to /etc/systemd/system/<botname>-web.service
+#
+# WorkingDirectory must resolve to the kit's web-terminal/ directory
+# (where server.js lives), not the vault. The kit is the source of the
+# web-shell code; the vault holds bot content (journals, identity,
+# handoffs) which the shell exposes via $VAULT_DIR but does not chdir
+# into.
 [Unit]
 Description=Web Terminal
 After=network.target claude-code.service
@@ -7,7 +13,7 @@ After=network.target claude-code.service
 [Service]
 Type=simple
 User=<USER>
-WorkingDirectory=<VAULT>/web-terminal
+WorkingDirectory=<KIT>/web-terminal
 ExecStart=/usr/bin/node server.js
 Restart=on-failure
 RestartSec=10

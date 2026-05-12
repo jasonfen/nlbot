@@ -27,7 +27,7 @@ Browser ──HTTPS──▶  Tailscale  ──▶  127.0.0.1:3000
 - **node-pty** spawns `tmux attach -t claude` and pipes its stdio over the WebSocket.
 - **xterm.js** in the browser renders the terminal.
 
-About 130 lines of server code, ~100 lines of HTML+CSS, and a few `<script>` tags pulling xterm.js. The full reference implementation is bundled in `web-terminal/` — copy that directory into your vault and edit `claude-web.service` (substitute `<USER>` and `<VAULT>` placeholders) before installing.
+About 130 lines of server code, ~100 lines of HTML+CSS, and a few `<script>` tags pulling xterm.js. The full reference implementation is bundled in `web-terminal/` under the kit — no copy into the vault is needed. Edit `claude-web.service` (substitute `<USER>`, `<BOT_NAME>`, and `<KIT>` placeholders — `WorkingDirectory` points at the kit's `web-terminal/` where `server.js` lives) before installing.
 
 ## What you need
 
