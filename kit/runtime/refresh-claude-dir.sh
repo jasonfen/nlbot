@@ -154,3 +154,34 @@ fi
 if [ -x "$KIT/runtime/install-plugs.sh" ]; then
   VAULT="$VAULT" bash "$KIT/runtime/install-plugs.sh"
 fi
+
+# Phase 4: cron-prompts kit assets. setup-runner Step 5 COPIES the kit's
+# inject-prompt.sh + cron-prompts/*.md files to <REPO_ROOT>/cron-prompts/
+# at install time. A later `git pull` updates the kit source but not the
+# deployed copies, so kit-side fixes (e.g., a new pane-detection rule
+# in inject-prompt.sh) don't reach the actual cron invocation path until
+# someone re-copies by hand. This phase keeps the deployed copies in sync.
+# OVERWRITE intentional — kit owns these files; local edits will be
+# blown away on each refresh. State files (queue/, inject.log,
+# .secretary-last-hash, .soul-loop-last-action, job-log.md, .inject.lock)
+# live alongside but are not touched. Caught by ansi on nlbot0 after F30
+# (sidechat msg 2771, F31).
+CRON_DST="$REPO_ROOT/cron-prompts"
+if [ -d "$CRON_DST" ]; then
+  refreshed=0
+  if [ -f "$KIT/runtime/inject-prompt.sh" ]; then
+    install -m 755 "$KIT/runtime/inject-prompt.sh" \
+      "$CRON_DST/inject-prompt.sh"
+    refreshed=$((refreshed + 1))
+  fi
+  if [ -d "$KIT/runtime/cron-prompts" ]; then
+    for src in "$KIT/runtime/cron-prompts"/*.md; do
+      [ -f "$src" ] || continue
+      install -m 644 "$src" "$CRON_DST/$(basename "$src")"
+      refreshed=$((refreshed + 1))
+    done
+  fi
+  if [ "$refreshed" -gt 0 ]; then
+    echo "refresh-claude-dir: $refreshed cron-prompts file(s) refreshed"
+  fi
+fi
