@@ -52,18 +52,20 @@ Idempotency: every step starts with a "is this already done?" probe (e.g. `docke
 - **USER_HOBBIES**:                <!-- free-form -->
 - **USER_HOURS**:                  <!-- when the user is typically online -->
 - **USER_PREFS**:                  <!-- non-negotiable preferences / always-do / never-do -->
+- **PASSWORD_MODE**:               <!-- unified | separate — one password for all bot services, or separate per service -->
+- **LINUX_PASSWORD_SET**:          <!-- yes | no — whether Phase 0 set the Linux login password via chpasswd; default no = SSH-key-only -->
 
 ### Collected just-in-time (bot writes these during Steps 5–7)
 
-- **SB_USER_PASSWORD**:            <!-- Step 5: bot runs `openssl rand -base64 24` and writes here -->
-- **SB_AUTH_TOKEN**:               <!-- Step 5: bot runs `openssl rand -base64 24` -->
+- **SB_USER_PASSWORD**:            <!-- Phase 0.5: typed by operator (or BOT_PASSWORD env var) and stored as a systemd-creds blob; pointer only here, not the value -->
+- **SB_AUTH_TOKEN**:               <!-- Step 5: bot runs `bot-secrets.sh generate sb-auth-token 24` (machine-only) -->
 - **TAILSCALE_HOSTNAME**:          <!-- Step 5: bot reads `tailscale status --json | jq -r .Self.HostName` -->
 - **TG_BOT_TOKEN**:                <!-- Step 6: human pastes from BotFather -->
 - **TG_BOT_USERNAME**:             <!-- Step 6: human pastes the @<botname>_bot handle -->
 - **TG_CHAT_ID**:                  <!-- Step 6: human runs /getUpdates and pastes chat.id -->
-- **WEB_SESSION_SECRET**:          <!-- Step 7: bot runs `openssl rand -hex 32` -->
+- **WEB_SESSION_SECRET**:          <!-- Step 7: bot runs `bot-secrets.sh generate web-session-secret 32` (machine-only) -->
 - **WEB_UI_USERNAME**:             <!-- Step 7: defaults to $BOT_NAME unless human specifies otherwise -->
-- **WEB_UI_PASSWORD**:             <!-- Step 7: bot runs `openssl rand -base64 24`, posts to user via BLOCKER for write-down -->
+- **WEB_UI_PASSWORD**:             <!-- Phase 0.5: typed by operator (or BOT_PASSWORD env var) and stored as a systemd-creds blob; pointer only here, not the value -->
 
 ---
 

@@ -208,6 +208,200 @@ prompt_value USER_PREFS         "Non-negotiable preferences (one short line)" "b
 
 [ -z "${VAULT:-}" ] && { echo "VAULT unresolved; aborting." >&2; exit 1; }
 
+# --- Phase 0.5: bot service passwords ---------------------------------------
+#
+# Prompt for the SilverBullet + web-shell passwords here, while we're still
+# at an interactive console with the operator's hand on the keyboard. The
+# typed value flows through bot-secrets.sh store-interactive, which pipes
+# it directly into systemd-creds encrypt — plaintext never on disk in the
+# clear.
+#
+# Why prompt now instead of letting setup-runner auto-generate later:
+# `bot-secrets.sh generate` produces an unguessable random base64 string
+# the operator never sees. Fine for machine-only creds (sb-auth-token,
+# web-session-secret) but unusable for credentials the operator actually
+# logs in with (sb-user-password, web-ui-password). The "how do I learn a
+# password I didn't type" hole has no clean answer, so we close it by
+# only ever using passwords the operator typed or pre-set via env var.
+#
+# Order: BOT_PASSWORD env var → existing cred blob (idempotent re-run) →
+# interactive prompt. Non-TTY without env override = hard fail, not
+# silent random-generate.
+
+banner "Phase 0.5 — Bot service passwords"
+
+# Slot list. Each entry: <cred-name>|<human label for the prompt>
+PROMPT_SLOTS=(
+  "sb-user-password|SilverBullet"
+  "web-ui-password|web shell"
+)
+
+slot_exists() {
+  # systemd-creds blobs live at /etc/<bot>/secrets/ mode 700 root — need
+  # sudo to even stat. Returns 0 if present, 1 if missing.
+  sudo test -f "/etc/${BOT_NAME}/secrets/$1"
+}
+
+# Ensure secrets dir exists before any of the slot writes (bot-secrets.sh
+# also has its own ensure_dir, but having it here makes the slot_exists
+# probe order-independent).
+sudo install -d -m 700 -o root -g root "/etc/$BOT_NAME/secrets"
+
+# Resolve PASSWORD_MODE: env var → setup-state.md → prompt.
+prompt_value PASSWORD_MODE "Password mode (unified | separate)" "unified" no
+
+# Resolve a unified BOT_PASSWORD if env-supplied. We don't prompt for this;
+# it's purely an env-var override for unattended provisioning (CI, ansible,
+# `pct exec`). Empty = fall through to interactive prompt below.
+BOT_PASSWORD="${BOT_PASSWORD:-}"
+
+if [ -n "$BOT_PASSWORD" ]; then
+  # Env-override path. Pipe the value into bot-secrets.sh store for each
+  # missing slot (skips slots that already have a cred — idempotent re-run).
+  echo "  BOT_PASSWORD env var supplied; using it for the unified slot set."
+  for entry in "${PROMPT_SLOTS[@]}"; do
+    slot="${entry%%|*}"
+    if slot_exists "$slot"; then
+      echo "  $slot: already stored, skipping (re-run idempotence)."
+    else
+      printf '%s' "$BOT_PASSWORD" \
+        | BOT_NAME="$BOT_NAME" bash "$KIT/runtime/bot-secrets.sh" store "$slot"
+    fi
+  done
+  unset BOT_PASSWORD
+elif [ ! -t 0 ]; then
+  # No env override and not interactive. Refuse to silently auto-generate
+  # an unreadable password — explicit failure points the operator at
+  # BOT_PASSWORD or the interactive path.
+  echo "  ERROR: stdin is not a TTY and BOT_PASSWORD is not set." >&2
+  echo "  Either: (a) re-run interactively, or (b) export BOT_PASSWORD=… first." >&2
+  echo "  Auto-generating an unreadable password is intentionally NOT a fallback." >&2
+  exit 1
+else
+  # Interactive path.
+  case "$PASSWORD_MODE" in
+    unified)
+      # Single prompt, written to every slot. bot-secrets.sh
+      # store-interactive prompts + confirms, then encrypts the same
+      # plaintext per slot. We invoke once per slot so the operator
+      # types twice total (prompt + confirm), not per-slot.
+      #
+      # Implementation: prompt once via store-interactive into the FIRST
+      # missing slot, then for any remaining missing slots, decrypt the
+      # just-stored value and pipe it into `store`. Decrypt requires sudo
+      # but stays in-process; nothing extra hits disk.
+      first_missing=""
+      for entry in "${PROMPT_SLOTS[@]}"; do
+        slot="${entry%%|*}"
+        if ! slot_exists "$slot"; then
+          first_missing="$slot"
+          break
+        fi
+      done
+      if [ -z "$first_missing" ]; then
+        echo "  All password slots already stored, skipping (re-run idempotence)."
+      else
+        BOT_NAME="$BOT_NAME" bash "$KIT/runtime/bot-secrets.sh" \
+          store-interactive "$first_missing" "$BOT_NAME services (unified)"
+        for entry in "${PROMPT_SLOTS[@]}"; do
+          slot="${entry%%|*}"
+          [ "$slot" = "$first_missing" ] && continue
+          if slot_exists "$slot"; then
+            echo "  $slot: already stored, skipping."
+          else
+            # Reuse the value we just stored. systemd-creds decrypt to
+            # stdout, piped straight into store for the next slot.
+            sudo systemd-creds decrypt "/etc/$BOT_NAME/secrets/$first_missing" - \
+              | BOT_NAME="$BOT_NAME" bash "$KIT/runtime/bot-secrets.sh" store "$slot"
+          fi
+        done
+      fi
+      ;;
+    separate)
+      # One prompt per slot. Each one is its own store-interactive call.
+      for entry in "${PROMPT_SLOTS[@]}"; do
+        slot="${entry%%|*}"
+        label="${entry##*|}"
+        if slot_exists "$slot"; then
+          echo "  $slot: already stored, skipping."
+        else
+          BOT_NAME="$BOT_NAME" bash "$KIT/runtime/bot-secrets.sh" \
+            store-interactive "$slot" "$label"
+        fi
+      done
+      ;;
+    *)
+      echo "  ERROR: unknown PASSWORD_MODE='$PASSWORD_MODE' (expected: unified|separate)" >&2
+      exit 1
+      ;;
+  esac
+fi
+
+# Optional: set the Linux user's login password from the same flow.
+#
+# Default OFF — SSH-key-only is the working model on the existing
+# nlbot-test box and matches the kit's threat model (tailnet-only, no
+# internet-facing surface). The /etc/shadow store is a DIFFERENT security
+# domain from the systemd-creds blobs above: shadow survives a creds-blob
+# wipe, blobs survive a /etc/shadow rotation. Worth a separate opt-in
+# rather than a silent default-on.
+#
+# Runs HERE — before the Step 4 NOPASSWD grant lands — so it uses the
+# operator's existing interactive sudo. That way we don't have to add
+# /usr/bin/chpasswd to the kit's steady-state NOPASSWD template.
+if [ -t 0 ] && [ "$(state_read LINUX_PASSWORD_SET)" != "yes" ] \
+            && [ "$(state_read LINUX_PASSWORD_SET)" != "no" ]; then
+  read -rp "  Also set the Linux user '$BOT_NAME's login password? [y/N — N keeps the box SSH-key-only, recommended]: " linux_pw_choice
+  linux_pw_choice="${linux_pw_choice:-n}"
+  case "$linux_pw_choice" in
+    y|Y|yes|YES)
+      if [ "$PASSWORD_MODE" = "unified" ] && slot_exists "sb-user-password"; then
+        # Reuse the unified password the operator just typed. Decrypt to
+        # stdout → prepend "user:" → pipe to chpasswd. Plaintext stays
+        # in-process through the pipe.
+        echo "  Setting $BOT_NAME login password to the unified password value."
+        sudo systemd-creds decrypt "/etc/$BOT_NAME/secrets/sb-user-password" - \
+          | awk -v u="$BOT_NAME" '{print u":"$0}' \
+          | sudo chpasswd
+      else
+        # separate mode (or unified but no sb-user-password yet — shouldn't
+        # happen given the flow above, but defensive). Prompt fresh, no
+        # blob storage — /etc/shadow is the only sink.
+        while true; do
+          printf "  Enter Linux login password for %s: " "$BOT_NAME" >&2
+          IFS= read -rs lpw1; printf "\n" >&2
+          printf "  Confirm Linux login password for %s: " "$BOT_NAME" >&2
+          IFS= read -rs lpw2; printf "\n" >&2
+          if [ -z "$lpw1" ]; then
+            echo "  ERROR: password cannot be empty — try again." >&2
+            continue
+          fi
+          if [ "$lpw1" != "$lpw2" ]; then
+            echo "  ERROR: passwords don't match — try again." >&2
+            continue
+          fi
+          break
+        done
+        printf '%s:%s\n' "$BOT_NAME" "$lpw1" | sudo chpasswd
+        unset lpw1 lpw2
+      fi
+      echo "  ✓ Linux user password updated for $BOT_NAME."
+      state_write LINUX_PASSWORD_SET "yes"
+      ;;
+    *)
+      echo "  Linux user password unchanged (SSH-key-only). Skipping."
+      state_write LINUX_PASSWORD_SET "no"
+      ;;
+  esac
+else
+  prior=$(state_read LINUX_PASSWORD_SET)
+  if [ "$prior" = "yes" ] || [ "$prior" = "no" ]; then
+    echo "  Linux user password choice already recorded in setup-state.md ($prior); skipping re-prompt."
+  fi
+fi
+
+state_write PASSWORD_MODE "$PASSWORD_MODE"
+
 # --- Step 1: prereq check ---------------------------------------------------
 #
 # setup-status.sh exits 1 whenever ANY part of the kit is incomplete —
