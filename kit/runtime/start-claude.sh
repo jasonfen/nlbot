@@ -33,14 +33,22 @@ fi
 # is ambiguous — the picker doesn't respond to tmux send-keys, blocking
 # unattended startup). See decisions.md 2026-04-03 lockup.
 #
+# **Conditional --continue (F38, fenbot00 walk 2026-05-12):** on a *truly*
+# fresh box (post-OAuth walk, zero prior conversation history), `claude
+# --continue` exits rc=1 with "No conversation found to continue" instantly.
+# The while-loop wrapper would then respawn into the same wall, so each
+# claude-code.service restart crashloops indefinitely until a human types
+# something into the pane to create a session. The fix is to check for
+# session files inside $HOME/.claude/projects/ and only pass --continue
+# when at least one exists. The check is inside the loop body so a
+# brand-new box converges naturally: first iteration runs plain `claude`
+# (creates a session as soon as a user prompts), subsequent iterations
+# pick up --continue.
+#
 # Wrap the claude invocation in a while-loop with exponential backoff so
-# the tmux session survives a clean exit of `claude` itself (e.g., when
-# --continue finds nothing to resume on a fresh OAuth walk, claude can
-# exit 0 immediately — without the wrapper, tmux closes the session
-# because its only command exited, and the bot disappears until the
-# operator manually restarts claude-code.service). The systemd unit's
-# Restart=on-failure can't recover this because exit-0 isn't a failure.
-# Caught on nlbot0 walk (sidechat msg 2728, F21).
+# the tmux session survives a clean exit of `claude` itself. The systemd
+# unit's Restart=on-failure can't recover an exit-0 because exit-0 isn't
+# a failure. Caught on nlbot0 walk (sidechat msg 2728, F21).
 #
 # Backoff: 5s → 10s → 20s → 40s → 80s → 160s → 300s (capped). Prevents a
 # tight loop on persistent failure (bad OAuth state, missing binary mid-
@@ -61,7 +69,15 @@ tmux new-session -d -s claude -c <VAULT> /bin/bash -c '
   delay=5
   max_delay=300
   while :; do
-    "$CLAUDE_BIN" --permission-mode bypassPermissions --continue
+    flags=(--permission-mode bypassPermissions)
+    # Add --continue only when there is a real session to resume. find
+    # exits 0 with no output when no .jsonl files match — the grep -q .
+    # makes the test true only on a non-empty find result.
+    if [ -d "$HOME/.claude/projects" ] && \
+       find "$HOME/.claude/projects" -name "*.jsonl" -print -quit 2>/dev/null | grep -q .; then
+      flags+=(--continue)
+    fi
+    "$CLAUDE_BIN" "${flags[@]}"
     rc=$?
     echo "[start-claude] claude exited rc=$rc; restarting in ${delay}s" >&2
     sleep "$delay"

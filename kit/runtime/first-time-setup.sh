@@ -890,9 +890,21 @@ EOF
 # or not this file exists; this file is just a convenience for the
 # provisioner-to-Nate handoff.
 HANDOFF_FILE="$REPO_ROOT/HANDOFF-TO-NATE.txt"
-TAILNET_HOST=$(tailscale status --json 2>/dev/null \
-  | grep -oE '"DNSName":\s*"[^"]+"' | head -1 \
-  | sed 's/.*"DNSName":\s*"\([^"]*\)\.?".*/\1/')
+# Pull DNSName via jq directly — the prior grep|sed approach used `\s` in a
+# BRE sed pattern, which on many GNU seds is a literal `s` rather than a
+# whitespace class, so the substitution silently fell through and dumped
+# the raw `"DNSName": "host.":` JSON fragment into the URL line of the
+# HANDOFF-TO-NATE.txt. jq is required for the kit anyway (sc-poll, MCP
+# probes, several setup-runner phase steps), so a hard jq dependency
+# here is fine; if jq is somehow missing we just fall through to the
+# `<bot>.<your-tailnet>.ts.net` placeholder. Trim the trailing dot
+# tailscale's JSON includes on FQDN form.
+TAILNET_HOST=""
+if command -v jq >/dev/null 2>&1; then
+  TAILNET_HOST=$(tailscale status --json 2>/dev/null \
+    | jq -r '.Self.DNSName // empty' 2>/dev/null \
+    | sed 's/\.$//')
+fi
 INITIAL_PASSWORD_HINT="${BOT_PASSWORD:-(the password you typed during Phase 0.5 — check your scrollback or your password manager)}"
 WEB_URL="${TAILNET_HOST:+https://${TAILNET_HOST}:8443/}"
 
