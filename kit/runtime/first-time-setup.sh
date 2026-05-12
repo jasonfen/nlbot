@@ -448,20 +448,28 @@ echo "  Wrote /etc/systemd/system/claude-code.service"
 sudo tee /etc/systemd/system/${BOT_NAME}-shell.service > /dev/null <<EOF
 [Unit]
 Description=Bot user persistent shell tmux session
-After=network-online.target
+After=network-online.target claude-code.service
 Wants=network-online.target
 StartLimitBurst=10
 StartLimitIntervalSec=60
 
 [Service]
-Type=forking
+# oneshot + RemainAfterExit because by the time this service starts, the
+# tmux server is already running (claude-code.service started it). The
+# \`tmux new-session\` call is just a client request that returns immediately
+# after creating the session, so Type=forking has no daemon to track and
+# the unit immediately deactivates — the session itself lives in the
+# existing tmux server process. Caught on fenbot 2026-05-11 retrofit.
+Type=oneshot
+RemainAfterExit=yes
 User=$BOT_NAME
-ExecStart=/usr/bin/tmux new-session -d -s shell -c %h /bin/bash -l
-ExecStop=/usr/bin/tmux kill-session -t shell
-Restart=on-failure
-RestartSec=5
+Environment=HOME=/home/$BOT_NAME
 Environment=LANG=C.utf8
 Environment=LC_ALL=C.utf8
+# Idempotent: create the session only if missing. has-session returns 0
+# when found, non-zero when not — so the || branch creates on miss.
+ExecStart=/bin/bash -c 'tmux has-session -t shell 2>/dev/null || tmux new-session -d -s shell -c /home/$BOT_NAME /bin/bash -l'
+ExecStop=/usr/bin/tmux kill-session -t shell
 
 [Install]
 WantedBy=multi-user.target
