@@ -46,7 +46,18 @@ fi
 # tight loop on persistent failure (bad OAuth state, missing binary mid-
 # upgrade) while still recovering quickly from a one-shot exit.
 export CLAUDE_BIN
+# `set -m` enables job control inside the wrapper. Without it, a
+# non-interactive `bash -c` invocation runs every child in the SAME
+# process group as bash itself — so when claude runs as a child, bash
+# stays the pgroup leader and `tmux pane_current_command` reports
+# `bash`, not `claude`. inject-prompt.sh's pane selector filters for
+# `pane_current_command == claude`, which then never matches and every
+# cron fire defers indefinitely (F29 regression of F21, caught on
+# nlbot0 sidechat msg 2759). With `set -m`, each command in the loop
+# becomes its own pgroup leader → claude is the leader during its run
+# → tmux reports `claude` → injector finds the pane.
 tmux new-session -d -s claude -c <VAULT> /bin/bash -c '
+  set -m
   delay=5
   max_delay=300
   while :; do
