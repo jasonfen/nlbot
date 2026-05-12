@@ -40,10 +40,29 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 **Then install memorious:**
 
 ```bash
-claude mcp add memorious-mcp uvx memorious-mcp
+# Resolve uvx to an absolute path so Claude Code's MCP subprocess can find
+# it even when PATH isn't inherited (the systemd-managed `claude-code.service`
+# does not by default put $HOME/.local/bin on PATH at MCP-spawn time, which
+# causes a "Failed to connect" status despite a successful registration —
+# F39, fenbot00 walk 2026-05-12).
+UVX=$(command -v uvx || echo "$HOME/.local/bin/uvx")
+claude mcp add memorious-mcp -- "$UVX" memorious-mcp
 ```
 
-That's it. Restart your Claude Code session (quit and reopen). Then try:
+**Verify the connection actually works:**
+
+```bash
+claude mcp list 2>&1 | grep memorious-mcp
+```
+
+The line should end in `✓ Connected`. If it shows `✗ Failed to connect`,
+the registration succeeded but the MCP subprocess can't launch — usually
+because `uvx` resolution differs between your shell and Claude Code's
+service environment. Re-run the `claude mcp add` line with an absolute
+path verified by `which uvx` (e.g. `/home/<bot>/.local/bin/uvx`).
+
+When the connection is healthy, restart your Claude Code session (quit
+and reopen) and try:
 ```
 recall("test")
 ```
