@@ -62,22 +62,49 @@ substitute_placeholders() {
     fi
   done
 
-  sed -i \
-    -e "s|\[Your Bot's Name\]|${BOT_NAME:-}|g" \
-    -e "s|\[Nate's\]|${USER_NAME:-}'s|g" \
-    -e "s|\[Nate\]|${USER_NAME:-}|g" \
-    -e "s|\[Nate: Fill this in\. What are your non-negotiable preferences?\]|${USER_PREFS:-}|g" \
-    -e "s|\[CHOOSE YOUR CANARY PHRASE\]|${CANARY_PHRASE:-}|g" \
-    -e "s|\[YOUR CANARY PHRASE\]|${CANARY_PHRASE:-}|g" \
-    -e "s|\[reading/coding/writing/exploring\]|${IDLE_PREFS:-}|g" \
-    -e "s|\[poems/stories/technical docs/music reviews\]|${CREATIVE_OUTPUT:-}|g" \
-    -e "s|\[direct/gentle/playful/formal\]|${COMM_STYLE:-}|g" \
-    -e "s|\[quality/speed/creativity/accuracy\]|${VALUES_CARES_ABOUT:-}|g" \
-    -e "s|<BOT_NAME>|${BOT_NAME:-}|g" \
-    -e "s|<USER_NAME>|${USER_NAME:-}|g" \
-    -e "s|<VAULT>|${VAULT:-}|g" \
-    -e "s|<USER>|${BOT_NAME:-}|g" \
-    "$file"
+  # Build the sed argv dynamically. A placeholder that maps to an unset
+  # var is SKIPPED entirely rather than replaced with an empty string —
+  # so the template literal (e.g., `[Nate]`, `[CHOOSE YOUR CANARY PHRASE]`)
+  # stays visible in the seeded vault file until the corresponding value
+  # is set. This is what lets the bash bootstrap leave intentional gaps
+  # for the /setup interview to fill in later; the seeded identity.md
+  # reads as legible "[Nate]" prose to a human browsing pre-interview.
+  local -a cmd=(sed -i)
+
+  # Always-run substitutions — these are required values written by the
+  # bash bootstrap.
+  cmd+=(-e "s|<BOT_NAME>|${BOT_NAME:-}|g")
+  cmd+=(-e "s|<VAULT>|${VAULT:-}|g")
+  cmd+=(-e "s|<USER>|${BOT_NAME:-}|g")
+  cmd+=(-e "s|\[Your Bot's Name\]|${BOT_NAME:-}|g")
+
+  # Optional substitutions — only added to argv when the var is set.
+  if [ -n "${USER_NAME:-}" ]; then
+    cmd+=(-e "s|\[Nate's\]|${USER_NAME}'s|g")
+    cmd+=(-e "s|\[Nate\]|${USER_NAME}|g")
+    cmd+=(-e "s|<USER_NAME>|${USER_NAME}|g")
+  fi
+  if [ -n "${CANARY_PHRASE:-}" ]; then
+    cmd+=(-e "s|\[CHOOSE YOUR CANARY PHRASE\]|${CANARY_PHRASE}|g")
+    cmd+=(-e "s|\[YOUR CANARY PHRASE\]|${CANARY_PHRASE}|g")
+  fi
+  if [ -n "${USER_PREFS:-}" ]; then
+    cmd+=(-e "s|\[Nate: Fill this in\. What are your non-negotiable preferences?\]|${USER_PREFS}|g")
+  fi
+  if [ -n "${IDLE_PREFS:-}" ]; then
+    cmd+=(-e "s|\[reading/coding/writing/exploring\]|${IDLE_PREFS}|g")
+  fi
+  if [ -n "${CREATIVE_OUTPUT:-}" ]; then
+    cmd+=(-e "s|\[poems/stories/technical docs/music reviews\]|${CREATIVE_OUTPUT}|g")
+  fi
+  if [ -n "${COMM_STYLE:-}" ]; then
+    cmd+=(-e "s|\[direct/gentle/playful/formal\]|${COMM_STYLE}|g")
+  fi
+  if [ -n "${VALUES_CARES_ABOUT:-}" ]; then
+    cmd+=(-e "s|\[quality/speed/creativity/accuracy\]|${VALUES_CARES_ABOUT}|g")
+  fi
+
+  "${cmd[@]}" "$file"
 }
 
 # Direct-invocation entry point. When sourced from another script, this block
