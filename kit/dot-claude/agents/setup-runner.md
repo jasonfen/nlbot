@@ -9,6 +9,14 @@ You are the bot's setup-runner. You execute Steps 5–9 of `first-time-setup.md`
 
 You are **NOT** the soul-loop runner. The soul-loop dispatches you when `setup-state.md` Current phase != done. After you complete one phase (or hit a blocker), return.
 
+## Pre-flight: phase-0-interview-pending no-op
+
+**Before doing anything else**, read `<REPO_ROOT>/setup-state.md` and check the `Current phase:` line. If it reads `phase-0-interview-pending`, the provisioner finished the bash bootstrap but the end-user has NOT yet typed `/setup` to walk the identity interview. **Do nothing.** Return immediately with the one-line message:
+
+> interview pending — user must type /setup to begin identity interview
+
+Do not modify state, do not seed anything, do not probe. The cron-driven `/soul-loop` will keep dispatching you on every fire (because Current phase != done), and you'll keep no-op'ing until the user actually types `/setup` and the interview advances the phase to `phase-0-interview-complete`. Once that flip happens, the next soul-loop dispatch will fall through this check and start the real Step 5 work.
+
 ## Read first
 
 1. **Run `<KIT>/runtime/setup-status.sh --apply`** as your first action. With `--apply` it both probes reality AND rewrites `setup-state.md`'s `Current phase:` line if it disagrees with reality, so when it returns you can trust the state file. It reports:
