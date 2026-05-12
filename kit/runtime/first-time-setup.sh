@@ -325,10 +325,25 @@ VAULT="$VAULT" bash "$KIT/runtime/install-plugs.sh" || \
 
 # Install the post-merge hook at <REPO_ROOT>/.git/hooks/post-merge so kit
 # pulls auto-refresh .claude/ + vault-page seeds + plug bundles.
-GIT_DIR_PATH=$(git -C "$REPO_ROOT" rev-parse --git-dir 2>/dev/null || echo "$REPO_ROOT/.git")
+# `git rev-parse --git-dir` returns a path relative to its CWD by default,
+# so we resolve it to an absolute path before joining. Without this, the
+# install ended up at `./.git/hooks/post-merge` relative to whatever CWD
+# the script was invoked from, NOT relative to $REPO_ROOT. Caught on
+# ansi's 2026-05-12 e2e #2 walk (Finding 8) where the hook reported
+# installed but was missing post-reboot.
+GIT_DIR_REL=$(git -C "$REPO_ROOT" rev-parse --git-dir 2>/dev/null || echo "$REPO_ROOT/.git")
+case "$GIT_DIR_REL" in
+  /*) GIT_DIR_PATH="$GIT_DIR_REL" ;;
+  *)  GIT_DIR_PATH="$REPO_ROOT/$GIT_DIR_REL" ;;
+esac
 mkdir -p "$GIT_DIR_PATH/hooks"
-install -m 755 "$KIT/runtime/hooks/post-merge" "$GIT_DIR_PATH/hooks/post-merge"
-echo "  ✓ .claude/ generated and post-merge hook installed (auto-refresh on git pull)"
+if install -m 755 "$KIT/runtime/hooks/post-merge" "$GIT_DIR_PATH/hooks/post-merge" \
+   && [ -x "$GIT_DIR_PATH/hooks/post-merge" ]; then
+  echo "  ✓ .claude/ generated and post-merge hook installed at $GIT_DIR_PATH/hooks/post-merge"
+else
+  echo "  ✗ post-merge hook FAILED to install at $GIT_DIR_PATH/hooks/post-merge" >&2
+  echo "    (.claude/ was rendered but auto-refresh on git pull is not wired)" >&2
+fi
 
 # Verify no leftover placeholders. Only inspect the files we actually
 # seeded into the vault — the kit's source docs (README.md, bootstrap.md,
@@ -538,12 +553,15 @@ EOS
      Verify the grant is active (lists every NOPASSWD entry $BOT_NAME has):
         sudo -u $BOT_NAME sudo -ln | grep NOPASSWD
 
-     Confirm systemd-creds is present on the box (bootstrap.md installs
-     systemd >= 250 which includes it; required for the encrypted-secrets
-     path used by setup-runner steps 6–7):
-        sudo -u $BOT_NAME sudo -n /usr/bin/systemd-creds has-tpm2 \\
-          && echo "systemd-creds OK (TPM available)" \\
-          || echo "systemd-creds OK (no TPM — host-key fallback)"
+     Confirm systemd is recent enough for the encrypted-secrets path
+     (systemd >= 250 ships systemd-creds; setup-runner steps 6–7 need it):
+        sudo -u $BOT_NAME sudo -n /usr/bin/systemd-analyze has-tpm2 \\
+          && echo "systemd OK (TPM available)" \\
+          || echo "systemd OK (no TPM — host-key fallback)"
+
+     (Note: \`systemd-creds has-tpm2\` is the older spelling; Debian 13's
+     systemd renamed it to \`systemd-analyze has-tpm2\`. Both work for now
+     via a redirect, but the new spelling is silent.)
 
   3. sudo reboot
      Verify the box comes back clean and claude-code.service auto-starts.

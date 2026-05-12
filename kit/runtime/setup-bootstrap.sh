@@ -55,8 +55,16 @@ fi
 # 4. Tailscale up? (Not fatal — setup-runner can post a BLOCKER instead,
 #    but warn early so the human knows.)
 if command -v tailscale >/dev/null 2>&1; then
-  if ! tailscale status >/dev/null 2>&1; then
-    echo "[setup-bootstrap] WARN: tailscale installed but not up. 'sudo tailscale up' before setup-runner reaches Step 5." >&2
+  # `tailscale status` returns non-zero during the brief window when
+  # tailscaled is still handshaking (e.g. post-reboot). Check
+  # BackendState via --json so the probe doesn't race the daemon.
+  # Caught on ansi's 2026-05-12 e2e #2 walk (Finding 7) — the device
+  # was up + had a 100.x IP but the probe fired during the race window.
+  ts_state=$(tailscale status --json 2>/dev/null \
+    | grep -oE '"BackendState"[[:space:]]*:[[:space:]]*"[A-Za-z]+"' \
+    | head -1 | grep -oE '"[A-Za-z]+"$' | tr -d '"')
+  if [ "$ts_state" != "Running" ]; then
+    echo "[setup-bootstrap] WARN: tailscale installed but BackendState=$ts_state (expected: Running). If you just rebooted, the daemon may still be coming up — retry in a few seconds. Otherwise run 'sudo tailscale up' before setup-runner reaches Step 5." >&2
   fi
 else
   echo "[setup-bootstrap] WARN: tailscale not installed. Step 5 needs it for the SilverBullet HTTPS proxy." >&2

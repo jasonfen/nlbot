@@ -210,35 +210,40 @@ if getent passwd "$BOT_NAME" >/dev/null 2>&1; then
     warn "ssh authorized_keys" "(bootstrap.md Step 2c — only matters if you want direct SSH as $BOT_NAME)"
   fi
 
-  # Scoped NOPASSWD. The kit grants twelve binaries; the three legacy ones
-  # (systemctl/crontab/docker) cover service+cron+container management; the
-  # rest (tee/journalctl/tailscale/systemd-creds/install/mktemp/rm/test/ls)
-  # cover service-file writes, log tailing, tailscale serve, and the
-  # encrypted-secrets path. Reporting which are missing (vs. just "doesn't
-  # match expected") lets the human patch one entry instead of rewriting
-  # the whole file. Blanket NOPASSWD:ALL is still accepted.
-  if [ -f "/etc/sudoers.d/$BOT_NAME" ]; then
-    if sudo -n test -r "/etc/sudoers.d/$BOT_NAME" 2>/dev/null || [ -r "/etc/sudoers.d/$BOT_NAME" ]; then
-      sudoers_content=$(sudo -n cat "/etc/sudoers.d/$BOT_NAME" 2>/dev/null || cat "/etc/sudoers.d/$BOT_NAME" 2>/dev/null)
-      if printf '%s' "$sudoers_content" | grep -q 'NOPASSWD:[[:space:]]*ALL'; then
-        pass "scoped NOPASSWD sudoers" "(blanket NOPASSWD:ALL — works but wide-blast-radius)"
-      else
-        missing=""
-        for bin in systemctl crontab docker tee journalctl tailscale systemd-creds install mktemp rm test ls; do
-          printf '%s' "$sudoers_content" | grep -qE "NOPASSWD:[[:space:]]*(/usr/bin/)?$bin([[:space:]]|,|$)" \
-            || missing="$missing $bin"
-        done
-        if [ -z "$missing" ]; then
-          pass "scoped NOPASSWD sudoers" "(all 12 entries present)"
-        else
-          warn "scoped NOPASSWD sudoers" "(missing:$missing — see first-time-setup.md Step 4 'Final action')"
-        fi
-      fi
-    else
-      warn "scoped NOPASSWD sudoers" "(file exists but can't read it from $USER)"
-    fi
+  # Scoped NOPASSWD. The kit grants twelve binaries. Probe via `sudo -ln`
+  # (which lists effective NOPASSWD entries from the running user's POV)
+  # rather than `cat /etc/sudoers.d/<bot>` — the sudoers file is mode 440
+  # root-owned, so cat without NOPASSWD-for-cat fails and the old probe
+  # returned the empty string, falsely reporting all entries missing.
+  # Caught on ansi's 2026-05-12 e2e #2 walk (Finding 6).
+  #
+  # `sudo -ln` output shape:
+  #   User nlbot may run the following commands on this host:
+  #       (ALL) NOPASSWD: /usr/bin/systemctl
+  #       ...
+  # so the same regex used against the sudoers file still matches.
+  if [ "$(id -un)" = "$BOT_NAME" ]; then
+    sudoers_content=$(sudo -ln 2>/dev/null)
   else
+    sudoers_content=$(sudo -n -u "$BOT_NAME" sudo -ln 2>/dev/null)
+  fi
+  if [ -z "$sudoers_content" ] && [ ! -f "/etc/sudoers.d/$BOT_NAME" ]; then
     warn "scoped NOPASSWD sudoers" "(grant in first-time-setup.md Step 4 'Final action' — this is the LAST step before reboot, not now)"
+  elif [ -z "$sudoers_content" ]; then
+    warn "scoped NOPASSWD sudoers" "(file exists but probe couldn't run sudo -ln as $BOT_NAME from $(id -un); verify manually with: sudo -u $BOT_NAME sudo -ln | grep NOPASSWD)"
+  elif printf '%s' "$sudoers_content" | grep -q 'NOPASSWD:[[:space:]]*ALL'; then
+    pass "scoped NOPASSWD sudoers" "(blanket NOPASSWD:ALL — works but wide-blast-radius)"
+  else
+    missing=""
+    for bin in systemctl crontab docker tee journalctl tailscale systemd-creds install mktemp rm test ls; do
+      printf '%s' "$sudoers_content" | grep -qE "NOPASSWD:[[:space:]]*(/usr/bin/)?$bin([[:space:]]|,|$)" \
+        || missing="$missing $bin"
+    done
+    if [ -z "$missing" ]; then
+      pass "scoped NOPASSWD sudoers" "(all 12 entries present)"
+    else
+      warn "scoped NOPASSWD sudoers" "(missing:$missing — see first-time-setup.md Step 4 'Final action')"
+    fi
   fi
 else
   fail "user exists" "(bootstrap.md Step 2 — sudo adduser $BOT_NAME)"
@@ -288,11 +293,18 @@ if [ -d "$VAULT" ]; then
       _OS_USER=$(grep "^- \*\*OS_USER\*\*:" "$REPO_ROOT/setup-state.md" 2>/dev/null | sed 's/^[^:]*: *//; s/ *<!--.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' | head -1)
       [ -n "$_OS_USER" ] || _OS_USER="$_BOT_NAME"
       if [ -n "$_BOT_NAME" ] && [ -n "$_VAULT" ]; then
+        # Substitute the same six placeholders refresh-claude-dir.sh
+        # substitutes — without <KIT> and <REPO_ROOT>, the scratch copy
+        # keeps those literal tokens and the diff against the real
+        # .claude/ (which DID get them substituted) reports false drift.
+        # Caught on ansi's 2026-05-12 e2e #2 walk (Finding 9).
         find "$drift_tmpdir/.claude" -type f -exec sed -i \
           -e "s|<BOT_NAME>|$_BOT_NAME|g" \
           -e "s|<USER_NAME>|$_USER_NAME|g" \
-          -e "s|<VAULT>|$_VAULT|g" \
           -e "s|<USER>|$_OS_USER|g" \
+          -e "s|<KIT>|$KIT|g" \
+          -e "s|<VAULT>|$_VAULT|g" \
+          -e "s|<REPO_ROOT>|$REPO_ROOT|g" \
           {} \;
         if diff -rq "$drift_tmpdir/.claude" "$REPO_ROOT/.claude" >/dev/null 2>&1; then
           pass ".claude/ in sync with dot-claude/"
