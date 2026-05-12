@@ -54,6 +54,7 @@ Idempotency: every step starts with a "is this already done?" probe (e.g. `docke
 - **USER_PREFS**:                  <!-- non-negotiable preferences / always-do / never-do -->
 - **PASSWORD_MODE**:               <!-- unified | separate — one password for all bot services, or separate per service -->
 - **LINUX_PASSWORD_SET**:          <!-- yes | no — whether Phase 0 set the Linux login password via chpasswd; default no = SSH-key-only -->
+- **TELEGRAM_ENABLED**:            <!-- yes | no — whether to configure Telegram bot integration (BotFather + token paste + chat ID); no = setup-runner skips step-9 and advances directly to done after step-8 -->
 
 ### Collected just-in-time (bot writes these during Steps 5–7)
 

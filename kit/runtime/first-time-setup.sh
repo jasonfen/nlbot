@@ -220,6 +220,9 @@ prompt_value USER_ROLE          "Your role / what you work on"                "s
 prompt_value USER_HOBBIES       "Hobbies (free-form)"                         "homelab, gaming"
 prompt_value USER_HOURS         "Hours you're typically online"               "evenings EDT"
 prompt_value USER_PREFS         "Non-negotiable preferences (one short line)" "be honest, be concise, ask when unsure"
+echo
+echo "  Optional integrations:"
+prompt_value TELEGRAM_ENABLED   "Configure Telegram messaging? (BotFather + token paste later; 'no' = skip and never prompt)" "yes"
 
 [ -z "${VAULT:-}" ] && { echo "VAULT unresolved; aborting." >&2; exit 1; }
 
@@ -547,6 +550,7 @@ state_write USER_ROLE           "$USER_ROLE"
 state_write USER_HOBBIES        "$USER_HOBBIES"
 state_write USER_HOURS          "$USER_HOURS"
 state_write USER_PREFS          "$USER_PREFS"
+state_write TELEGRAM_ENABLED    "$TELEGRAM_ENABLED"
 sed -i "s|^Last updated:.*|Last updated: $(date '+%Y-%m-%d %H:%M')|" "$REPO_ROOT/setup-state.md"
 sed -i "s|^Current phase:.*|Current phase: pre-step-5|" "$REPO_ROOT/setup-state.md"
 

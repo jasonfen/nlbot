@@ -134,7 +134,9 @@ If the count is 6, advance to the container probe.
 1. Follow the memorious-mcp install in `memory.md`. The exact command depends on the recipe in that doc — typically `claude mcp add memorious-mcp -- npx memorious-mcp` or similar, but read `memory.md` for the current canonical incantation.
 2. Verify it shows up in `claude mcp list`.
 3. Journal: `### Step 8 done — memorious-mcp registered, memory layer online`.
-4. Advance phase to `step-9-telegram-daemon`.
+4. **Check the Telegram opt-out before advancing.** Read `TELEGRAM_ENABLED` from setup-state.md Values block:
+   - If `TELEGRAM_ENABLED: no` → Telegram is opted out. Skip all `step-9-*` phases. Advance directly to `done`. Add to `## Notes`: `Telegram integration skipped per Phase 0 opt-out (TELEGRAM_ENABLED=no). Operator can opt back in later by setting TELEGRAM_ENABLED=yes in setup-state.md and re-firing setup-runner with phase=step-9-telegram-daemon.` Then return.
+   - If `TELEGRAM_ENABLED: yes` or unset (legacy installs default to yes for backwards compatibility) → advance phase to `step-9-telegram-daemon`.
 
 ### `step-9-telegram-daemon`
 
