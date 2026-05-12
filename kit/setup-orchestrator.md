@@ -49,12 +49,14 @@ These you can't know up front; capture them when their setup step runs and store
 | `TG_BOT_TOKEN` | Step 6 — Telegram | After Nate runs `/newbot` with `@BotFather`, paste the token. |
 | `TG_BOT_USERNAME` | Step 6 — Telegram | The `@<botname>_bot` handle BotFather assigns. |
 | `TG_CHAT_ID` | Step 6 — Telegram | After Nate DMs the bot once, fetch from `https://api.telegram.org/bot$TG_BOT_TOKEN/getUpdates`, grep `chat.id`. |
-| `SB_USER_PASSWORD` | Step 5 — SilverBullet | `openssl rand -base64 24` — generate, store, confirm with Nate. |
-| `SB_AUTH_TOKEN` | Step 5 — SilverBullet | `openssl rand -base64 24` — generate, store. |
+| `SB_USER_PASSWORD` | **Phase 0.5** of `first-time-setup.sh` (operator typed) | Stored as systemd-creds blob at `/etc/<BOT_NAME>/secrets/sb-user-password`. Operator typed it at the prompt or set `BOT_PASSWORD` env var; they already know it. Step 6 just reads. |
+| `SB_AUTH_TOKEN` | Step 5/6 — SilverBullet (machine-only) | `bot-secrets.sh generate sb-auth-token 24` — random base64, never seen by operator. |
 | `TAILSCALE_HOSTNAME` | Step 5 — SilverBullet (first Tailscale serve) | `tailscale status --json \| jq -r .Self.HostName` — auto-detect, confirm. |
-| `WEB_SESSION_SECRET` | Step 7 — Web shell (optional) | `openssl rand -hex 32` — generate, store. |
-| `WEB_UI_USERNAME` | Step 7 — Web shell | "What username for the web shell login?" Default: `BOT_NAME`. |
-| `WEB_UI_PASSWORD` | Step 7 — Web shell | `openssl rand -base64 24` — generate, show to Nate, store in `Values`, confirm he wrote it down. |
+| `WEB_SESSION_SECRET` | Step 7 — Web shell (machine-only) | `bot-secrets.sh generate web-session-secret 32` — random hex, never seen by operator. |
+| `WEB_UI_USERNAME` | Step 7 — Web shell | Defaults to `BOT_NAME`. Override via `echo "<name>" \| bot-secrets.sh store web-ui-username`. |
+| `WEB_UI_PASSWORD` | **Phase 0.5** of `first-time-setup.sh` (operator typed) | Stored as systemd-creds blob at `/etc/<BOT_NAME>/secrets/web-ui-password`. Same source as `SB_USER_PASSWORD` if `PASSWORD_MODE=unified`. Operator already knows it; no "write it down" BLOCKER needed. |
+| `PASSWORD_MODE` | Phase 0.5 — `first-time-setup.sh` | Choice: `unified` (one password for all bot services) or `separate` (per-service prompts). Default: `unified`. |
+| `LINUX_PASSWORD_SET` | Phase 0.5 — `first-time-setup.sh` (opt-in) | Whether the operator chose to set the bot user's `/etc/shadow` login password too. Default: `no` (SSH-key-only). |
 
 ### How to apply collected values
 
@@ -194,16 +196,19 @@ Current phase: pre-step-5
 - USER_HOURS:
 - USER_PREFS:
 
+- PASSWORD_MODE:             # phase 0.5 — unified | separate (default: unified)
+- LINUX_PASSWORD_SET:        # phase 0.5 — yes | no (default: no, SSH-key-only)
+
 ### Collected just-in-time
 - TG_BOT_TOKEN:              # step 6 (Telegram)
 - TG_BOT_USERNAME:           # step 6
 - TG_CHAT_ID:                # step 6
-- SB_USER_PASSWORD:          # step 5 (SilverBullet) — generate openssl rand -base64 24
-- SB_AUTH_TOKEN:             # step 5 — generate openssl rand -base64 24
+- SB_USER_PASSWORD:          # phase 0.5 — operator typed (or BOT_PASSWORD env); stored as systemd-creds blob
+- SB_AUTH_TOKEN:             # step 5/6 — bot-secrets.sh generate sb-auth-token 24 (machine-only)
 - TAILSCALE_HOSTNAME:        # step 5 — derive from `tailscale status`
-- WEB_SESSION_SECRET:        # step 7 (Web shell, optional) — openssl rand -hex 32
+- WEB_SESSION_SECRET:        # step 7 — bot-secrets.sh generate web-session-secret 32 (machine-only)
 - WEB_UI_USERNAME:           # step 7 (default $BOT_NAME)
-- WEB_UI_PASSWORD:           # step 7 — openssl rand -base64 24
+- WEB_UI_PASSWORD:           # phase 0.5 — operator typed (or BOT_PASSWORD env); stored as systemd-creds blob
 
 ## Done
 (none yet)

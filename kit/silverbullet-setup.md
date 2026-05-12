@@ -8,7 +8,7 @@ This is your primary day-to-day interface to the bot. You read its journal in Si
 
 > **What the bot does automatically vs. what needs your hands**
 >
-> During Step 6 of bot-driven setup, the bot generates the SilverBullet passwords via `bot-secrets.sh generate` (which pipes openssl through `systemd-creds encrypt` — plaintext never lands on disk in cleartext), then runs `bash <KIT>/runtime/silverbullet-up.sh` which decrypts the blobs into env vars and brings up `<KIT>/docker-compose.yml` (kit-managed). The compose file mounts `../vault:/space`. Finally `sudo tailscale serve --https=443` exposes the container. **Credential pointers** land in `setup-state.md` as `(systemd-creds: sb-user-password)` — to retrieve a value, run `sudo systemd-creds decrypt /etc/<BOT_NAME>/secrets/sb-user-password -` once and write it down.
+> During **Phase 0.5** of `first-time-setup.sh`, the operator types the SilverBullet password at an interactive prompt (or pre-sets `BOT_PASSWORD` env var for unattended provisioning). The typed value flows through `bot-secrets.sh store-interactive` which pipes it directly into `systemd-creds encrypt` — plaintext never lands on disk in cleartext. Then during **Step 6** of bot-driven setup, the bot generates the machine-only `sb-auth-token` via `bot-secrets.sh generate`, and runs `bash <KIT>/runtime/silverbullet-up.sh` which decrypts both blobs into env vars and brings up `<KIT>/docker-compose.yml` (kit-managed). The compose file mounts `../vault:/space`. Finally `sudo tailscale serve --https=443` exposes the container. The operator already knows `sb-user-password` (they typed it in Phase 0.5); `sb-auth-token` is machine-only.
 >
 > If you're doing the assisting-CC fallback flow (Steps 5–9 by hand), the commands below are what you run yourself.
 
@@ -33,7 +33,7 @@ services:
       - "127.0.0.1:3001:3000"                         # bind to localhost only
 ```
 
-Generate the password and token with `openssl rand -base64 24` (do it twice, they should be different). Save them somewhere you'll remember — SilverBullet on a phone will ask for the password the first time you connect.
+The password is the one you typed in Phase 0.5 of `first-time-setup.sh` (you already know it; that was the point of prompting). The auth-token is machine-only, generated via `bot-secrets.sh generate sb-auth-token 24` during bot-driven Step 6. If you're doing the manual fallback flow, `openssl rand -base64 24` works for both — just save the password somewhere recoverable since SilverBullet on a phone will ask for it the first time you connect.
 
 Bring it up:
 

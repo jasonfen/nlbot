@@ -6,7 +6,7 @@ This is the *third* thing you reach for, after Telegram (for messaging) and Silv
 
 > **What the bot does automatically vs. what needs your hands**
 >
-> Web shell is baseline config (not optional). During Step 7 of bot-driven setup, the bot runs `npm install`, generates `WEB_SESSION_SECRET` + `WEB_UI_PASSWORD`, writes `.env`, installs `<BOT_NAME>-web.service`, and exposes it via `sudo tailscale serve --https=8443`. The credentials land in `setup-state.md` Values block — **write them down somewhere recoverable, they aren't recoverable later.** The bot posts a BLOCKER reminding you of this.
+> Web shell is baseline config (not optional). The web-shell password (`web-ui-password`) is typed by the operator at the **Phase 0.5** prompt in `first-time-setup.sh` (or pre-set via `BOT_PASSWORD` env var) and stored as a systemd-creds blob — the operator already knows it because they typed it. During **Step 7** of bot-driven setup, the bot runs `npm install`, generates the machine-only `web-session-secret` via `bot-secrets.sh generate`, installs `<BOT_NAME>-web.service`, and exposes it via `sudo tailscale serve --https=8443`. The bot **does not** post a "write this down" BLOCKER for the password anymore — there's nothing for the operator to write down that they don't already have.
 >
 > If you're doing the assisting-CC fallback flow (Steps 5–9 by hand), the commands below are what you run yourself.
 
@@ -83,12 +83,15 @@ $KIT/web-terminal/
 
 ```
 PORT=3000
-SESSION_SECRET=<openssl rand -base64 48>
-UI_USERNAME=<BOT_NAME>
-UI_PASSWORD=<a real password — `openssl rand -base64 24`>
 ```
 
-`chmod 600 .env`. The session secret rotates every login session anyway, but losing it logs everyone out, so generate it once and leave it.
+The other three values (`SESSION_SECRET`, `UI_USERNAME`, `UI_PASSWORD`) come from systemd-creds blobs loaded by the systemd unit at service start, not from `.env`:
+
+- `web-session-secret` — machine-only; bot generates via `bot-secrets.sh generate web-session-secret 32` during Step 7.
+- `web-ui-username` — defaults to `<BOT_NAME>`; if you want a different login name, set it via `echo "<name>" | bot-secrets.sh store web-ui-username`.
+- `web-ui-password` — typed by the operator during Phase 0.5 of `first-time-setup.sh` (or pre-set via `BOT_PASSWORD`). Stored as a systemd-creds blob, decrypted at unit start.
+
+`chmod 600 .env`. The session secret rotates every login session anyway, but losing the blob logs everyone out, so generate it once and leave it.
 
 ## `server.js` — the essentials
 

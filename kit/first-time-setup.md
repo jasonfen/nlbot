@@ -13,7 +13,13 @@ cd ~/nlbot       # or wherever you cloned the kit; this is your <REPO_ROOT>
 bash kit/runtime/first-time-setup.sh
 ```
 
-The script prompts interactively for Phase 0 values (`BOT_NAME`, `USER_NAME`, `VAULT`, `CANARY_PHRASE`, identity prefs), with sensible defaults in brackets. Pre-set env vars (`BOT_NAME=nlbot ./first-time-setup.sh`) skip the corresponding prompt; values already populated in `setup-state.md`'s Values block are also picked up automatically. After the run, the script prints the remaining manual commands (NOPASSWD grant, reboot, `setup-status.sh` to watch the bot-driven Steps 5–9).
+The script prompts interactively for Phase 0 values (`BOT_NAME`, `USER_NAME`, `VAULT`, `CANARY_PHRASE`, identity prefs), with sensible defaults in brackets. Pre-set env vars (`BOT_NAME=nlbot ./first-time-setup.sh`) skip the corresponding prompt; values already populated in `setup-state.md`'s Values block are also picked up automatically.
+
+**Phase 0.5 — bot service passwords** runs right after Phase 0. The script asks for `PASSWORD_MODE` (`unified` for one password across SilverBullet + web shell, or `separate` for one prompt per service; default `unified`), then prompts for the value(s) with no-echo + confirm. The typed plaintext flows through `bot-secrets.sh store-interactive` → `systemd-creds encrypt` and lands as an encrypted blob at `/etc/<BOT_NAME>/secrets/<name>` — never on disk in cleartext. Unattended provisioning: pre-set `BOT_PASSWORD=…` and the prompt is skipped. Non-TTY without that env var = hard fail (the script refuses to silently auto-generate an unreadable password).
+
+After Phase 0.5 the script offers an optional `[y/N]` to also set the Linux user's `/etc/shadow` login password via `chpasswd`; default `N` keeps the box SSH-key-only, which is the recommended posture for a tailnet-only LXC.
+
+After the run, the script prints the remaining manual commands (NOPASSWD grant, reboot, `setup-status.sh` to watch the bot-driven Steps 5–9).
 
 The rest of this doc is the canonical reference: read along to know exactly what the script is doing, or use the prose blocks to do any step by hand.
 
@@ -230,8 +236,8 @@ After the Step 4 verification reboot, `claude-code.service` brings the bot onlin
 | Phase | What runs |
 |---|---|
 | `step-5-cron` | **First bot phase, intentionally.** Installs crontab entries (soul-loop / secretary / wake-up / midnight-maintenance) for the bot's unix user so the heartbeat + journaling pipeline starts on minute one. Everything downstream becomes re-drivable from the heartbeat. |
-| `step-6-silverbullet` | Generates SB_USER_PASSWORD + SB_AUTH_TOKEN (`openssl rand`), writes `docker-compose.yml`, `docker compose up -d`, `sudo tailscale serve --https=443`. |
-| `step-7-web-shell` | `npm install`, generates `WEB_SESSION_SECRET` + `WEB_UI_PASSWORD`, writes `.env`, installs `<BOT_NAME>-web.service`, `sudo tailscale serve --https=8443`. |
+| `step-6-silverbullet` | Generates the machine-only `sb-auth-token` (`bot-secrets.sh generate`), runs `silverbullet-up.sh` which reads `sb-user-password` (typed by operator in Phase 0.5) + `sb-auth-token` from systemd-creds blobs and brings up the container, `sudo tailscale serve --https=443`. |
+| `step-7-web-shell` | `npm install`, generates the machine-only `web-session-secret` (`bot-secrets.sh generate`), reads `web-ui-password` (typed by operator in Phase 0.5) from the systemd-creds blob, installs `<BOT_NAME>-web.service`, `sudo tailscale serve --https=8443`. |
 | `step-8-memory` | Installs memorious-mcp as the baseline memory backend. |
 | `step-9-telegram-daemon` | Copies `tg-bot.py` + `tg-post.sh` into `.telegram/`, drops the systemd unit, posts a BLOCKER asking for BotFather token. (Last phase — by the time you hit this, the rest of the bot is fully operational, so the BotFather handoff isn't gating anything else.) |
 | `step-9-telegram-creds-blocker` | **Waits on you.** See "What you still do" below. |
@@ -246,7 +252,7 @@ The bot writes `BLOCKER <name>: <instruction>` lines in `setup-state.md` `## Blo
 
 1. **`BLOCKER telegram-botfather`** — happens during `step-9-telegram-daemon` (the *last* phase, intentionally — everything else is already running by this point). Open Telegram, message `@BotFather`, `/newbot`, save the token. DM your new bot once. Visit `https://api.telegram.org/bot<TOKEN>/getUpdates` and find your `chat.id`. Paste `TG_BOT_TOKEN`, `TG_BOT_USERNAME` (`@<name>_bot`), and `TG_CHAT_ID` into `setup-state.md` Values. Remove the BLOCKER line.
 
-2. **`BLOCKER web-shell-credentials`** — informational, doesn't block progress. The bot generated a username + password for the web shell; write them down somewhere recoverable before continuing.
+2. ~~**`BLOCKER web-shell-credentials`**~~ — no longer fires. The web-shell password is the one the operator typed in Phase 0.5 of `first-time-setup.sh`, so there's nothing to "write down" — they already have it.
 
 3. **`BLOCKER tailscale-cert`** *(may not appear)* — Tailscale's first `serve --https` triggers a cert provisioning. If Tailscale needs interactive approval, the bot will pause here.
 
@@ -316,12 +322,12 @@ Within 10 minutes you should see soul-loop fires in `cron-prompts/job-log.md`, a
 
 This is your daily interface to the bot's brain. Walked through fully in [silverbullet-setup.md](silverbullet-setup.md). The condensed version:
 
-1. Generate two random secrets:
+1. `sb-user-password` was already typed by the operator in Phase 0.5 (or pre-set via `BOT_PASSWORD`) and stored as a systemd-creds blob; nothing to do. Generate the machine-only `sb-auth-token`:
    ```bash
-   openssl rand -base64 24    # for SB_USER password
-   openssl rand -base64 24    # for SB_AUTH_TOKEN
+   bash $KIT/runtime/bot-secrets.sh generate sb-auth-token 24
    ```
-2. Drop a `docker-compose.yml` in `$VAULT/` with the silverbullet service block (template in [silverbullet-setup.md](silverbullet-setup.md)) — set `SB_USER=<bot-name>:<password>`, `SB_AUTH_TOKEN=<token>`, mount `$VAULT:/space`, bind `127.0.0.1:3001:3000`.
+   If you're doing the fully-manual fallback flow (no Phase 0.5 was run), `openssl rand -base64 24` for the password works too — just save it somewhere you can recover, since SB on a phone will ask for it.
+2. The kit's `docker-compose.yml` at `$KIT/docker-compose.yml` already references `${BOT_NAME}` / `${SB_USER_PASSWORD}` / `${SB_AUTH_TOKEN}` as env vars. Bring the stack up via `bash $KIT/runtime/silverbullet-up.sh`, which decrypts both blobs into process env before invoking `docker compose up -d silverbullet` — plaintext stays in memory only.
 3. `docker compose up -d` and visit `http://localhost:3001`. Log in with the SB_USER credentials. You should see your vault.
 4. Expose via Tailscale: `sudo tailscale serve --bg --https=443 http://127.0.0.1:3001`. Now reachable from your phone at `https://<host>.<tailnet>.ts.net`.
 5. Install the seeded plugs. `first-time-setup.sh` Step 2 already wrote `CONFIG.md` at the vault root with `config.set("plugs", {…})` declaring TreeView. In SilverBullet:
@@ -340,7 +346,10 @@ When you first land on SilverBullet, [[index]] is the entry point (created from 
 The web shell is a small Node.js server that attaches to your `claude` tmux session and renders it through xterm.js in the browser, login-protected and Tailscale-only. Walked through end-to-end in [web-shell.md](web-shell.md). The condensed version:
 
 1. `cd $KIT/web-terminal && npm install` (the directory already exists in the kit; no copy needed).
-2. Create `$KIT/web-terminal/.env` with `PORT=3000`. The other values (`SESSION_SECRET`, `UI_USERNAME`, `UI_PASSWORD`) are loaded from systemd-creds at service start — see `kit/runtime/bot-secrets.sh generate` for how the bot creates the blobs.
+2. Create `$KIT/web-terminal/.env` with `PORT=3000`. The other values (`SESSION_SECRET`, `UI_USERNAME`, `UI_PASSWORD`) are loaded from systemd-creds blobs at service start:
+   - `web-ui-password` was typed by the operator in Phase 0.5 (or pre-set via `BOT_PASSWORD`) — nothing to do.
+   - `web-session-secret` is machine-only; generate via `bash $KIT/runtime/bot-secrets.sh generate web-session-secret 32`.
+   - `web-ui-username` defaults to `$BOT_NAME`; override via `echo "<name>" | bash $KIT/runtime/bot-secrets.sh store web-ui-username` if needed.
 3. Drop `/etc/systemd/system/<BOT_NAME>-web.service` (template at `$KIT/web-terminal/claude-web.service`; `WorkingDirectory=$KIT/web-terminal`). Enable and start.
 5. `sudo tailscale serve --bg --https=8443 http://127.0.0.1:3000`.
 6. Visit `https://<host>.<tailnet>.ts.net:8443`, log in, watch Claude type.
