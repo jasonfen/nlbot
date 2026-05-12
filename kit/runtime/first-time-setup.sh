@@ -105,11 +105,18 @@ prompt_value() {
   fi
 
   local answer
+  # `read` returns non-zero on EOF (which happens whenever the script is
+  # piped stdin from /dev/null or any non-tty source). Under `set -e`
+  # that aborts the whole script BEFORE the default-merge below could
+  # take effect. Guard with `|| true` so EOF leaves `answer` empty, then
+  # the default-merge + required check handle the rest. Caught by ansi
+  # on kit-e2e-test-3 (F16) when probing the non-TTY hard-fail without
+  # PASSWORD_MODE pre-set in env.
   if [ -n "$default" ]; then
-    read -rp "  $question [$default]: " answer
+    read -rp "  $question [$default]: " answer || true
     answer="${answer:-$default}"
   else
-    read -rp "  $question: " answer
+    read -rp "  $question: " answer || true
   fi
 
   if [ -z "$answer" ] && [ "$required" = "yes" ]; then
@@ -351,7 +358,7 @@ fi
 # /usr/bin/chpasswd to the kit's steady-state NOPASSWD template.
 if [ -t 0 ] && [ "$(state_read LINUX_PASSWORD_SET)" != "yes" ] \
             && [ "$(state_read LINUX_PASSWORD_SET)" != "no" ]; then
-  read -rp "  Also set the Linux user '$BOT_NAME's login password? [y/N — N keeps the box SSH-key-only, recommended]: " linux_pw_choice
+  read -rp "  Also set the Linux login password for the $BOT_NAME account? [y/N — N keeps the box SSH-key-only, recommended]: " linux_pw_choice
   linux_pw_choice="${linux_pw_choice:-n}"
   case "$linux_pw_choice" in
     y|Y|yes|YES)
