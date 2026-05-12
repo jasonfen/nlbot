@@ -19,7 +19,9 @@ The bot's soul-loop reads the `Current phase:` line above and dispatches accordi
 
 | Phase | Driven by | What runs |
 |---|---|---|
-| `pre-step-5` | Assisting CC (or human DIY) | Collect the Values block (interview Nate), then Steps 1–4 of `first-time-setup.md`: vault, keybindings, `claude-code.service`, verification reboot. **The bot doesn't exist yet.** Older kits used `phase-0` as the seed value; that's treated as an alias. |
+| `pre-step-5` | (legacy seed value) | Treated as alias of `phase-0-interview-pending` for older kits that haven't been refreshed. |
+| `phase-0-interview-pending` | Provisioner finished bash bootstrap; user has NOT typed `/setup` yet | Crons fire but setup-runner short-circuits (returns "interview pending — user must type /setup"). Bot is alive in the tmux session and reachable via web shell, but no work advances until the user kicks off the interview. |
+| `phase-0-interview-complete` | `/setup` (interactive interview inside the bot's session) | User answered the identity questions (name, canary phrase, hobbies, communication style, Telegram opt-in). `/setup` wrote each answer to the Values block, ran `kit/runtime/substitute-placeholders.sh` over the seeded vault files, and advanced the phase. Setup-runner dispatch unblocks. |
 | `step-5-cron` | **Bot** (setup-runner) | **First bot phase, intentionally.** Install crontab entries (soul-loop / secretary / wake-up / midnight-maintenance) so the heartbeat + journaling pipeline starts on minute one. Everything that follows can be re-driven from the heartbeat if a phase mid-fails. |
 | `step-6-silverbullet` | **Bot** (setup-runner) | Generate SB_USER_PASSWORD + SB_AUTH_TOKEN, write docker-compose.yml, `docker compose up -d silverbullet`, `tailscale serve` for HTTPS |
 | `step-7-web-shell` | **Bot** (setup-runner) | `npm install` in `web-terminal/`, generate WEB_SESSION_SECRET + WEB_UI_PASSWORD, write `.env` and `claude-web.service`, enable, `tailscale serve` |

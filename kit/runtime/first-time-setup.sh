@@ -46,10 +46,21 @@ VAULT_DEFAULT="$REPO_ROOT/vault"
 # --reinstall-services-only: skip Phase 0/Steps 1–3 and jump straight to
 # Step 4. Used by migrate-layout.sh on existing installs whose Phase 0
 # values are already in setup-state.md and whose vault is already seeded.
+#
+# --non-interactive: provisioner mode. prompt_value fails fast on missing
+# required values instead of dropping to `read -rp`. Combined with env vars
+# (BOT_NAME, VAULT, BOT_PASSWORD), enables fully unattended provisioning
+# from CI / image-bake pipelines. The bash bootstrap collects only the
+# load-bearing values; identity/personality values (USER_NAME, CANARY_PHRASE,
+# the eight personality fields, TELEGRAM_ENABLED) are deferred to /setup
+# and the new "phase-0-interview-pending" phase state. See the
+# jaunty-swimming-forest plan for the provisioner-vs-Nate split.
 REINSTALL_SERVICES_ONLY=0
+NON_INTERACTIVE=0
 for arg in "$@"; do
   case "$arg" in
     --reinstall-services-only) REINSTALL_SERVICES_ONLY=1 ;;
+    --non-interactive)         NON_INTERACTIVE=1 ;;
     -h|--help)
       sed -n '2,/^$/p' "$0" | sed 's/^# \?//'
       exit 0 ;;
@@ -101,6 +112,26 @@ prompt_value() {
   if [ -n "$from_state" ]; then
     eval "$var_name=$(printf '%q' "$from_state")"
     echo "  $var_name = $from_state  (from setup-state.md)"
+    return 0
+  fi
+
+  # --non-interactive provisioner mode: refuse to drop into `read -rp`.
+  # If we got here, the value wasn't supplied via env or setup-state.md.
+  # Use the default if one's available; otherwise hard-fail with a clear
+  # message naming the missing var. Provisioner can re-invoke with the
+  # right env var.
+  if [ "${NON_INTERACTIVE:-0}" = "1" ]; then
+    if [ -n "$default" ]; then
+      eval "$var_name=$(printf '%q' "$default")"
+      echo "  $var_name = $default  (non-interactive: applied default)"
+      return 0
+    fi
+    if [ "$required" = "yes" ]; then
+      echo "  ERROR: $var_name is required but unset (--non-interactive mode)" >&2
+      echo "  Re-invoke with: $var_name=<value> $0 --non-interactive [...]" >&2
+      exit 1
+    fi
+    # Optional + no default + non-interactive → leave empty.
     return 0
   fi
 
@@ -181,27 +212,25 @@ if [ "$REINSTALL_SERVICES_ONLY" = "1" ]; then
   echo "  Jumping to Step 4 (systemd units + tmux verification)."
 else
 
-banner "Phase 0 — Collect setup values"
+banner "Phase 0 — Collect provisioning values"
 echo "  (env var > setup-state.md > prompt — first hit wins)"
 echo
+echo "  Only BOT_NAME and VAULT are bash-collected. Identity values (your"
+echo "  name, canary phrase, communication style, hobbies, etc.) are filled"
+echo "  in by the user via /setup after the bot is up — see jaunty-swimming"
+echo "  -forest plan / first-time-setup.md provisioner-vs-Nate split."
+echo
 
-prompt_value BOT_NAME       "Bot name (lowercase, becomes the unix user)" "$USER" yes
-prompt_value USER_NAME      "Your name (how the bot will address you)"   "${USER^}" yes
-prompt_value VAULT          "Vault path (kit clone directory)"           "$VAULT_DEFAULT" yes
-prompt_value CANARY_PHRASE  "Canary phrase (3-7 memorable words)"        "" yes
-echo
-echo "  Optional identity values (Enter accepts the default):"
-prompt_value IDLE_PREFS         "Idle-time preference"                        "reading"
-prompt_value CREATIVE_OUTPUT    "Preferred creative output"                   "technical docs"
-prompt_value COMM_STYLE         "Communication style"                         "direct"
-prompt_value VALUES_CARES_ABOUT "Values you care about"                       "quality"
-prompt_value USER_ROLE          "Your role / what you work on"                "software engineer"
-prompt_value USER_HOBBIES       "Hobbies (free-form)"                         "homelab, gaming"
-prompt_value USER_HOURS         "Hours you're typically online"               "evenings EDT"
-prompt_value USER_PREFS         "Non-negotiable preferences (one short line)" "be honest, be concise, ask when unsure"
-echo
-echo "  Optional integrations:"
-prompt_value TELEGRAM_ENABLED   "Configure Telegram messaging? (BotFather + token paste later; 'yes' = walk the setup later)" "no"
+prompt_value BOT_NAME  "Bot name (lowercase, becomes the unix user)" "$USER"             yes
+prompt_value VAULT     "Vault path (kit clone directory)"            "$VAULT_DEFAULT"    yes
+
+# Non-interactive shortcut: provisioner can override the friendly defaults
+# above with env vars and skip ALL prompts. Used for unattended provisioning
+# (CI, image-bake pipelines, repeated dev installs). Combined with the
+# `--non-interactive` flag (which makes prompt_value fail-fast instead of
+# falling through to `read -rp`), this gives a clean scripted provisioning
+# path. If --non-interactive and any required value is missing, the prompt
+# function will already have aborted.
 
 [ -z "${VAULT:-}" ] && { echo "VAULT unresolved; aborting." >&2; exit 1; }
 
@@ -515,23 +544,30 @@ for f in "$VAULT/processes/"*.md "$VAULT/_templates/"*.md; do
   substitute_placeholders "$f"
 done
 
-# Persist Phase 0 values into setup-state.md
+# Persist Phase 0 values into setup-state.md. Only BOT_NAME / VAULT /
+# OS_USER are populated by the bash bootstrap; the rest stay empty (the
+# /setup interview will fill them based on Nate's answers, then re-run
+# substitute-placeholders.sh on the seeded vault files).
 state_write BOT_NAME            "$BOT_NAME"
-state_write USER_NAME           "$USER_NAME"
 state_write VAULT               "$VAULT"
 state_write OS_USER             "$USER"
-state_write CANARY_PHRASE       "$CANARY_PHRASE"
-state_write IDLE_PREFS          "$IDLE_PREFS"
-state_write CREATIVE_OUTPUT     "$CREATIVE_OUTPUT"
-state_write COMM_STYLE          "$COMM_STYLE"
-state_write VALUES_CARES_ABOUT  "$VALUES_CARES_ABOUT"
-state_write USER_ROLE           "$USER_ROLE"
-state_write USER_HOBBIES        "$USER_HOBBIES"
-state_write USER_HOURS          "$USER_HOURS"
-state_write USER_PREFS          "$USER_PREFS"
-state_write TELEGRAM_ENABLED    "$TELEGRAM_ENABLED"
+state_write USER_NAME           "${USER_NAME:-}"
+state_write CANARY_PHRASE       "${CANARY_PHRASE:-}"
+state_write IDLE_PREFS          "${IDLE_PREFS:-}"
+state_write CREATIVE_OUTPUT     "${CREATIVE_OUTPUT:-}"
+state_write COMM_STYLE          "${COMM_STYLE:-}"
+state_write VALUES_CARES_ABOUT  "${VALUES_CARES_ABOUT:-}"
+state_write USER_ROLE           "${USER_ROLE:-}"
+state_write USER_HOBBIES        "${USER_HOBBIES:-}"
+state_write USER_HOURS          "${USER_HOURS:-}"
+state_write USER_PREFS          "${USER_PREFS:-}"
+state_write TELEGRAM_ENABLED    "${TELEGRAM_ENABLED:-}"
 sed -i "s|^Last updated:.*|Last updated: $(date '+%Y-%m-%d %H:%M')|" "$REPO_ROOT/setup-state.md"
-sed -i "s|^Current phase:.*|Current phase: pre-step-5|" "$REPO_ROOT/setup-state.md"
+# Initial phase is phase-0-interview-pending. setup-runner is gated on this
+# (the runner's tier-1 probe returns "interview pending — user must type
+# /setup" until the interview advances the phase). soul-loop sees the
+# non-done phase and dispatches setup-runner, which then no-ops cleanly.
+sed -i "s|^Current phase:.*|Current phase: phase-0-interview-pending|" "$REPO_ROOT/setup-state.md"
 
 # Generate <REPO_ROOT>/.claude/ from kit/dot-claude/ now that setup-state.md
 # has the Phase 0 values. refresh-claude-dir.sh handles first-install and
@@ -833,7 +869,56 @@ EOS
   3. sudo reboot
      Verify the box comes back clean and claude-code.service auto-starts.
 
-  4. After reboot, the bot drives Steps 5-9 via setup-runner.
-     Watch progress:  bash $KIT/runtime/setup-status.sh
+  4. After reboot, hand HANDOFF-TO-NATE.txt (written below) to the end-user.
+     Their only step: open the web shell URL, log in, type \`/setup\`.
+     The bot runs an interactive interview to collect their name, canary
+     phrase, hobbies, comm style, etc., then dispatches setup-runner for
+     Steps 5-9. Watch progress:  bash $KIT/runtime/setup-status.sh
 
 EOF
+
+# --- HANDOFF-TO-NATE.txt — credentials + first-step instructions ------------
+#
+# Writes a one-page handoff doc the provisioner gives to the end-user (Nate).
+# Lives at <REPO_ROOT>/HANDOFF-TO-NATE.txt, mode 600. Contains the web-shell
+# URL (best-effort from `tailscale status`), the initial password the
+# provisioner set (or "(see your BOT_PASSWORD env)" if it wasn't via env),
+# and a single instruction: type /setup.
+#
+# Banner reminder: `shred -u` the file after delivering it to Nate. The
+# password sits in /etc/<BOT_NAME>/secrets/ as a systemd-creds blob whether
+# or not this file exists; this file is just a convenience for the
+# provisioner-to-Nate handoff.
+HANDOFF_FILE="$REPO_ROOT/HANDOFF-TO-NATE.txt"
+TAILNET_HOST=$(tailscale status --json 2>/dev/null \
+  | grep -oE '"DNSName":\s*"[^"]+"' | head -1 \
+  | sed 's/.*"DNSName":\s*"\([^"]*\)\.?".*/\1/')
+INITIAL_PASSWORD_HINT="${BOT_PASSWORD:-(the password you typed during Phase 0.5 — check your scrollback or your password manager)}"
+WEB_URL="${TAILNET_HOST:+https://${TAILNET_HOST}:8443/}"
+
+cat > "$HANDOFF_FILE" <<EOF
+HANDOFF — your bot is ready
+═══════════════════════════════════════════════════════════════════════════
+
+Hi! Someone set up an nlbot for you. Here's everything you need to start:
+
+  Web shell URL:  ${WEB_URL:-https://<bot>.<your-tailnet>.ts.net:8443/}
+  Username:       $BOT_NAME
+  Initial password:  $INITIAL_PASSWORD_HINT
+
+To start: open the URL above in a browser, log in with the username and
+password, and you'll see a Claude Code session ready for input. Type:
+
+  /setup
+
+The bot will walk you through a short conversational interview — your
+name, hobbies, communication style, etc. — and then bring up the rest of
+its services (SilverBullet vault, optional Telegram messaging). You'll be
+operational in a few minutes.
+
+Questions? The bot answers them. Just talk.
+EOF
+chmod 600 "$HANDOFF_FILE" 2>/dev/null || true
+echo
+echo "  📄 Wrote $HANDOFF_FILE (mode 600). Deliver to Nate, then \`shred -u\` it."
+echo
