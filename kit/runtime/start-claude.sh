@@ -27,10 +27,36 @@ if [ -z "$CLAUDE_BIN" ]; then
 fi
 
 # Start Claude in a detached tmux session.
+#
 # Use --continue (auto-selects most recent session, no interactive picker)
 # instead of --resume main (which can hit the Ink TUI picker if session list
 # is ambiguous — the picker doesn't respond to tmux send-keys, blocking
 # unattended startup). See decisions.md 2026-04-03 lockup.
-tmux new-session -d -s claude -c <VAULT> "$CLAUDE_BIN" --permission-mode bypassPermissions --continue
+#
+# Wrap the claude invocation in a while-loop with exponential backoff so
+# the tmux session survives a clean exit of `claude` itself (e.g., when
+# --continue finds nothing to resume on a fresh OAuth walk, claude can
+# exit 0 immediately — without the wrapper, tmux closes the session
+# because its only command exited, and the bot disappears until the
+# operator manually restarts claude-code.service). The systemd unit's
+# Restart=on-failure can't recover this because exit-0 isn't a failure.
+# Caught on nlbot0 walk (sidechat msg 2728, F21).
+#
+# Backoff: 5s → 10s → 20s → 40s → 80s → 160s → 300s (capped). Prevents a
+# tight loop on persistent failure (bad OAuth state, missing binary mid-
+# upgrade) while still recovering quickly from a one-shot exit.
+export CLAUDE_BIN
+tmux new-session -d -s claude -c <VAULT> /bin/bash -c '
+  delay=5
+  max_delay=300
+  while :; do
+    "$CLAUDE_BIN" --permission-mode bypassPermissions --continue
+    rc=$?
+    echo "[start-claude] claude exited rc=$rc; restarting in ${delay}s" >&2
+    sleep "$delay"
+    delay=$(( delay * 2 ))
+    [ "$delay" -gt "$max_delay" ] && delay=$max_delay
+  done
+'
 # Set pane title to bot name — watcher scripts use this to target the right pane
 tmux select-pane -t claude:0.0 -T "<BOT_NAME>"
