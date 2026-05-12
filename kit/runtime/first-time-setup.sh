@@ -222,7 +222,7 @@ prompt_value USER_HOURS         "Hours you're typically online"               "e
 prompt_value USER_PREFS         "Non-negotiable preferences (one short line)" "be honest, be concise, ask when unsure"
 echo
 echo "  Optional integrations:"
-prompt_value TELEGRAM_ENABLED   "Configure Telegram messaging? (BotFather + token paste later; 'no' = skip and never prompt)" "yes"
+prompt_value TELEGRAM_ENABLED   "Configure Telegram messaging? (BotFather + token paste later; 'yes' = walk the setup later)" "no"
 
 [ -z "${VAULT:-}" ] && { echo "VAULT unresolved; aborting." >&2; exit 1; }
 
