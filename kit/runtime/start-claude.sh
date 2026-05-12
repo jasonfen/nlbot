@@ -70,11 +70,23 @@ tmux new-session -d -s claude -c <VAULT> /bin/bash -c '
   max_delay=300
   while :; do
     flags=(--permission-mode bypassPermissions)
-    # Add --continue only when there is a real session to resume. find
-    # exits 0 with no output when no .jsonl files match — the grep -q .
-    # makes the test true only on a non-empty find result.
-    if [ -d "$HOME/.claude/projects" ] && \
-       find "$HOME/.claude/projects" -name "*.jsonl" -print -quit 2>/dev/null | grep -q .; then
+    # Add --continue only when there is a real session to resume IN THIS
+    # cwd. Project dirs under ~/.claude/projects/ encode the cwd into
+    # the directory name by replacing every / with -, so
+    # /home/foo/bar/vault becomes -home-foo-bar-vault. The first F38
+    # cut (eceb580) checked for any *.jsonl anywhere under projects/,
+    # which let an OAuth-time session from cwd=~ pass the gate while
+    # the systemd-launched claude (cwd=<VAULT>) was looking in a
+    # different project dir; --continue then exited rc=1 with "No
+    # conversation found to continue" and the bot crashlooped exactly
+    # the same way the original F38 bug did, just one layer deeper.
+    # Caught on fenbot01 walk 2026-05-12. The scoped check below
+    # matches the actual project dir claude itself would open. (Avoid
+    # apostrophes anywhere in this whole bash -c body — single-quoted
+    # to the outer shell, any literal apostrophe terminates it early.)
+    proj_dir="$HOME/.claude/projects/$(printf %s "$PWD" | tr / -)"
+    if [ -d "$proj_dir" ] && \
+       find "$proj_dir" -name "*.jsonl" -print -quit 2>/dev/null | grep -q .; then
       flags+=(--continue)
     fi
     "$CLAUDE_BIN" "${flags[@]}"
