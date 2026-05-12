@@ -39,7 +39,7 @@ About 130 lines of server code, ~100 lines of HTML+CSS, and a few `<script>` tag
 ## File layout
 
 ```
-$VAULT/web-terminal/
+$KIT/web-terminal/
 ├── package.json          # dependencies
 ├── server.js             # ~130 lines, Express + WS + node-pty
 ├── .env                  # secrets (see below)

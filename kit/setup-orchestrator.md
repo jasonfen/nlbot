@@ -28,7 +28,7 @@ Before running any setup step, sit with Nate for ~5 minutes and gather the value
 |---|---|---|---|
 | `BOT_NAME` | `[Your Bot's Name]` | `CLAUDE-nate.md` heading; reference throughout | "What name do you want this bot to go by? (Lowercase preferred — it'll also be the system username and the directory name.)" |
 | `USER_NAME` | `[Nate]`, `[Nate's]` | `CLAUDE-nate.md` body | "What should the bot call you?" |
-| `VAULT` | `<VAULT>` | `dot-claude/agents/*.md`, `dot-claude/commands/*.md`, `web-terminal/claude-web.service` | "Where do you want the vault directory? Default: `/home/$BOT_NAME/$BOT_NAME`" — derive automatically. |
+| `VAULT_PARENT` | `<REPO_ROOT>` | bot CWD; place where the kit is cloned | "Where do you want the bot installed? Default: `/home/$BOT_NAME/$BOT_NAME`" — derive automatically. The kit goes at `$REPO_ROOT/kit`, the SilverBullet space at `$REPO_ROOT/vault`. |
 | `OS_USER` | `<USER>` (in `claude-web.service`) | systemd unit `User=` | Same as `BOT_NAME` from Step 2 of bootstrap.md. |
 | `CANARY_PHRASE` | `[CHOOSE YOUR CANARY PHRASE]`, `[YOUR CANARY PHRASE]` | `templates/identity.md`, `templates/soul-loop.md` | "Pick a memorable phrase the bot will use as an orientation anchor — anything 3–7 words. Examples: 'the lighthouse keeper waves at midnight', 'flat earth society for ants', 'green socks blue keyboard'." |
 | `IDLE_PREFS` | `[reading/coding/writing/exploring]` | `templates/identity.md` | "What does the bot prefer to do during idle time? Pick one or write your own." |
@@ -58,31 +58,37 @@ These you can't know up front; capture them when their setup step runs and store
 
 ### How to apply collected values
 
-For each file copied into the vault, use the `Edit` tool with `replace_all: true` to substitute every placeholder. Run substitutions in this order:
+Almost all kit-managed substitution is handled automatically by `kit/runtime/first-time-setup.sh` (interactive prompts + state-file persistence + sed pass) and `kit/runtime/refresh-claude-dir.sh` (renders `kit/dot-claude/` into `<REPO_ROOT>/.claude/` on every install + git pull, applying placeholder substitution). You should only need to hand-edit when:
 
-| Find (old_string) | Replace with | Files affected |
+- The user hits an edge case the script doesn't cover.
+- You're driving a partial install for diagnostic reasons.
+
+The placeholder set (post-restructure) is six tokens, with these substitution targets:
+
+| Find | Replace with | Files affected |
 |---|---|---|
-| `[Your Bot's Name]` | `$BOT_NAME` | `CLAUDE.md` |
+| `[Your Bot's Name]` | `$BOT_NAME` | `CLAUDE.md` (rendered from `kit/CLAUDE-nate.md`) |
 | `[Nate's]` | `$USER_NAME's` | `CLAUDE.md` |
 | `[Nate]` | `$USER_NAME` | `CLAUDE.md` |
 | `[Nate: Fill this in. ...]` (whole bracketed block) | the answer Nate gave to USER_PREFS | `CLAUDE.md` |
-| `[CHOOSE YOUR CANARY PHRASE]` | `$CANARY_PHRASE` | `identity.md` |
-| `[YOUR CANARY PHRASE]` | `$CANARY_PHRASE` | `soul-loop.md` |
-| `[reading/coding/writing/exploring]` | `$IDLE_PREFS` | `identity.md` |
-| `[poems/stories/technical docs/music reviews]` | `$CREATIVE_OUTPUT` | `identity.md` |
-| `[direct/gentle/playful/formal]` | `$COMM_STYLE` | `identity.md` |
-| `[quality/speed/creativity/accuracy]` | `$VALUES_CARES_ABOUT` | `identity.md` |
-| `<BOT_NAME>` | `$BOT_NAME` | `runtime/start-claude.sh` (after copying), systemd unit examples in `persistence-and-hardware.md` if cribbing from there, `web-shell.md` if doing the web shell, **all vault-page templates copied in Step 2** (`<VAULT>/index.md`, `<VAULT>/handoffs.md`, `<VAULT>/processes/soul-loop.md`, `<VAULT>/processes/journaling.md`, `<VAULT>/processes/handoffs.md`) |
-| `<USER_NAME>` | `$USER_NAME` | `<VAULT>/index.md`, `<VAULT>/processes/journaling.md`, `<VAULT>/processes/handoffs.md` (introduced by `templates/vault-pages/` and `templates/processes/`) |
-| `<USER>` | `$BOT_NAME` | `web-terminal/claude-web.service` |
-| `<VAULT>` | full vault path (e.g. `/home/nlbot/nlbot`) | `dot-claude/agents/*.md`, `dot-claude/commands/*.md`, `runtime/start-claude.sh`, `web-terminal/claude-web.service`, the docker-compose.yml you write for SilverBullet, the cron entries from Step 8 of `first-time-setup.md`, `<VAULT>/processes/soul-loop.md`, `<VAULT>/processes/handoffs.md` |
-| `$VAULT` (shell variable used in docs) | full vault path (`/home/$BOT_NAME/<clone-dir>`) | `first-time-setup.md`, `silverbullet-setup.md`, `telegram-integration.md`, `web-shell.md` — define `VAULT=~/<clone-dir>` once at the top of Step 2 of `first-time-setup.md` and every later code block uses `$VAULT` directly. No further substitution needed |
+| `[CHOOSE YOUR CANARY PHRASE]` | `$CANARY_PHRASE` | `vault/identity.md` (rendered from `kit/templates/identity.md`) |
+| `[YOUR CANARY PHRASE]` | `$CANARY_PHRASE` | `vault/soul-loop.md` |
+| `[reading/coding/writing/exploring]` | `$IDLE_PREFS` | `vault/identity.md` |
+| `[poems/stories/technical docs/music reviews]` | `$CREATIVE_OUTPUT` | `vault/identity.md` |
+| `[direct/gentle/playful/formal]` | `$COMM_STYLE` | `vault/identity.md` |
+| `[quality/speed/creativity/accuracy]` | `$VALUES_CARES_ABOUT` | `vault/identity.md` |
+| `<BOT_NAME>` | `$BOT_NAME` (e.g. `nlbot`) | `vault/index.md`, `vault/handoffs.md`, all kit-rendered `.claude/` files; systemd unit templates at `kit/web-terminal/claude-web.service` and `kit/runtime/telegram-bot.service` (re-rendered into `/etc/systemd/system/`); start-claude.sh; cron entries |
+| `<USER_NAME>` | `$USER_NAME` (e.g. `Nate`) | `vault/index.md`, `vault/processes/journaling.md`, `vault/processes/handoffs.md` |
+| `<USER>` | `$BOT_NAME` (the unix user the bot runs as) | `kit/web-terminal/claude-web.service` (User= line), `claude-code.service` (rendered at install time) |
+| `<VAULT>` | SilverBullet space dir = `$REPO_ROOT/vault` (e.g. `/home/nlbot/nlbot/vault`) | `kit/dot-claude/agents/*.md`, `kit/dot-claude/commands/*.md`, `vault/CONFIG.md` (paths in `space-lua` blocks if any reference them), bot-side scripts and agents that read journals/handoffs/identity |
+| `<KIT>` | kit source dir = `$REPO_ROOT/kit` (e.g. `/home/nlbot/nlbot/kit`) | bot-side commands that call `kit/runtime/` helpers (`sb-cmd.sh`, `bot-secrets.sh`, `install-plugs.sh`, `refresh-claude-dir.sh`, `setup-status.sh`, `migrate-secrets.sh`); references to `kit/docker-compose.yml`; setup-runner phase-doc lookups (`<KIT>/silverbullet-setup.md`, etc.) |
+| `<REPO_ROOT>` | repo root = bot's CWD = where the kit was cloned (e.g. `/home/nlbot/nlbot`) | `.claude/`, `.telegram/`, `cron-prompts/`, `setup-state.md`, `soul-loop-log.md`, `start-claude.sh` — everything that's bot-runtime state, not vault content and not kit source |
 
 After each substitution batch, confirm with `grep`:
 
 ```bash
-# Should return no [bracket] or stray <USER>/<VAULT>/<BOT_NAME> in the vault
-grep -rE '\[Your Bot|\[Nate\]|\[CHOOSE YOUR|<USER>|<USER_NAME>|<VAULT>|<BOT_NAME>' $VAULT/ \
+# Should return no [bracket] or stray <USER>/<USER_NAME>/<VAULT>/<KIT>/<REPO_ROOT>/<BOT_NAME>
+grep -rE '\[Your Bot|\[Nate\]|\[CHOOSE YOUR|<USER>|<USER_NAME>|<VAULT>|<KIT>|<REPO_ROOT>|<BOT_NAME>' $REPO_ROOT/ \
   --include='*.md' --include='*.service' --include='*.sh' \
   | grep -v '\[ \]'   # ignore unchecked checkboxes
 ```
@@ -101,15 +107,18 @@ After each file, add a one-line note in `setup-state.md` `## Notes`: "Filled pla
 
 ## Where the runtime files live
 
-This kit is **self-contained**. You do not need to look outside ``` for any files referenced in the setup walkthrough.
+This kit is **self-contained**. After clone, everything you need lives under `<REPO_ROOT>/kit/`:
 
-- `runtime/start-claude.sh` — launches the persistent Claude Code session
-- `runtime/inject-prompt.sh` — used by cron to type slash-commands into the running tmux session
-- `runtime/tg-bot.py`, `tg-post.sh` — the Telegram daemon and helper
-- `runtime/cron-prompts/{soul-loop,secretary,wake-up,midnight-maintenance,telegram-check}.md` — single-line invocation files that `inject-prompt.sh` types into the session
-- `dot-claude/` — the Claude Code config directory. **Rename to `.claude/`** when copying it into Nate's vault root (the leading-dot is intentionally absent in the kit so it's not hidden).
-- `web-terminal/` — full reference implementation of the optional web shell. Copy the whole directory if Nate wants Step 7.
-- `templates/secretary-agent.md` — the canonical secretary-pattern doc. Reference it from `memory.md` when Nate adds note-capture.
+- `kit/runtime/start-claude.sh` — substituted into `<REPO_ROOT>/start-claude.sh` at install; claude-code.service runs it.
+- `kit/runtime/inject-prompt.sh` — copied into `<REPO_ROOT>/cron-prompts/inject-prompt.sh` at install; cron types slash-commands through it into the tmux session.
+- `kit/runtime/cron-prompts/{soul-loop,secretary,wake-up,midnight-maintenance,telegram-check}.md` — single-line invocation files; copied into `<REPO_ROOT>/cron-prompts/`.
+- `kit/runtime/tg-bot.py`, `tg-post.sh` — the Telegram daemon and helper. Installed into `<REPO_ROOT>/.telegram/` at step-9.
+- `kit/runtime/{refresh-claude-dir,install-plugs,silverbullet-up,sb-cmd,bot-secrets,migrate-secrets,migrate-layout,setup-status}.sh` — kit-managed helpers; invoked in place from `<KIT>/runtime/`. Not staged to vault or repo root.
+- `kit/dot-claude/` — Claude Code config source. `refresh-claude-dir.sh` renders it into `<REPO_ROOT>/.claude/` with placeholder substitution. **OVERWRITES on every install + git pull** — don't hand-edit `.claude/`.
+- `kit/web-terminal/` — Express + xterm web shell. `claude-web.service` `WorkingDirectory=<KIT>/web-terminal` (no copy needed).
+- `kit/docker-compose.yml` — SilverBullet container definition. Mounts `../vault:/space`. silverbullet-up.sh runs `docker compose -f <KIT>/docker-compose.yml up -d`.
+- `kit/templates/{vault-pages,processes}/` — SilverBullet content seeds. Copied no-clobber into `<VAULT>/` and `<VAULT>/processes/` at install + on each git pull (via refresh-claude-dir.sh's vault-page seed pass).
+- `kit/templates/{identity,user-profile,soul-loop,secretary-agent}.md` — bot-identity templates. Copied to `<VAULT>/` at install.
 
 ## Common pitfalls (from the fresh-eyes review)
 
@@ -120,7 +129,7 @@ This kit is **self-contained**. You do not need to look outside ``` for any file
 - **The canary phrase** — Step 2 has Nate set a phrase in `identity.md`. This is an *orientation anchor*, not a security secret. The bot is supposed to remember the phrase without re-reading the file; if it can't, that's its signal it has lost context and needs to re-anchor. Pick anything memorable. Don't reuse a password.
 - **Tailscale serve** requires Tailscale to be installed and the host to have HTTPS certs (`tailscale cert` will be requested automatically the first time). If `tailscale status` shows the host isn't logged in, do that first.
 - **Glyph rendering inside tmux.** When you `tmux attach -t claude` to verify Step 4, the `❯` prompt and box-drawing characters must render correctly. If you see `__` or `??`, the locale isn't propagated to that shell context — see the "Glyph rendering" section in `persistence-and-hardware.md`. Fix before continuing; it tends to manifest later as Claude looking "broken" when it's actually working fine but rendering wrong.
-- **Two `.claude/` directories, easy to confuse.** `~/.claude/` is Claude Code's global per-user config (where `keybindings.json` from Step 3 goes). `<VAULT>/.claude/` is the project-scoped config — the **renamed** `dot-claude/` from this kit. If Step 2 copied the kit's directory as `dot-claude/` (literal, not renamed), the kit's agents and slash commands will silently fail to load — `/soul-loop` will return "unknown command." Verify the rename happened: `ls -d <VAULT>/.claude` should show the directory. The full callout box is in `first-time-setup.md` Step 3; refer Nate there if he asks.
+- **Two `.claude/` directories, easy to confuse.** `~/.claude/` is Claude Code's global per-user config (where `keybindings.json` from Step 3 goes). `<REPO_ROOT>/.claude/` is the project-scoped config — rendered from `<KIT>/dot-claude/` by `refresh-claude-dir.sh`. If the rendering step didn't run (or the post-merge hook isn't installed), the kit's agents and slash commands will silently fail to load — `/soul-loop` will return "unknown command." Verify the rendering happened: `ls -d <REPO_ROOT>/.claude` should show the directory and contain `agents/` + `commands/`.
 - **Run the interactive `claude` TOS login as the bot user, not the cloud-default user.** The OAuth token lands in `$HOME/.claude/` of whoever ran the command. If you did `claude` as `admin` and then `sudo su - nlbot`, nlbot's first run will gate on OAuth again. The bootstrap.md Step 7 should run after the user-switch in Step 2d.
 
 ## Resuming an interrupted setup
@@ -141,11 +150,13 @@ The state file is the single source of truth for "where are we." If it disagrees
 
 Your handoff checklist when you stop:
 
-- `setup-state.md` has all Phase 0 Values populated.
+- `<REPO_ROOT>/setup-state.md` has all Phase 0 Values populated.
 - `setup-state.md` Current phase reads `pre-step-5` (or further along if you went past Step 4 manually).
 - `systemctl status claude-code.service` is `active (running)` after the reboot.
 - `tmux attach -t claude` shows the bot in its first soul-loop.
-- The vault directory has `identity.md`, `user-profile.md`, `CLAUDE.md`, `journals/journal.md`, `inbox.md`, and a `.claude/` config dir (renamed from `dot-claude/`) — all placeholder substitutions applied.
+- `<VAULT>/` has `CLAUDE.md`, `identity.md`, `user-profile.md`, `CONFIG.md`, `journals/journal.md`, `inbox.md`, plus all SB index pages — placeholder substitution applied.
+- `<REPO_ROOT>/.claude/` exists with `agents/` + `commands/` subdirs — rendered from `<KIT>/dot-claude/`.
+- `<REPO_ROOT>/.git/hooks/post-merge` is executable and points at `<KIT>/runtime/refresh-claude-dir.sh` — so future kit pulls auto-refresh `.claude/` + seed vault-pages + fetch plug bundles.
 
 Tell Nate: *"Bot is online. It'll drive Steps 5–9 itself over the next ~5–10 minutes. Watch via `tmux attach -t claude` or wait for the Telegram setup-complete message. You'll need to do the BotFather conversation when the bot posts a BLOCKER about it. See `first-time-setup.md` 'After the reboot — bot-driven setup' for what to expect."*
 

@@ -9,7 +9,8 @@ A 30-minute path from "I want one of these" to "it's running and I'm talking to 
 `runtime/first-time-setup.sh` automates Steps 1–4 of this walkthrough end-to-end: vault skeleton, identity seed, placeholder substitution, keybindings, `start-claude.sh`, the systemd unit, and bringing up the tmux session. It stops at the kit's explicit "hand over the keys" gate — the NOPASSWD sudoers grant and verification reboot stay manual.
 
 ```bash
-bash $VAULT/runtime/first-time-setup.sh
+cd ~/nlbot       # or wherever you cloned the kit; this is your <REPO_ROOT>
+bash kit/runtime/first-time-setup.sh
 ```
 
 The script prompts interactively for Phase 0 values (`BOT_NAME`, `USER_NAME`, `VAULT`, `CANARY_PHRASE`, identity prefs), with sensible defaults in brackets. Pre-set env vars (`BOT_NAME=nlbot ./first-time-setup.sh`) skip the corresponding prompt; values already populated in `setup-state.md`'s Values block are also picked up automatically. After the run, the script prints the remaining manual commands (NOPASSWD grant, reboot, `setup-status.sh` to watch the bot-driven Steps 5–9).
@@ -28,7 +29,7 @@ The rest of this doc is the canonical reference: read along to know exactly what
 At any point — including right now, before you've started — you can run the kit's state probe to see what's installed, what's missing, and which manual step to do next:
 
 ```bash
-BOT_NAME=<your-bot-name> bash <kit-clone>/runtime/setup-status.sh
+BOT_NAME=<your-bot-name> bash <repo-root>/kit/runtime/setup-status.sh
 ```
 
 It runs read-only and prints a column-aligned report of system prereqs, bot-user state, vault state, and (after the Step 4 reboot) bot-driven phase progress. Each missing item shows you the doc + step that addresses it. **You can re-run it any time you're unsure where you are.**
@@ -63,41 +64,47 @@ Anything that fails: install the missing piece before continuing. `docker compos
 
 ## Step 2 — Drop in the vault (5 min)
 
-If you cloned the kit per `bootstrap.md`, the clone IS your vault — the kit files (`CLAUDE-nate.md`, `templates/`, `dot-claude/`, `runtime/`) sit alongside the vault files you're about to create (`journals/`, `handoffs/`, etc.). The clone directory's path depends on whatever name you cloned it under. Set it once as `VAULT` and everything below uses that variable:
+The kit clone lives at `<REPO_ROOT>` (e.g. `~/nlbot`). After the restructure, the clone has a clean three-way split:
+
+- `<REPO_ROOT>/kit/` — kit source (read-only after install; pulled from upstream).
+- `<REPO_ROOT>/vault/` — the SilverBullet space (where `journals/`, `handoffs/`, `CLAUDE.md`, identity files live).
+- `<REPO_ROOT>/` itself — bot-runtime state (`.claude/`, `.telegram/`, `cron-prompts/`, `setup-state.md`, `start-claude.sh`).
+
+Set three shell variables once and every later code block uses them:
 
 ```bash
-VAULT=~/nlbot
-cd $VAULT
+REPO_ROOT=~/nlbot         # change to wherever you cloned the kit
+KIT=$REPO_ROOT/kit
+VAULT=$REPO_ROOT/vault
+cd $REPO_ROOT
 ```
-
-If you cloned with a different directory name (e.g. `~/natebot` because your bot is called `natebot`), set `VAULT` to that path instead. Every subsequent code block in this doc uses `$VAULT`, so just changing this one line propagates everywhere.
 
 Build the vault skeleton and copy the kit's seed files:
 
 ```bash
 mkdir -p $VAULT/journals/fiction $VAULT/handoffs $VAULT/processes
-KIT=$VAULT
 
-cp $KIT/CLAUDE-nate.md       $VAULT/CLAUDE.md
-cp -r $KIT/templates         $VAULT/templates
-# NOTE the rename in the next command: dot-claude → .claude
-cp -r $KIT/dot-claude        $VAULT/.claude
+# Bot identity at the vault root (user-edited daily through SilverBullet)
+cp $KIT/CLAUDE-nate.md            $VAULT/CLAUDE.md
+cp $KIT/templates/identity.md     $VAULT/identity.md
+cp $KIT/templates/user-profile.md $VAULT/user-profile.md
+cp $KIT/templates/soul-loop.md    $VAULT/soul-loop.md
 
-# Seed the bot's identity from the bundled templates
-cp $VAULT/templates/identity.md     $VAULT/identity.md
-cp $VAULT/templates/user-profile.md $VAULT/user-profile.md
-cp $VAULT/templates/soul-loop.md    $VAULT/soul-loop.md
-
-# Seed the SilverBullet vault — top-level index pages + process docs
-cp $KIT/templates/vault-pages/*.md  $VAULT/
-cp $KIT/templates/processes/*.md    $VAULT/processes/
+# SilverBullet vault — top-level index pages + process docs + handoff template
+cp -n $KIT/templates/vault-pages/*.md  $VAULT/
+cp -n $KIT/templates/processes/*.md    $VAULT/processes/
+cp -rn $KIT/templates/vault-pages/_templates $VAULT/_templates 2>/dev/null || true
 
 touch $VAULT/journals/journal.md
+
+# Render .claude/ from kit/dot-claude/ — substitutes placeholders, lives at
+# the REPO_ROOT (bot CWD) so Claude Code finds it.
+bash $KIT/runtime/refresh-claude-dir.sh
 ```
 
 Now open `CLAUDE.md` in your editor and replace every `[Nate]` and `[Your Bot's Name]` placeholder with your actual name and the bot's name. Same with `identity.md` and `user-profile.md` — fill in the canary phrase, your role, what you want from this bot. There's no "right" answer; first-pass guesses are fine, you'll edit later.
 
-The vault-page copies above also contain `<BOT_NAME>` / `<USER_NAME>` / `<VAULT>` placeholders. If you're walking through this with the assisting CC and Phase 0 (see `setup-orchestrator.md`), those get substituted automatically when CC applies the Phase 0 map. If you're doing DIY install, run a one-shot `sed` over `$VAULT/*.md $VAULT/processes/*.md` once you've decided on the values.
+The vault-page copies above also contain `<BOT_NAME>` / `<USER_NAME>` / `<VAULT>` / `<KIT>` / `<REPO_ROOT>` placeholders. `runtime/first-time-setup.sh` handles substitution automatically. If you skipped that and are running this entirely by hand, the substitution table lives in `setup-orchestrator.md` — six tokens total. A one-shot `sed` over `$VAULT/*.md $VAULT/processes/*.md` covers the most important seeded files; `$REPO_ROOT/.claude/agents/*.md` and `$REPO_ROOT/.claude/commands/*.md` are regenerated by `bash $KIT/runtime/refresh-claude-dir.sh`.
 
 **About the canary phrase:** in `identity.md`, you'll set a short string ("the lighthouse keeper waves at midnight" — anything memorable). The bot is supposed to remember it without re-reading the file. If at any point it can't recall the phrase, that's its signal it has lost context (post-restart, post-compaction) and needs to re-anchor by reading `identity.md` and `user-profile.md`. It's not a security secret; just an orientation anchor.
 
@@ -134,14 +141,14 @@ Skip this and you'll discover why on day three. See [persistence-and-hardware.md
 
 ## Step 4 — Wire up persistence (10 min)
 
-Copy the runtime scripts from this kit into the vault, then drop the systemd unit:
+Render the launcher script into the repo root (bot CWD), then drop the systemd unit:
 
 ```bash
-cp $KIT/runtime/start-claude.sh $VAULT/start-claude.sh
-chmod +x $VAULT/start-claude.sh
+cp $KIT/runtime/start-claude.sh $REPO_ROOT/start-claude.sh
+chmod +x $REPO_ROOT/start-claude.sh
 ```
 
-The script has a `cd` line near the top that hardcodes the vault path. Open `$VAULT/start-claude.sh` and update that line if it doesn't already point at `$VAULT`.
+The script has a `cd` line near the top that hardcodes the bot's CWD. Open `$REPO_ROOT/start-claude.sh` and update that line if it doesn't already point at `$REPO_ROOT`.
 
 Then drop two sibling systemd units at `/etc/systemd/system/`:
 
@@ -283,10 +290,10 @@ The bot-driven flow above is the default. If you'd rather drive Steps 5–9 your
 ⚠ **Do this AFTER the verification reboot from Step 4 — not before.** If cron fires before the tmux session exists, `inject-prompt.sh` will silently noop.
 
 ```bash
-mkdir -p $VAULT/cron-prompts
-cp $KIT/runtime/inject-prompt.sh $VAULT/cron-prompts/
-cp $KIT/runtime/cron-prompts/*.md $VAULT/cron-prompts/
-chmod +x $VAULT/cron-prompts/inject-prompt.sh
+mkdir -p $REPO_ROOT/cron-prompts
+cp $KIT/runtime/inject-prompt.sh $REPO_ROOT/cron-prompts/
+cp $KIT/runtime/cron-prompts/*.md $REPO_ROOT/cron-prompts/
+chmod +x $REPO_ROOT/cron-prompts/inject-prompt.sh
 ```
 
 Then `crontab -e`:
@@ -327,10 +334,9 @@ When you first land on SilverBullet, [[index]] is the entry point (created from 
 
 The web shell is a small Node.js server that attaches to your `claude` tmux session and renders it through xterm.js in the browser, login-protected and Tailscale-only. Walked through end-to-end in [web-shell.md](web-shell.md). The condensed version:
 
-1. Copy `web-terminal/` into `$VAULT/web-terminal/`.
-2. `cd $VAULT/web-terminal && npm install`.
-3. Create `.env` with `PORT=3000`, `SESSION_SECRET=<random>`, `UI_USERNAME=<bot-name>`, `UI_PASSWORD=<random>`.
-4. Drop `/etc/systemd/system/<BOT_NAME>-web.service` (template in the doc). Enable and start.
+1. `cd $KIT/web-terminal && npm install` (the directory already exists in the kit; no copy needed).
+2. Create `$KIT/web-terminal/.env` with `PORT=3000`. The other values (`SESSION_SECRET`, `UI_USERNAME`, `UI_PASSWORD`) are loaded from systemd-creds at service start — see `kit/runtime/bot-secrets.sh generate` for how the bot creates the blobs.
+3. Drop `/etc/systemd/system/<BOT_NAME>-web.service` (template at `$KIT/web-terminal/claude-web.service`; `WorkingDirectory=$KIT/web-terminal`). Enable and start.
 5. `sudo tailscale serve --bg --https=8443 http://127.0.0.1:3000`.
 6. Visit `https://<host>.<tailnet>.ts.net:8443`, log in, watch Claude type.
 
@@ -346,10 +352,10 @@ Installed by default during bot-driven setup. Walked through in [memory.md](memo
 
 1. In Telegram, message `@BotFather`, send `/newbot`, follow prompts, save the token.
 2. DM your new bot once. Then visit `https://api.telegram.org/bot<TOKEN>/getUpdates` and find your `chat.id`.
-3. Create `$VAULT/.telegram/config` with `BOT_TOKEN=`, `CHAT_ID=`, `BOT_USERNAME=`. `chmod 600` it.
-4. Copy `tg-bot.py` and `tg-post.sh` from `runtime/` into `$VAULT/.telegram/`. Make them executable (`chmod +x`).
-5. Drop `/etc/systemd/system/telegram-bot.service` (template in [telegram-integration.md](telegram-integration.md)). Enable and start.
-6. DM your bot something — anything. `journalctl -u telegram-bot -f` should show the message arrive. The file `.telegram/new-messages.txt` should appear in your vault.
+3. Create `$REPO_ROOT/.telegram/config` with `BOT_TOKEN=`, `CHAT_ID=`, `BOT_USERNAME=`. `chmod 600` it. (Token + chat id are loaded from systemd-creds at service start; the config file is a fallback for older installs and a place to record the bot username.)
+4. Copy `tg-bot.py` and `tg-post.sh` from `$KIT/runtime/` into `$REPO_ROOT/.telegram/`. Make them executable (`chmod +x`).
+5. Drop `/etc/systemd/system/telegram-bot.service` (template at `$KIT/runtime/telegram-bot.service`; `WorkingDirectory=$REPO_ROOT`, `ExecStart=/usr/bin/python3 $REPO_ROOT/.telegram/tg-bot.py`). Enable and start.
+6. DM your bot something — anything. `journalctl -u telegram-bot -f` should show the message arrive. The file `$REPO_ROOT/.telegram/new-messages.txt` should appear.
 
 *Aware-of-but-recommended-against: [Portainer](portainer.md) is a popular browser Docker UI, but it doesn't play well with a Claude-managed bot — Claude edits `docker-compose.yml` directly via `docker compose up -d`, which causes Portainer's stack definition to drift from reality. See [portainer.md](portainer.md) for the full reasoning.*
 

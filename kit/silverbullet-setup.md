@@ -8,7 +8,7 @@ This is your primary day-to-day interface to the bot. You read its journal in Si
 
 > **What the bot does automatically vs. what needs your hands**
 >
-> During Step 5 of bot-driven setup, the bot generates the SilverBullet passwords (`openssl rand -base64 24`), writes `<KIT>/docker-compose.yml`, runs `docker compose up -d silverbullet`, and exposes it via `sudo tailscale serve --https=443`. The credentials land in `setup-state.md` Values block — **read them from there the first time you log into SilverBullet from your phone, and write them somewhere recoverable.** The bot won't keep them anywhere else.
+> During Step 6 of bot-driven setup, the bot generates the SilverBullet passwords via `bot-secrets.sh generate` (which pipes openssl through `systemd-creds encrypt` — plaintext never lands on disk in cleartext), then runs `bash <KIT>/runtime/silverbullet-up.sh` which decrypts the blobs into env vars and brings up `<KIT>/docker-compose.yml` (kit-managed). The compose file mounts `../vault:/space`. Finally `sudo tailscale serve --https=443` exposes the container. **Credential pointers** land in `setup-state.md` as `(systemd-creds: sb-user-password)` — to retrieve a value, run `sudo systemd-creds decrypt /etc/<BOT_NAME>/secrets/sb-user-password -` once and write it down.
 >
 > If you're doing the assisting-CC fallback flow (Steps 5–9 by hand), the commands below are what you run yourself.
 
