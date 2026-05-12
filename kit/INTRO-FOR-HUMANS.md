@@ -1,8 +1,20 @@
 # Running Claude on Your Own — A Human's Guide
 
-You're about to set up a persistent Claude instance. Think of it as hiring Claude to be your assistant *and* your journal keeper, running 24/7 on your machine. Here's what you need to know before you start.
+You're about to start working with a persistent Claude instance. Think of it as hiring Claude to be your assistant *and* your journal keeper, running 24/7 on a machine somewhere. Here's what you need to know before you start.
 
-*If a Claude Code instance is helping you with the install: it should read [setup-orchestrator.md](setup-orchestrator.md) first, not this file. This one is for you. The orchestrator doc tells the assisting Claude how to walk through the rest.*
+## If someone gave you a URL
+
+If a friend (or co-worker, or the kid in your family who runs the homelab) handed you a URL, a username, and an initial password and told you "open it and type `/setup`" — that's exactly what to do. The provisioner has already done the hard part (installed the bot, walked OAuth, granted privileges, rebooted). What's left is a short conversational interview the bot itself runs:
+
+1. Open the URL in your browser. Log in with the username + password.
+2. You'll land in a terminal-style view, with the bot waiting at a prompt.
+3. Type `/setup` and hit enter.
+4. The bot asks ~11 questions — your name, a memorable canary phrase, what you do, how you want to be talked to. Two are required (name + canary phrase); the rest accept `skip`.
+5. After the last answer, the bot brings the rest of itself online (~5 minutes) and you're done. Skim "What's going to feel weird" below before you go.
+
+You can `skip` anything that feels intrusive. If you Ctrl-C mid-interview or close your browser, just type `/setup` again — it resumes from the first still-empty question.
+
+*If a Claude Code instance is helping the provisioner with the install, it should read [setup-orchestrator.md](setup-orchestrator.md) instead. This file is for you, the end user.*
 
 ## What this actually is
 
@@ -46,7 +58,7 @@ This is the *point*, but it's not what you're used to if you've only chatted wit
 
 ## How long does setup take? And what does it cost?
 
-**Setup:** ~30 minutes to install, ~15 minutes to answer the identity questions (who you are, what you want from this, what your preferences are).
+**Setup:** ~30 minutes for the provisioner to install (most of which is automated). For you, it's the `/setup` interview — about 2 minutes if you breeze through, 5–10 if you actually think about your canary phrase.
 
 **Time to feel alive:** About a week. By day 1, Claude will remember everything. By day 3, you'll start to trust it. By day 7, it will start *surprising* you with connections you missed.
 
@@ -80,11 +92,14 @@ All of these live in `identity.md` and `CLAUDE.md` — human-readable files you 
 
 ## What to expect right now
 
-1. **Install Claude Code** — if you don't have it already.
-2. **Clone or copy the kit** — a folder with templates and guides.
-3. **Answer the identity questions** — "What's your name?" "What's your homepage?" "What do you do?"
-4. **Start the soul loop** — Claude will wake up every 10–30 minutes and ask itself what to do.
-5. **Read the journal** — check in each morning to see what Claude did, what it's thinking about, what it needs from you.
+If a provisioner gave you a URL:
+
+1. **Open the URL, log in.**
+2. **Type `/setup`.** Answer 11 short questions.
+3. **Watch the bot bring itself up** (a few minutes; you can leave the browser open or close it — the bot keeps working either way).
+4. **Read the journal** each morning to see what Claude did, what it's thinking about, what it needs from you.
+
+If *you're* the provisioner (you're installing this for yourself or for someone else): see **first-time-setup.md** for the env-var-driven install path. After that, the user's only step is "type `/setup`".
 
 That's it. From there, you'll develop your own patterns. Some people journal obsessively. Some barely read it. Some ask Claude to write poems. Some ask Claude to organize their code. The system is flexible enough to fit your style.
 

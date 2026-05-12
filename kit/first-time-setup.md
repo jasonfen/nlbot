@@ -1,25 +1,41 @@
 # First-time setup walkthrough
 
-A 30-minute path from "I want one of these" to "it's running and I'm talking to it." Read [INTRO-FOR-HUMANS.md](INTRO-FOR-HUMANS.md) first if you haven't — it explains *why* this is a thing. This doc is the *how*.
+A 30-minute path from "I want one of these" to "the box is running and ready to hand over." Read [INTRO-FOR-HUMANS.md](INTRO-FOR-HUMANS.md) first if you haven't — it explains *why* this is a thing. This doc is the *how*.
 
-*If a Claude Code instance is helping you with the install, it should read [setup-orchestrator.md](setup-orchestrator.md) first. That doc tells the assisting Claude how to walk through this one with you and track progress in `setup-state.md` so an interrupted setup can resume cleanly.*
+**Audience:** the *provisioner* — the technical person standing the box up. The end user (call them Nate) doesn't see this doc; they receive a URL and a one-line instruction ("open it, log in, type `/setup`") and the bot walks them through the rest of identity setup conversationally inside the web shell.
 
-## TL;DR — run the script
+*If a Claude Code instance is helping you with the install, it should read [setup-orchestrator.md](setup-orchestrator.md) first. That doc covers the assisting-CC flow as a fallback to the env-var-driven path described here.*
 
-`runtime/first-time-setup.sh` automates Steps 1–4 of this walkthrough end-to-end: vault skeleton, identity seed, placeholder substitution, keybindings, `start-claude.sh`, the systemd unit, and bringing up the tmux session. It stops at the kit's explicit "hand over the keys" gate — the NOPASSWD sudoers grant and verification reboot stay manual.
+## TL;DR — run the script with env vars, then hand over
+
+`runtime/first-time-setup.sh` automates Steps 1–4 end-to-end: vault skeleton, identity seed, placeholder substitution, keybindings, `start-claude.sh`, the systemd unit, the parallel `<BOT_NAME>-shell.service`, and bringing up both tmux sessions. It stops at the kit's explicit "hand over the keys" gate — the OAuth walk, NOPASSWD sudoers grant, and verification reboot stay with the provisioner. After reboot, *Nate's only step* is to open the web shell URL and type `/setup`.
 
 ```bash
 cd ~/nlbot       # or wherever you cloned the kit; this is your <REPO_ROOT>
-bash kit/runtime/first-time-setup.sh
+BOT_NAME=nlbot BOT_PASSWORD=Welcome2026 bash kit/runtime/first-time-setup.sh --non-interactive
 ```
 
-The script prompts interactively for Phase 0 values (`BOT_NAME`, `USER_NAME`, `VAULT`, `CANARY_PHRASE`, identity prefs), with sensible defaults in brackets. Pre-set env vars (`BOT_NAME=nlbot ./first-time-setup.sh`) skip the corresponding prompt; values already populated in `setup-state.md`'s Values block are also picked up automatically.
+That two-env-var invocation is the canonical happy path. The script no longer prompts for `USER_NAME`, `CANARY_PHRASE`, hobbies, communication style, or any of the eight personality values — those get collected by the bot during Nate's `/setup` interview after he logs in. The bash phase only collects what's truly load-bearing for getting the box up to the point where Nate can connect:
 
-**Phase 0.5 — bot service passwords** runs right after Phase 0. The script asks for `PASSWORD_MODE` (`unified` for one password across SilverBullet + web shell, or `separate` for one prompt per service; default `unified`), then prompts for the value(s) with no-echo + confirm. The typed plaintext flows through `bot-secrets.sh store-interactive` → `systemd-creds encrypt` and lands as an encrypted blob at `/etc/<BOT_NAME>/secrets/<name>` — never on disk in cleartext. Unattended provisioning: pre-set `BOT_PASSWORD=…` and the prompt is skipped. Non-TTY without that env var = hard fail (the script refuses to silently auto-generate an unreadable password).
+- **`BOT_NAME`** — required; unix user, systemd `User=`, secrets dir at `/etc/<BOT_NAME>/secrets/`, vault dirname.
+- **`VAULT`** — defaults to `$REPO_ROOT/vault`; rarely overridden.
+- **`BOT_PASSWORD`** — required at Phase 0.5 (or supply via env). Stored as a systemd-creds blob at `/etc/<BOT_NAME>/secrets/{sb-user-password,web-ui-password}` (one shared blob if `PASSWORD_MODE=unified`, the default; two separate blobs if `separate`). Plaintext never lands on disk.
+
+Everything else gets a default in `setup-state.md`'s Values block (`USER_NAME=`, `CANARY_PHRASE=`, the eight personality values, `TELEGRAM_ENABLED=` all blank). The seeded vault files keep their bracket placeholders (`[Nate]`, `[CHOOSE YOUR CANARY PHRASE]`) visible — they read as legible template prose pre-interview, and `/setup` re-substitutes them with Nate's real answers when he runs it.
+
+### `--non-interactive` mode
+
+With the flag set, the script fails fast (with a clear error) if any required value is unset. Without it, the script falls back to `read -rp` for `BOT_NAME` and `VAULT` (handy if you're driving the install at a console). `BOT_PASSWORD` always either reads from env or prompts no-echo + confirm at the terminal; non-TTY without `BOT_PASSWORD` is a hard fail — the script refuses to silently auto-generate an unreadable password.
+
+The `--reinstall-services-only` flag is unchanged: it re-renders the two systemd units from their templates and is the way to apply unit-template fixes from `git pull` without re-running the whole bootstrap.
+
+### `HANDOFF-TO-NATE.txt`
+
+End of run, the script writes `<REPO_ROOT>/HANDOFF-TO-NATE.txt` (mode 600) containing the web shell URL, login username, initial password hint, and the single instruction for Nate (`Open <URL>, log in, then type /setup`). The script also prints a banner reminding you to `shred -u HANDOFF-TO-NATE.txt` after Nate has read it. The file exists so you have a clean text artifact to send Nate over whatever channel you trust; the banner exists so you don't forget to wipe it.
+
+### Linux login password opt-in
 
 After Phase 0.5 the script offers an optional `[y/N]` to also set the Linux user's `/etc/shadow` login password via `chpasswd`; default `N` keeps the box SSH-key-only, which is the recommended posture for a tailnet-only LXC.
-
-After the run, the script prints the remaining manual commands (NOPASSWD grant, reboot, `setup-status.sh` to watch the bot-driven Steps 5–9).
 
 The rest of this doc is the canonical reference: read along to know exactly what the script is doing, or use the prose blocks to do any step by hand.
 
@@ -225,11 +241,26 @@ systemctl status claude-code.service     # active (running)
 tmux attach -t claude                    # back in the session
 ```
 
-## After the reboot — bot-driven setup (Steps 5–9)
+## After the reboot — hand the URL to Nate
 
-After the Step 4 verification reboot, `claude-code.service` brings the bot online and the bot itself drives the rest of setup. The kit's `setup-runner` subagent reads `setup-state.md` Current phase on every soul-loop, executes the next phase, advances state, and posts progress to the journal. You can watch via `tmux attach -t claude` (and later via Telegram, once Step 6 finishes).
+At this point the box is running. `claude-code.service` is up, the tmux `claude` session has the bot at its prompt, and `<BOT_NAME>-shell.service` is hosting the web-shell-accessible bash session. `Current phase: phase-0-interview-pending` — the soul-loop will fire on its 10-minute cadence but `setup-runner` short-circuits with `interview pending — user must type /setup` and does nothing else until Nate connects.
 
-**Total elapsed:** ~5–10 minutes until you get a "Setup complete" Telegram message.
+**What you do:** read `HANDOFF-TO-NATE.txt`, copy its contents over whatever channel you trust (email, SMS, in-person), then `shred -u HANDOFF-TO-NATE.txt` once Nate confirms receipt.
+
+**What Nate does:**
+
+1. Opens the web shell URL in his browser.
+2. Logs in with the username + initial password from the handoff.
+3. Lands in the tmux `claude` pane, sees the bot's prompt.
+4. Types `/setup`.
+
+The bot's `/setup` slash command runs a short conversational interview (USER_NAME, CANARY_PHRASE, 8 optional personality values, TELEGRAM opt-in). Each answer persists to `setup-state.md` immediately, so Nate can Ctrl-C / close his browser / lose the network mid-interview and resume from the first still-empty question on his next `/setup`. After the last answer, `/setup` re-substitutes the seeded vault files with Nate's real values, advances the phase to `phase-0-interview-complete`, and falls through to the bot-driven Step 5–9 walk.
+
+### What the bot drives after the interview
+
+`setup-runner` reads `setup-state.md` Current phase on every soul-loop, executes the next phase, advances state, and posts progress to the journal. Nate can watch via the web shell (or, after Step 7 finishes, via Telegram — only if he opted in at the interview's last question).
+
+**Total elapsed from Nate's first `/setup`:** ~5–10 minutes, or longer if he opted in to Telegram (the BotFather BLOCKER pauses there).
 
 ### What the bot does
 

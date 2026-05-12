@@ -1,5 +1,16 @@
 # Setup Orchestrator — instructions for the assisting Claude Code instance
 
+> **Heads-up:** the kit's recommended install path is now env-var-driven:
+> `BOT_NAME=… BOT_PASSWORD=… bash kit/runtime/first-time-setup.sh --non-interactive`,
+> followed by Nate's `/setup` interview inside the bot's web shell. That flow
+> doesn't need an assisting Claude Code instance at all — Nate's identity
+> answers are collected by the bot itself after reboot.
+>
+> This doc is the **fallback path**: a provisioner who'd rather drive the
+> install conversationally (or whose `--non-interactive` run hit an edge
+> case) can spin up a second Claude Code instance and walk this doc with
+> Nate. See [first-time-setup.md](first-time-setup.md) for the env-var path.
+
 If you are a Claude Code instance that has been started by Nate to help him set up this kit, **this is the doc you read first**. The other docs target Nate (the human); this one targets you.
 
 ## Who you are
@@ -152,15 +163,15 @@ The state file is the single source of truth for "where are we." If it disagrees
 
 Your handoff checklist when you stop:
 
-- `<REPO_ROOT>/setup-state.md` has all Phase 0 Values populated.
-- `setup-state.md` Current phase reads `pre-step-5` (or further along if you went past Step 4 manually).
+- `<REPO_ROOT>/setup-state.md` has the required Phase 0 Values populated (`BOT_NAME`, `VAULT`, `OS_USER`). The personality values (`USER_NAME`, `CANARY_PHRASE`, `IDLE_PREFS`, etc.) may be left blank — they're collected by the bot's own `/setup` interview after reboot.
+- `setup-state.md` Current phase reads `phase-0-interview-pending` (or further along if you collected the personality values too and let Nate skip the interview). The legacy seed value `pre-step-5` is treated as an alias of `phase-0-interview-pending` for older state files.
 - `systemctl status claude-code.service` is `active (running)` after the reboot.
 - `tmux attach -t claude` shows the bot in its first soul-loop.
 - `<VAULT>/` has `CLAUDE.md`, `identity.md`, `user-profile.md`, `CONFIG.md`, `journals/journal.md`, `inbox.md`, plus all SB index pages — placeholder substitution applied.
 - `<REPO_ROOT>/.claude/` exists with `agents/` + `commands/` subdirs — rendered from `<KIT>/dot-claude/`.
 - `<REPO_ROOT>/.git/hooks/post-merge` is executable and points at `<KIT>/runtime/refresh-claude-dir.sh` — so future kit pulls auto-refresh `.claude/` + seed vault-pages + fetch plug bundles.
 
-Tell Nate: *"Bot is online. It'll drive Steps 5–9 itself over the next ~5–10 minutes. Watch via `tmux attach -t claude` or wait for the Telegram setup-complete message. You'll need to do the BotFather conversation when the bot posts a BLOCKER about it. See `first-time-setup.md` 'After the reboot — bot-driven setup' for what to expect."*
+Tell Nate: *"Bot is online and waiting for you. Open the web shell URL, log in, then type `/setup` at the prompt. The bot will run a short interview (your name, a canary phrase, a few preferences), then bring the rest of itself up over ~5–10 minutes. If you opted in to Telegram during the interview, you'll need to do the BotFather conversation when the bot posts a BLOCKER about it. See `first-time-setup.md` 'After the reboot — hand the URL to Nate' for what to expect."*
 
 Then `exit` the assisting-CC session.
 
@@ -177,7 +188,7 @@ If `setup-state.md` doesn't exist yet, create it with this content:
 
 Started: <YYYY-MM-DD HH:MM>
 Last updated: <YYYY-MM-DD HH:MM>
-Current phase: pre-step-5
+Current phase: phase-0-interview-pending
 
 ## Values
 
