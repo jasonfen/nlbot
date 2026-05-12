@@ -1,21 +1,20 @@
 #!/usr/bin/env bash
-# Re-sync <VAULT>/.claude/ from the kit's dot-claude/ source.
+# Re-sync kit-managed files into the vault. Runs from the git post-merge
+# hook so kit pulls propagate without manual reseeds.
 #
-# The vault is the kit clone. After `git pull` brings in new
-# dot-claude/{agents,commands}/*.md, this script:
+# Two phases, with different ownership models:
 #
-#   1. Reads Phase-0 substitution values (BOT_NAME, USER_NAME, VAULT,
-#      OS_USER) from <VAULT>/setup-state.md.
-#   2. Walks <VAULT>/dot-claude/, applies substitution, writes to
-#      <VAULT>/.claude/ at the same relative path.
-#   3. Reports how many files changed.
+#   1. <VAULT>/.claude/ — kit-owned, OVERWRITES on every run. Source is
+#      <VAULT>/dot-claude/, substituted for Phase-0 placeholders.
+#      Local edits are blown away; fork the kit if you need to override.
 #
-# Idempotent — re-running produces the same output unless dot-claude/
-# changed (compares with cmp before overwriting).
+#   2. Vault-page seeds — user-owned, NO-CLOBBER. New files from
+#      templates/vault-pages/ (CONFIG.md, _templates/handoff.md, etc.)
+#      get seeded if absent; existing files at the vault root are left
+#      alone so user edits survive.
 #
-# .claude/ is bot-owned. Don't hand-edit; the post-merge hook will
-# overwrite local edits on every `git pull`. If you need to override
-# kit behavior, fork the kit and edit dot-claude/ at the source.
+# Phase-0 substitution values (BOT_NAME, USER_NAME, VAULT, OS_USER) come
+# from <VAULT>/setup-state.md's Values block.
 
 set -euo pipefail
 
@@ -91,3 +90,60 @@ while IFS= read -r -d '' src; do
 done < <(find "$SRC" -type f -print0)
 
 echo "refresh-claude-dir: $changed/$total file(s) updated in $DST"
+
+# Seed any vault-page templates that the kit ships but this vault doesn't
+# have yet. Unlike .claude/ (kit-owned, overwriting), vault-page files at
+# the root are USER-OWNED after first install — they hand-edit them. So
+# we only ADD missing files; never clobber existing ones.
+#
+# This covers the gap where the kit gains a new vault-page (e.g. CONFIG.md
+# in d04074c, _templates/handoff.md in the same commit). Existing installs
+# pull the new files into templates/vault-pages/ but Step 2's one-shot
+# `cp -n` never re-fires, so the new templates sit unused. Without this
+# block, every kit-added vault-page requires a manual reseed instruction.
+PAGES_SRC="$VAULT/templates/vault-pages"
+if [ -d "$PAGES_SRC" ]; then
+  seeded_pages=0
+  for src in "$PAGES_SRC"/*.md; do
+    [ -f "$src" ] || continue
+    base=$(basename "$src")
+    dst="$VAULT/$base"
+    if [ ! -f "$dst" ]; then
+      sed \
+        -e "s|<BOT_NAME>|$BOT_NAME|g" \
+        -e "s|<USER_NAME>|$USER_NAME|g" \
+        -e "s|<VAULT>|$VAULT|g" \
+        -e "s|<USER>|$OS_USER|g" \
+        "$src" > "$dst"
+      seeded_pages=$((seeded_pages + 1))
+      echo "  seeded $base (was missing)"
+    fi
+  done
+
+  # _templates/ — the SilverBullet page-template directory. Same no-clobber
+  # contract: add the whole tree if the vault has no _templates yet; add
+  # individual files if the directory exists but specific templates are
+  # missing.
+  if [ -d "$PAGES_SRC/_templates" ]; then
+    seeded_tpls=0
+    for src in "$PAGES_SRC/_templates"/*.md; do
+      [ -f "$src" ] || continue
+      base=$(basename "$src")
+      dst="$VAULT/_templates/$base"
+      mkdir -p "$VAULT/_templates"
+      if [ ! -f "$dst" ]; then
+        sed \
+          -e "s|<BOT_NAME>|$BOT_NAME|g" \
+          -e "s|<USER_NAME>|$USER_NAME|g" \
+          -e "s|<VAULT>|$VAULT|g" \
+          -e "s|<USER>|$OS_USER|g" \
+          "$src" > "$dst"
+        seeded_tpls=$((seeded_tpls + 1))
+        echo "  seeded _templates/$base (was missing)"
+      fi
+    done
+    echo "refresh-claude-dir: $seeded_pages new vault-page(s), $seeded_tpls new template(s) seeded"
+  else
+    echo "refresh-claude-dir: $seeded_pages new vault-page(s) seeded"
+  fi
+fi
