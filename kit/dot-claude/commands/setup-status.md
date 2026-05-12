@@ -10,7 +10,7 @@ Useful when:
 Run it:
 
 ```bash
-"$VAULT"/runtime/setup-status.sh
+<KIT>/runtime/setup-status.sh
 ```
 
 The script prints a column-aligned table of prereqs + phase probes, then a `=== Recommendation ===` block:
