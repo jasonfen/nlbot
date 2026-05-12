@@ -788,6 +788,10 @@ $BOT_NAME ALL=(ALL) NOPASSWD: /usr/bin/mktemp
 $BOT_NAME ALL=(ALL) NOPASSWD: /usr/bin/rm
 $BOT_NAME ALL=(ALL) NOPASSWD: /usr/bin/test
 $BOT_NAME ALL=(ALL) NOPASSWD: /usr/bin/ls
+# Reboot (Step 4 final action — operator runs \`sudo reboot\` to validate
+# the unit comes back clean; works even on SSH-key-only accounts with
+# no /etc/shadow password)
+$BOT_NAME ALL=(ALL) NOPASSWD: /usr/sbin/reboot
 EOS
         sudo chmod 440 /etc/sudoers.d/$BOT_NAME
         sudo visudo -cf /etc/sudoers.d/$BOT_NAME
