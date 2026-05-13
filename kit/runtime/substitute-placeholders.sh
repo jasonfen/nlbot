@@ -69,6 +69,19 @@ substitute_placeholders() {
   # is set. This is what lets the bash bootstrap leave intentional gaps
   # for the /setup interview to fill in later; the seeded identity.md
   # reads as legible "[Nate]" prose to a human browsing pre-interview.
+  #
+  # F40 (2026-05-13): an optional question the user typed `skip` on is
+  # stored as the literal string `(skipped)` in setup-state.md (so re-runs
+  # do not re-ask the same question — the empty-vs-non-empty check in
+  # /setup's interview probe treats anything non-blank as already answered).
+  # But naively substituting `(skipped)` into identity.md produced ugly
+  # prose like "I write (skipped) when I have something to say". Treat
+  # `(skipped)` as a skip-substitution sentinel below; the bracket
+  # placeholder stays visible and Nate can fill it in later via
+  # SilverBullet if he changes his mind.
+  _skip_sentinel() {
+    [ "${1:-}" = "(skipped)" ]
+  }
   local -a cmd=(sed -i)
 
   # Always-run substitutions — these are required values written by the
@@ -78,29 +91,30 @@ substitute_placeholders() {
   cmd+=(-e "s|<USER>|${BOT_NAME:-}|g")
   cmd+=(-e "s|\[Your Bot's Name\]|${BOT_NAME:-}|g")
 
-  # Optional substitutions — only added to argv when the var is set.
-  if [ -n "${USER_NAME:-}" ]; then
+  # Optional substitutions — only added to argv when the var is set
+  # AND not the `(skipped)` sentinel from the /setup interview.
+  if [ -n "${USER_NAME:-}" ] && ! _skip_sentinel "${USER_NAME:-}"; then
     cmd+=(-e "s|\[Nate's\]|${USER_NAME}'s|g")
     cmd+=(-e "s|\[Nate\]|${USER_NAME}|g")
     cmd+=(-e "s|<USER_NAME>|${USER_NAME}|g")
   fi
-  if [ -n "${CANARY_PHRASE:-}" ]; then
+  if [ -n "${CANARY_PHRASE:-}" ] && ! _skip_sentinel "${CANARY_PHRASE:-}"; then
     cmd+=(-e "s|\[CHOOSE YOUR CANARY PHRASE\]|${CANARY_PHRASE}|g")
     cmd+=(-e "s|\[YOUR CANARY PHRASE\]|${CANARY_PHRASE}|g")
   fi
-  if [ -n "${USER_PREFS:-}" ]; then
+  if [ -n "${USER_PREFS:-}" ] && ! _skip_sentinel "${USER_PREFS:-}"; then
     cmd+=(-e "s|\[Nate: Fill this in\. What are your non-negotiable preferences?\]|${USER_PREFS}|g")
   fi
-  if [ -n "${IDLE_PREFS:-}" ]; then
+  if [ -n "${IDLE_PREFS:-}" ] && ! _skip_sentinel "${IDLE_PREFS:-}"; then
     cmd+=(-e "s|\[reading/coding/writing/exploring\]|${IDLE_PREFS}|g")
   fi
-  if [ -n "${CREATIVE_OUTPUT:-}" ]; then
+  if [ -n "${CREATIVE_OUTPUT:-}" ] && ! _skip_sentinel "${CREATIVE_OUTPUT:-}"; then
     cmd+=(-e "s|\[poems/stories/technical docs/music reviews\]|${CREATIVE_OUTPUT}|g")
   fi
-  if [ -n "${COMM_STYLE:-}" ]; then
+  if [ -n "${COMM_STYLE:-}" ] && ! _skip_sentinel "${COMM_STYLE:-}"; then
     cmd+=(-e "s|\[direct/gentle/playful/formal\]|${COMM_STYLE}|g")
   fi
-  if [ -n "${VALUES_CARES_ABOUT:-}" ]; then
+  if [ -n "${VALUES_CARES_ABOUT:-}" ] && ! _skip_sentinel "${VALUES_CARES_ABOUT:-}"; then
     cmd+=(-e "s|\[quality/speed/creativity/accuracy\]|${VALUES_CARES_ABOUT}|g")
   fi
 
