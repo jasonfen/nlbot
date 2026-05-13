@@ -52,7 +52,7 @@ substitute_placeholders() {
   local var current state_val
   for var in BOT_NAME USER_NAME VAULT CANARY_PHRASE \
              IDLE_PREFS CREATIVE_OUTPUT COMM_STYLE VALUES_CARES_ABOUT \
-             USER_ROLE USER_HOBBIES USER_HOURS USER_PREFS; do
+             USER_ROLE USER_HOBBIES USER_HOURS USER_PREFS TIMEZONE; do
     current=$(eval echo "\${$var:-}")
     if [ -z "$current" ]; then
       state_val=$(_state_read "$var")
@@ -61,6 +61,20 @@ substitute_placeholders() {
       fi
     fi
   done
+
+  # F46 (2026-05-13): TIMEZONE auto-detected from the machine if env and
+  # state-file both empty. The kit's user-profile.md template includes
+  # `<TIMEZONE>` so it gets populated without a /setup interview question.
+  # Order of fallbacks mirrors common Linux setups: timedatectl on systemd
+  # boxes, /etc/timezone on Debian-style, readlink on the symlink the
+  # tzdata package writes. Default UTC if all three miss.
+  if [ -z "${TIMEZONE:-}" ]; then
+    TIMEZONE=$(timedatectl show -p Timezone --value 2>/dev/null \
+            || cat /etc/timezone 2>/dev/null \
+            || readlink /etc/localtime 2>/dev/null | sed 's|.*/zoneinfo/||' \
+            || echo UTC)
+    : "${TIMEZONE:=UTC}"
+  fi
 
   # Build the sed argv dynamically. A placeholder that maps to an unset
   # var is SKIPPED entirely rather than replaced with an empty string —
@@ -116,6 +130,23 @@ substitute_placeholders() {
   fi
   if [ -n "${VALUES_CARES_ABOUT:-}" ] && ! _skip_sentinel "${VALUES_CARES_ABOUT:-}"; then
     cmd+=(-e "s|\[quality/speed/creativity/accuracy\]|${VALUES_CARES_ABOUT}|g")
+  fi
+  # F46: angle-bracket tokens used by the rewritten user-profile.md template.
+  # Always-substituted when set (skip-aware so the token stays legible if
+  # the user typed `skip` during the /setup interview). TIMEZONE has no
+  # skip path — it is auto-detected from the machine and effectively never
+  # empty unless detection breaks entirely.
+  if [ -n "${USER_ROLE:-}" ] && ! _skip_sentinel "${USER_ROLE:-}"; then
+    cmd+=(-e "s|<USER_ROLE>|${USER_ROLE}|g")
+  fi
+  if [ -n "${USER_HOBBIES:-}" ] && ! _skip_sentinel "${USER_HOBBIES:-}"; then
+    cmd+=(-e "s|<USER_HOBBIES>|${USER_HOBBIES}|g")
+  fi
+  if [ -n "${USER_HOURS:-}" ] && ! _skip_sentinel "${USER_HOURS:-}"; then
+    cmd+=(-e "s|<USER_HOURS>|${USER_HOURS}|g")
+  fi
+  if [ -n "${TIMEZONE:-}" ]; then
+    cmd+=(-e "s|<TIMEZONE>|${TIMEZONE}|g")
   fi
 
   "${cmd[@]}" "$file"
