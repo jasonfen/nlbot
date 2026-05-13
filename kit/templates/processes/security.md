@@ -35,6 +35,22 @@ These are non-negotiable when you're the bot:
 
 5. **`runtime/bot-secrets.sh` is the only tool you call.** It exposes `generate`, `store`, `list`, `verify`, and `path` subcommands. There is **no `get`** by design — the script will refuse to print a plaintext value. If a workflow seems to require `bot-secrets get`, you've misread the architecture.
 
+## SilverBullet HTTP API — bot does not call it
+
+SilverBullet ships an HTTP API at `/.fs/<path>`, `/.shell`, `/.proxy/<host>/...`, `/.runtime/lua`, `/.ping`, `/.config`, authenticated by `Authorization: Bearer ${SB_AUTH_TOKEN}`. The token sits encrypted at `/etc/<BOT_NAME>/secrets/sb-auth-token`, consumed only by `silverbullet-up.sh` when bringing up the container.
+
+**The bot does NOT call this API in v1.** Vault CRUD goes through the filesystem — `cat`, `>`, the normal Read/Write/Edit tool surface. SilverBullet's index pass picks up disk changes within seconds. Every workflow the bot actually runs against its own vault is filesystem-mediated; the HTTP API exists for browser clients and remote tooling, not for the bot.
+
+**Hand-rolled wrappers are forbidden.** Any pattern that decrypts `sb-auth-token` into a shell variable, env var, or `curl -H "Authorization: Bearer ..."` argv string leaks the bearer via `/proc/<pid>/environ` (for env) or `/proc/<pid>/cmdline` (for argv), readable by any process in the same uid until the call returns. This weakens the doctrine without buying anything the filesystem doesn't already give us.
+
+**The future-approved shape is the broker pattern.** When a concrete bot-as-client use case lands (sandboxed sub-agent without filesystem access, remote integration in a different container), build a kit-managed daemon that holds the bearer via `LoadCredentialEncrypted=` and exposes a unix socket at `/run/<BOT_NAME>/sb-broker.sock` (mode 660, group `<BOT_NAME>`). The bot becomes a socket client; the token stays in the broker process. This matches the rule-(4) shape: token held by one service, bot is queue/socket client. Until that use case arrives, the broker isn't built — speculation is not justification.
+
+**Note on `runtime/sb-cmd.sh`.** The kit ships a runtime wrapper at `<KIT>/runtime/sb-cmd.sh` that invokes SilverBullet's `POST /.runtime/lua` endpoint. It pre-dates this doctrine and currently uses the hand-rolled-wrapper pattern (decrypts the token, places it in a `curl -H` header). It is **operator-tier** — for ad-hoc programmatic SB command invocation from a human terminal session — and **not** for agent-side use. The bot's runtime should not invoke `sb-cmd.sh` from agent code. Future kit versions will either deprecate `sb-cmd.sh` or replace it with a broker-pattern equivalent.
+
+### Footnote: the limit of rule (4)
+
+Rule (4) ("if you need to use a credential, you don't — a service does") was written with always-on daemons in mind (Telegram bot, web shell, the SB container itself). It does not have a clean answer for **the bot needing to act as a client** to one of those services — there is no equivalent queue pattern for HTTP-API consumption. The broker pattern above is the resolution: keep the token contained to one service, make the bot a socket client, preserve rule (4)'s invariant ("the only process that should ever see a plaintext token is the daemon that needs it") without forcing the bot into the daemon role.
+
 ## Setting a new secret (setup-runner phases)
 
 For credentials the bot generates (random tokens, passwords, session secrets):
