@@ -1,5 +1,15 @@
 # <BOT_NAME>
 
+> **👋 First thing to do:** open [[user-profile]] and flesh out the sections
+> `/setup` left as prose-with-examples — Technical level, Things that work
+> well, Things that annoy you, What you use Claude for, Busy periods, and
+> Preferences. The more your bot knows about how you actually work, the
+> faster the soul loop converges on useful idle output instead of generic
+> first-week guesses. **5 minutes here saves a lot of "the bot keeps doing
+> X when I'd prefer Y" friction later.** You can keep editing these
+> sections in SilverBullet anytime — the bot re-reads `user-profile.md` on
+> every wake-up.
+
 ## Journal & history
 - [[journals/journal]] — running narrative (today's entries, before nightly compaction)
 - [[journals]] — folder index of every daily file. Scroll back through what the bot's been doing day by day.
