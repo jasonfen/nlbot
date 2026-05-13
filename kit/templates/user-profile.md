@@ -40,11 +40,10 @@ about something other than work.)*
 
 ## Preferences
 
-[Nate: Fill this in. What are your non-negotiable preferences?]
-
-*(Examples of what tends to live here: "I hate emoji unless I use them
-first", "always ask before destructive changes", "no markdown headers in
-chat replies — just paragraphs".)*
+*(Add your non-negotiable rules here as you notice them. Examples of
+what tends to live in this section: "I hate emoji unless I use them
+first", "always ask before destructive changes", "no markdown headers
+in chat replies — just paragraphs".)*
 
 ---
 
