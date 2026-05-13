@@ -541,7 +541,7 @@ touch "$VAULT/journals/journal.md"
 # slash-command invocations the cron fires + the inject script. They're
 # kit-managed source at $KIT/runtime/cron-prompts/ but the runtime copies
 # live at $REPO_ROOT/cron-prompts/ so the bot can write state files
-# (.soul-loop-last-action, job-log.md) next to them.
+# (.soul-loop-last-action, .secretary-last-hash) next to them. job-log.md lives in the vault root so SilverBullet indexes it.
 mkdir -p "$REPO_ROOT/cron-prompts"
 cp -n "$KIT/runtime/cron-prompts/"*.md "$REPO_ROOT/cron-prompts/" 2>/dev/null || true
 [ -f "$REPO_ROOT/cron-prompts/inject-prompt.sh" ] || \

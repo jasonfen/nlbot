@@ -4,7 +4,7 @@ Spawn the `wake-up-runner` sub-agent (Agent tool, `subagent_type: "wake-up-runne
 
 After the agent returns, log the result + `total_tokens` from the agent's usage block:
 ```bash
-echo "| $(date '+%Y-%m-%d %H:%M') | wake-up | <total_tokens> | <agent return value> |" >> <REPO_ROOT>/cron-prompts/job-log.md
+echo "| $(date '+%Y-%m-%d %H:%M') | wake-up | <total_tokens> | <agent return value> |" >> <VAULT>/job-log.md
 ```
 
 Display ONLY the agent's one-line return value.

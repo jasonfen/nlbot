@@ -127,7 +127,7 @@ So in this human-driven path, dispatch setup-runner in a loop:
 
 1. Spawn the `setup-runner` sub-agent (Agent tool, `subagent_type:
    "setup-runner"`) with the prompt below.
-2. Log the agent's `total_tokens` + return value to `cron-prompts/job-log.md`.
+2. Log the agent's `total_tokens` + return value to `job-log.md`.
 3. Re-read `Current phase` from `<REPO_ROOT>/setup-state.md`.
 4. If the new phase is `done`, OR ends in `-blocker`, OR is the same
    as the phase before the dispatch (the agent made no progress —
@@ -147,7 +147,7 @@ Dispatch prompt:
 Log line format (same as before):
 
 ```bash
-echo "| $(date '+%Y-%m-%d %H:%M') | setup | <total_tokens> | <agent return value> |" >> <REPO_ROOT>/cron-prompts/job-log.md 2>/dev/null || true
+echo "| $(date '+%Y-%m-%d %H:%M') | setup | <total_tokens> | <agent return value> |" >> <VAULT>/job-log.md 2>/dev/null || true
 ```
 
 After the loop exits, display the chain of one-line return values from
