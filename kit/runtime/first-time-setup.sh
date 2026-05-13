@@ -839,6 +839,31 @@ fi
 # older state files still walk cleanly).
 banner "Step 5: web shell"
 
+# F43 (2026-05-13): pre-accept the bypass-permissions disclaimer so Nate
+# does not see it on first connect. Claude Code reads
+# `~/.claude/settings.json` and skips the disclaimer when
+# `skipDangerousModePermissionPrompt: true`. (The companion
+# "trust this folder" prompt is NOT pre-acceptable yet — no
+# trustedDirectories key exists in Claude Code as of this commit;
+# upstream feature request #12737. HANDOFF prose still mentions
+# trust + theme + login as one-time prompts.) Merge with any
+# existing settings.json rather than clobber.
+mkdir -p "$HOME/.claude"
+if [ -f "$HOME/.claude/settings.json" ] && command -v jq >/dev/null 2>&1; then
+  tmp=$(mktemp)
+  jq '. + { "skipDangerousModePermissionPrompt": true }' \
+    "$HOME/.claude/settings.json" > "$tmp" \
+    && mv "$tmp" "$HOME/.claude/settings.json" \
+    || rm -f "$tmp"
+else
+  cat > "$HOME/.claude/settings.json" <<'JSON'
+{
+  "skipDangerousModePermissionPrompt": true
+}
+JSON
+fi
+echo "  Pre-accepted bypass-permissions disclaimer in ~/.claude/settings.json"
+
 # Machine-only secret. Stored as a systemd-creds blob; the operator never
 # sees the plaintext. web-ui-username + web-ui-password were already
 # handled by Phase 0.5.
@@ -1015,36 +1040,33 @@ if command -v jq >/dev/null 2>&1; then
 fi
 INITIAL_PASSWORD_HINT="${BOT_PASSWORD:-(the password you typed during Phase 0.5 — check your scrollback or your password manager)}"
 WEB_URL="${TAILNET_HOST:+https://${TAILNET_HOST}:8443/}"
-SHELL_URL="${TAILNET_HOST:+https://${TAILNET_HOST}:8443/?session=shell}"
 
 # Compute whether OAuth has been walked on the provisioner side. When it has,
-# the claude session in the web shell is already usable and Nate jumps
-# straight to /setup. When it hasn't, Nate walks OAuth via the bash session
-# first (F42 zero-SSH flow), then switches to the claude session.
+# the claude session is already usable and Nate jumps straight to /setup.
+# When it has not (F42 zero-SSH flow — the default), Nate walks a few
+# one-time prompts (theme picker, trust folder, OAuth URL paste, bypass-
+# permissions disclaimer) directly in the claude session on first connect.
+# The pre-F42-doc HANDOFF prose told Nate to route OAuth through the bash
+# `?session=shell` session, which doubled up on theme + trust prompts and
+# added a back-and-forth between two sessions for no real gain (Jason
+# validated as Nate on fenbot03 walk 2026-05-13 — the default claude
+# session walks cleanly to /setup without the shell detour).
 if [ -f "$HOME/.claude/.credentials.json" ]; then
   OAUTH_BLOCK=""
 else
   OAUTH_BLOCK="
 
-Step 0 — OAuth (only the first time, then never again):
+First connect — you will see a few one-time prompts:
 
-  The bot's Claude Code needs to log in before it can talk to you. Walk
-  this once and you are done forever:
+  1. Theme picker (color scheme for the terminal). Pick any, hit Enter.
+  2. Trust this folder? Answer 'Yes, I trust this folder'.
+  3. Login. Claude Code prints a URL. Open it in a new browser tab,
+     sign in with your Anthropic account, accept the TOS, and the page
+     will show a code. Paste the code back into the web shell terminal.
 
-  1. From the web shell login screen, click 'shell' (or open
-     ${SHELL_URL:-<URL>?session=shell}).
-  2. At the bash prompt, type:
-
-       claude
-
-     Claude Code will print a URL. Open it in a new browser tab. Sign in
-     with your Anthropic account, accept the TOS. The page will show a
-     code. Paste that code back into the web shell terminal.
-  3. Once Claude Code says 'Welcome', type 'exit' to return to bash, then
-     close the shell tab.
-
-  Now the bot's persistent session has live credentials. Switch to the
-  default ('claude') view and continue below.
+  (The bypass-permissions disclaimer is pre-accepted for you; you will
+  not see it.) After those three, the prompt is ready and you can
+  continue below.
 "
 fi
 
