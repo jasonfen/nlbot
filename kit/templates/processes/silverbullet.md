@@ -11,17 +11,36 @@ How <BOT_NAME> interacts with its vault editor. The short version: through the f
 
 ## How the bot reads and writes
 
-**Through the filesystem.** Always. The vault is a directory of `.md` files; SilverBullet is one of several processes that read and write to it (the bot is another). Use the normal `Read`, `Write`, `Edit` tool surface — no SilverBullet-specific machinery needed.
+Two supported channels. Use the one that fits the task.
+
+**Channel 1 — filesystem (the default).** The vault is a directory of `.md` files; SilverBullet is one process reading/writing them, the bot is another. For everyday vault churn (journal entries, inbox checkboxes, handoff replies, decisions logs), use the normal `Read`, `Write`, `Edit` tool surface directly on disk.
 
 ```bash
-# Bot reading a vault page
-cat <VAULT>/journals/journal.md
-
-# Bot writing a vault page
-echo "..." >> <VAULT>/journals/journal.md
+cat <VAULT>/journals/journal.md            # read
+echo "..." >> <VAULT>/journals/journal.md  # append
 ```
 
-SilverBullet's **index pass** picks up disk changes within seconds. There is no `notify`, no `reload`, no API call required — write the file, wait a beat, the page renders. Concurrent edits between the bot and a human browser session are atomic at the OS write level; SilverBullet's last-write-wins for the rendered view, but the canonical state is always the file on disk.
+SilverBullet's **index pass** picks up disk changes within seconds. Write the file, wait a beat, the page renders. Concurrent edits between the bot and a human browser session are atomic at the OS write level; SB's last-write-wins for the rendered view, but the canonical state is always the file on disk.
+
+**Channel 2 — SB's HTTP API (when filesystem isn't enough).** When the task benefits from going *through SilverBullet* rather than past it, use the kit-shipped wrappers in `<KIT>/runtime/`:
+
+| Wrapper | Wraps | Use it for |
+|---|---|---|
+| `sb-cmd.sh` | `POST /.runtime/lua` | Invoke SB commands (`Plugs: Update`, `Page: From Template`); run arbitrary space-lua expressions for things SB knows how to do that bash doesn't. |
+| `sb-fs.sh` | `GET/PUT/DELETE /.fs/<path>`, `LIST /.fs/` | Read/write/delete pages through SB's view (post-index, post-transforms); list the indexed page set; force-roundtrip a write so SB has it before the next read. |
+| `sb-config.sh` | `GET /.config`, `PUT /.fs/CONFIG.md` | Inspect merged runtime config (with layered overrides applied); round-trip `CONFIG.md` edits through SB so they take effect immediately. |
+
+```bash
+bash <KIT>/runtime/sb-cmd.sh "Plugs: Update"
+bash <KIT>/runtime/sb-cmd.sh --lua 'editor.getCurrentPage()'
+bash <KIT>/runtime/sb-fs.sh GET journals/journal.md
+echo '# Note' | bash <KIT>/runtime/sb-fs.sh PUT inbox.md
+bash <KIT>/runtime/sb-config.sh get indexInterval
+```
+
+All three handle auth the same way: decrypt `sb-auth-token` from systemd-creds at call time, pass it as `Authorization: Bearer` on the curl request, exit when done. The bearer never lives outside the per-call shell process; `processes/security.md` § *SilverBullet HTTP API — supported pattern* explains the threat-model boundary (single-tenant + Tailscale-isolated tailnet = bounded `/proc/<pid>/cmdline` exposure).
+
+**`sb-cmd.sh` requires the `-runtime-api` container variant** (`ghcr.io/silverbulletmd/silverbullet:latest-runtime-api`, ~766MB, includes Chromium). The base `:latest` image (~64MB) doesn't expose `/.runtime/lua`. See `<KIT>/silverbullet-setup.md` for the trade-off and how to flip the docker-compose image. `sb-fs.sh` and `sb-config.sh` work against either image variant.
 
 ## Conventions the bot relies on
 
@@ -44,21 +63,29 @@ SilverBullet's **index pass** picks up disk changes within seconds. There is no 
 | `<VAULT>/processes/*.md` | Canonical lifecycle docs (this one, soul-loop, journaling, handoffs, security). |
 | `<VAULT>/_templates/*.md` | SB page templates. |
 
-## The HTTP API — the bot does NOT call it
+## When to use which channel
 
-SilverBullet exposes an HTTP API at `/.fs/<path>`, `/.shell`, `/.proxy/<host>/...`, `/.runtime/lua`, `/.ping`, `/.config`, authenticated by `Authorization: Bearer ${SB_AUTH_TOKEN}`. **This is not the bot's interface.** The bot reads and writes the vault through the filesystem, period.
+The two channels (filesystem vs. HTTP API) aren't strict alternatives — both produce the same vault state — but each has ergonomic strengths. Rough guide:
 
-The doctrinal reasoning lives in `[[processes/security]]` — short version: any pattern that decrypts `sb-auth-token` and places the bearer in a `curl -H` header leaks via `/proc/<pid>/cmdline`, weakening the rule that the only process which sees a plaintext token is the daemon that needs it. When a real bot-as-client use case lands (sandboxed sub-agent without filesystem access, remote integration), the future-approved shape is a kit-managed unix-socket broker — not a hand-rolled wrapper. See `[[processes/security]]` § *SilverBullet HTTP API*.
+| Task | Channel | Why |
+|---|---|---|
+| Append a journal entry | filesystem | One open-append-close; SB indexes within seconds. |
+| Write inbox checkbox + immediately query whether SB sees it | `sb-fs.sh PUT` then `sb-cmd.sh --lua` | Round-trip through SB, no race against the index pass. |
+| Invoke a SB command (`Plugs: Update`, `Page: From Template`) | `sb-cmd.sh` | The command is SB-side; there's no filesystem-equivalent. |
+| Run a complex page-level query (backlinks, tag filter) | `sb-cmd.sh --lua` | Space-lua has direct access to SB's index; doing it from the bash side means re-indexing the world. |
+| Read a page in the form SB actually serves (template-expanded, post-transform) | `sb-fs.sh GET` | Filesystem gives raw bytes; SB gives the rendered/transformed version. |
+| Inspect or edit merged config | `sb-config.sh get` / `edit` | `CONFIG.md` on disk shows declared config; SB's merged view reflects layered overrides. |
+| Bulk-edit thirty files at once | filesystem | One `sed -i` is faster than thirty PUTs. |
+
+When in doubt: filesystem is faster and cheaper; the API is more *correct* (reflects SB's view rather than raw disk).
 
 ## Other clients
 
-The HTTP API exists and is correct for clients that are *not* the bot:
+The HTTP API surface is shared with non-bot consumers:
 
-- **Browser.** The web UI authenticates with `SB_USER` (basic auth) and uses the API internally.
-- **Sync clients.** Other SilverBullet instances syncing with this one use `SB_AUTH_TOKEN`.
-- **Future broker.** When/if a kit-managed broker is built, it loads `sb-auth-token` via `LoadCredentialEncrypted=` and proxies bot-side socket requests to the SB HTTP API. The bot is the socket client; the token stays in the broker.
-
-For ad-hoc operator use (a human at a terminal, *not* the bot's agent code), the kit ships `<KIT>/runtime/sb-cmd.sh` — a wrapper around `POST /.runtime/lua`. It is **operator-tier**, flagged for deprecation or broker-wrap in a future kit revision. The bot's agent code does not invoke `sb-cmd.sh`. See `[[processes/security]]` § *Note on `runtime/sb-cmd.sh`* for context.
+- **Browser.** The web UI authenticates with `SB_USER` (basic auth) and uses the same API surface internally.
+- **Sync clients.** Other SilverBullet instances syncing with this one authenticate via `SB_AUTH_TOKEN`.
+- **Future broker (conditional).** If the kit is ever adapted for multi-tenant boxes or non-tailnet deployments, the wrappers should move behind a kit-managed broker daemon (loads `sb-auth-token` via `LoadCredentialEncrypted=`, exposes a unix socket, so the bearer never enters argv). Not needed for this kit's target deployments — see `[[processes/security]]` § *Threat-model boundary*.
 
 ## Plug management
 
