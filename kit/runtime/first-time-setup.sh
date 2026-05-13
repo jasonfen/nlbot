@@ -657,6 +657,24 @@ fi
 # --- Step 3: disable runaway keybindings ------------------------------------
 
 banner "Step 3 — Disable session-killing keybindings"
+
+# Install ~/.tmux.conf if the user doesn't already have one. cp -n skips
+# when present so an operator's customizations are preserved. Substitutes
+# <BOT_NAME> in the status bar so the session is identifiable at a glance.
+# Without this, mouse scroll doesn't work in the web shell — the wheel
+# scrolls the host terminal's buffer instead of tmux's pane, leaving the
+# bot's output unscrollable (fenbot00 2026-05-13).
+if [ ! -f "$HOME/.tmux.conf" ]; then
+  sed "s|<BOT_NAME>|$BOT_NAME|g" "$KIT/runtime/tmux.conf" > "$HOME/.tmux.conf"
+  echo "  installed: $HOME/.tmux.conf (mouse on, set-clipboard on, status bar)"
+  # Reload tmux if a claude session is already running.
+  if tmux has-session -t claude 2>/dev/null; then
+    tmux source-file "$HOME/.tmux.conf" 2>/dev/null || true
+  fi
+else
+  echo "  skipped: $HOME/.tmux.conf already exists (preserving operator customizations)"
+fi
+
 mkdir -p "$HOME/.claude"
 KB="$HOME/.claude/keybindings.json"
 # Claude Code 2.1.139's parser wants:
