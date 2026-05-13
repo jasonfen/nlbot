@@ -1,6 +1,6 @@
 # SilverBullet
 
-How <BOT_NAME> interacts with its vault editor. The short version: through the filesystem, not the HTTP API.
+How <BOT_NAME> interacts with its vault editor. Two supported channels: the filesystem for everyday vault churn, and SilverBullet's HTTP API via kit-shipped wrappers when going *through* SB matters.
 
 ## Canonical setup
 
@@ -114,7 +114,7 @@ SilverBullet is an editor, not storage. Do not rely on its sync layer for backup
 
 ## See also
 
-- `[[processes/security]]` — credential handling, the HTTP API doctrine, why the bot doesn't call it
+- `[[processes/security]]` — credential handling, the SB HTTP API supported pattern, the tailnet-bounded threat model
 - `[[processes/handoffs]]` — async task delegation lifecycle
 - `[[processes/soul-loop]]` — the heartbeat that drives bot reads/writes against the vault
 - `<KIT>/silverbullet-setup.md` — operator-facing setup doc (kit-side, not vault-side)
