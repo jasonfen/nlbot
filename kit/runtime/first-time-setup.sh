@@ -2,7 +2,7 @@
 # first-time-setup.sh — automates Steps 1-4 of first-time-setup.md.
 #
 # Drops the vault skeleton, copies kit files, substitutes Phase 0
-# placeholders ([Nate], [Your Bot's Name], <VAULT>, etc.), installs
+# placeholders (<USER_NAME>, [Your Bot's Name], <VAULT>, etc.), installs
 # claude-code.service, and brings up the tmux session.
 #
 # Stops BEFORE the NOPASSWD sudoers grant and the verification reboot —
@@ -54,7 +54,7 @@ VAULT_DEFAULT="$REPO_ROOT/vault"
 # load-bearing values; identity/personality values (USER_NAME, CANARY_PHRASE,
 # the eight personality fields, TELEGRAM_ENABLED) are deferred to /setup
 # and the new "phase-0-interview-pending" phase state. See the
-# jaunty-swimming-forest plan for the provisioner-vs-Nate split.
+# jaunty-swimming-forest plan for the provisioner-vs-user split.
 REINSTALL_SERVICES_ONLY=0
 NON_INTERACTIVE=0
 for arg in "$@"; do
@@ -161,7 +161,7 @@ prompt_value() {
 # Replace Phase 0 placeholders in one file. Delegated to the standalone
 # `substitute-placeholders.sh` (sourced for in-process function access)
 # so the same substitution logic is also reusable by the `/setup` interview
-# command at /setup time, AFTER Nate has typed his answers into setup-
+# command at /setup time, AFTER the end user has typed his answers into setup-
 # state.md. The function reads shell vars first, falls back to setup-
 # state.md if env unset, and uses ${VAR:-} defaults under `set -u`.
 # shellcheck source=/dev/null
@@ -172,14 +172,14 @@ prompt_value() {
 # was missing, on the theory that claude-code.service would crashloop without
 # OAuth done. That theory was right but the gate forced the provisioner to
 # SSH in and walk OAuth before bash could run — wiping out the kit's stated
-# UX promise that Nate's first action is opening the web shell URL in a
+# UX promise that the end user's first action is opening the web shell URL in a
 # browser. F42 (fenbot02 walk 2026-05-12) inverts the order: bash provisioner
-# runs without OAuth, Phase 5 brings up the web shell, and Nate walks OAuth
+# runs without OAuth, Phase 5 brings up the web shell, and the end user walks OAuth
 # via the web shell's bash session (`?session=shell`) AFTER opening the URL.
 # claude-code.service still crashloops in the background until OAuth lands,
 # but the start-claude.sh while-loop wrapper absorbs that (each iteration is
 # its own claude exit, not a systemd-visible failure) and once OAuth is
-# complete the next claude launch succeeds. Nate then switches to the claude
+# complete the next claude launch succeeds. the end user then switches to the claude
 # session and types /setup.
 #
 # The gate stays as an ADVISORY warning so an operator who *is* OAuth-walking
@@ -189,7 +189,7 @@ if [ ! -f "$HOME/.claude/.credentials.json" ]; then
   echo
   echo "  ℹ Claude Code first-run OAuth has not been completed."
   echo "    \$HOME/.claude/.credentials.json is missing — that is OK for the"
-  echo "    F42 zero-SSH flow. Nate walks OAuth via the web shell after the"
+  echo "    F42 zero-SSH flow. the end user walks OAuth via the web shell after the"
   echo "    bash provisioner finishes: open the web shell URL, switch to the"
   echo "    'shell' session (use the URL param ?session=shell), run \`claude\`"
   echo "    and walk /login in the browser. claude-code.service will start"
@@ -236,7 +236,7 @@ echo
 echo "  Only BOT_NAME and VAULT are bash-collected. Identity values (your"
 echo "  name, canary phrase, communication style, hobbies, etc.) are filled"
 echo "  in by the user via /setup after the bot is up — see jaunty-swimming"
-echo "  -forest plan / first-time-setup.md provisioner-vs-Nate split."
+echo "  -forest plan / first-time-setup.md provisioner-vs-user split."
 echo
 
 prompt_value BOT_NAME  "Bot name (lowercase, becomes the unix user)" "$USER"             yes
@@ -519,7 +519,7 @@ if [ ! -f "$REPO_ROOT/setup-state.md" ]; then
 fi
 
 # Seed top-level identity files into the vault. -n = don't clobber edits.
-[ -f "$VAULT/CLAUDE.md" ]       || cp "$KIT/CLAUDE-nate.md"            "$VAULT/CLAUDE.md"
+[ -f "$VAULT/CLAUDE.md" ]       || cp "$KIT/CLAUDE.md.template"            "$VAULT/CLAUDE.md"
 # .claude/ is regenerated from dot-claude/ by refresh-claude-dir.sh after
 # Phase 0 values are written below. Lives at repo root, not in vault.
 [ -f "$VAULT/identity.md" ]     || cp "$KIT/templates/identity.md"     "$VAULT/identity.md"
@@ -564,7 +564,7 @@ done
 
 # Persist Phase 0 values into setup-state.md. Only BOT_NAME / VAULT /
 # OS_USER are populated by the bash bootstrap; the rest stay empty (the
-# /setup interview will fill them based on Nate's answers, then re-run
+# /setup interview will fill them based on the user's answers, then re-run
 # substitute-placeholders.sh on the seeded vault files).
 state_write BOT_NAME            "$BOT_NAME"
 state_write VAULT               "$VAULT"
@@ -635,14 +635,14 @@ SEEDED_FILES=(
 LEFTOVER=""
 for f in "${SEEDED_FILES[@]}"; do
   [ -f "$f" ] || continue
-  if grep -qE '\[Your Bot|\[Nate\]|\[CHOOSE YOUR|<USER>|<USER_NAME>|<VAULT>|<BOT_NAME>|<KIT>|<REPO_ROOT>' "$f"; then
+  if grep -qE '\[Your Bot|\[CHOOSE YOUR|<USER>|<USER_NAME>|<USER_PREFS>|<USER_ROLE>|<USER_HOBBIES>|<USER_HOURS>|<TIMEZONE>|<VAULT>|<BOT_NAME>|<KIT>|<REPO_ROOT>' "$f"; then
     LEFTOVER+="$f"$'\n'
   fi
 done
 # Also check the seeded processes/ + .claude/ (at repo root) + _templates/ trees
 while IFS= read -r f; do
   [ -z "$f" ] && continue
-  if grep -qE '\[Your Bot|\[Nate\]|\[CHOOSE YOUR|<USER>|<USER_NAME>|<VAULT>|<BOT_NAME>|<KIT>|<REPO_ROOT>' "$f"; then
+  if grep -qE '\[Your Bot|\[CHOOSE YOUR|<USER>|<USER_NAME>|<USER_PREFS>|<USER_ROLE>|<USER_HOBBIES>|<USER_HOURS>|<TIMEZONE>|<VAULT>|<BOT_NAME>|<KIT>|<REPO_ROOT>' "$f"; then
     LEFTOVER+="$f"$'\n'
   fi
 done < <(find "$VAULT/processes" "$REPO_ROOT/.claude" "$VAULT/_templates" -name '*.md' 2>/dev/null)
@@ -823,23 +823,23 @@ if ! tmux ls 2>/dev/null | grep -q '^shell:'; then
   exit 1
 fi
 
-# --- Step 5: web shell (so Nate can connect at phase-0-interview-pending) ---
+# --- Step 5: web shell (so the end user can connect at phase-0-interview-pending) ---
 #
 # The web shell used to be set up by setup-runner step-7-web-shell, which
-# runs only AFTER Nate has typed /setup. But the F34 provisioner-vs-Nate
-# split tells Nate his first action is to open the web shell URL and type
+# runs only AFTER the end user has typed /setup. But the F34 provisioner-vs-user
+# split tells the end user that the first action is to open the web shell URL and type
 # /setup THERE — so a web shell that only comes up post-/setup is a
-# chicken-and-egg (Nate cannot reach the bot to type the thing that
-# brings up the surface Nate is supposed to type into). Caught on the
+# chicken-and-egg (the end user cannot reach the bot to type the thing that
+# brings up the surface the end user is supposed to type into). Caught on the
 # fenbot01 walk 2026-05-12 (F41). Moving it into the provisioner makes
-# the URL in HANDOFF-TO-NATE.txt actually load when Nate opens it.
+# the URL in HANDOFF-TO-NATE.txt actually load when the end user opens it.
 #
 # step-7-web-shell in setup-runner becomes a probe-and-advance no-op
 # from this point on (it stays in the phase enum so re-runs against
 # older state files still walk cleanly).
 banner "Step 5: web shell"
 
-# F43 (2026-05-13): pre-accept the bypass-permissions disclaimer so Nate
+# F43 (2026-05-13): pre-accept the bypass-permissions disclaimer so the end user
 # does not see it on first connect. Claude Code reads
 # `~/.claude/settings.json` and skips the disclaimer when
 # `skipDangerousModePermissionPrompt: true`. (The companion
@@ -1012,16 +1012,16 @@ EOF
 
 # --- HANDOFF-TO-NATE.txt — credentials + first-step instructions ------------
 #
-# Writes a one-page handoff doc the provisioner gives to the end-user (Nate).
+# Writes a one-page handoff doc the provisioner gives to the end user.
 # Lives at <REPO_ROOT>/HANDOFF-TO-NATE.txt, mode 600. Contains the web-shell
 # URL (best-effort from `tailscale status`), the initial password the
 # provisioner set (or "(see your BOT_PASSWORD env)" if it wasn't via env),
 # and a single instruction: type /setup.
 #
-# Banner reminder: `shred -u` the file after delivering it to Nate. The
+# Banner reminder: `shred -u` the file after delivering it to the end user. The
 # password sits in /etc/<BOT_NAME>/secrets/ as a systemd-creds blob whether
 # or not this file exists; this file is just a convenience for the
-# provisioner-to-Nate handoff.
+# provisioner-to-end-user handoff.
 HANDOFF_FILE="$REPO_ROOT/HANDOFF-TO-NATE.txt"
 # Pull DNSName via jq directly — the prior grep|sed approach used `\s` in a
 # BRE sed pattern, which on many GNU seds is a literal `s` rather than a
@@ -1042,14 +1042,14 @@ INITIAL_PASSWORD_HINT="${BOT_PASSWORD:-(the password you typed during Phase 0.5 
 WEB_URL="${TAILNET_HOST:+https://${TAILNET_HOST}:8443/}"
 
 # Compute whether OAuth has been walked on the provisioner side. When it has,
-# the claude session is already usable and Nate jumps straight to /setup.
-# When it has not (F42 zero-SSH flow — the default), Nate walks a few
+# the claude session is already usable and the end user jumps straight to /setup.
+# When it has not (F42 zero-SSH flow — the default), the end user walks a few
 # one-time prompts (theme picker, trust folder, OAuth URL paste, bypass-
 # permissions disclaimer) directly in the claude session on first connect.
-# The pre-F42-doc HANDOFF prose told Nate to route OAuth through the bash
+# The pre-F42-doc HANDOFF prose told the end user to route OAuth through the bash
 # `?session=shell` session, which doubled up on theme + trust prompts and
 # added a back-and-forth between two sessions for no real gain (Jason
-# validated as Nate on fenbot03 walk 2026-05-13 — the default claude
+# validated by jason-as-end-user on fenbot03 walk 2026-05-13 — the default claude
 # session walks cleanly to /setup without the shell detour).
 if [ -f "$HOME/.claude/.credentials.json" ]; then
   OAUTH_BLOCK=""
@@ -1094,5 +1094,5 @@ Questions? The bot answers them. Just talk.
 EOF
 chmod 600 "$HANDOFF_FILE" 2>/dev/null || true
 echo
-echo "  📄 Wrote $HANDOFF_FILE (mode 600). Deliver to Nate, then \`shred -u\` it."
+echo "  📄 Wrote $HANDOFF_FILE (mode 600). Deliver to the end user, then \`shred -u\` it."
 echo

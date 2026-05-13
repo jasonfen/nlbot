@@ -16,7 +16,7 @@ echo "CURRENT_PHASE=$CURRENT_PHASE"
 
 ## Tier 2 — branch on `CURRENT_PHASE`
 
-- **If `phase-0-interview-pending` (or legacy `pre-step-5`):** the bash bootstrap is done and the user (Nate) has not yet walked the identity interview. **Conduct the interview inline (Phase A below).** Do not spawn an agent — agents can't pause for user input mid-execution; Phase A runs as you, in this turn and subsequent turns of conversation.
+- **If `phase-0-interview-pending` (or legacy `pre-step-5`):** the bash bootstrap is done and the user has not yet walked the identity interview. **Conduct the interview inline (Phase A below).** Do not spawn an agent — agents can't pause for user input mid-execution; Phase A runs as you, in this turn and subsequent turns of conversation.
 
 - **If `done`:** setup is fully complete. Reply:
   > Setup is already complete (Current phase: done). No work to do. Type a natural-language prompt to chat with me.

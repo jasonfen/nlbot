@@ -1,6 +1,6 @@
 # Telegram Integration
 
-How Nate's bot talks to him over Telegram. Mirrors the proven fenbot setup: one Python daemon, async messaging, a single whitelisted chat.
+How the bot talks to him over Telegram. Mirrors the proven fenbot setup: one Python daemon, async messaging, a single whitelisted chat.
 
 > **What the bot does automatically vs. what needs your hands**
 >
@@ -114,7 +114,7 @@ You can also send from a shell: `bash .telegram/tg-post.sh "manual message"`.
 
 When you DM the bot, the daemon:
 1. Verifies your `chat_id` matches the whitelist (rejects if not).
-2. Appends `[YYYY-MM-DD HH:MM:SS] Nate: <text>` to `.telegram/new-messages.txt`.
+2. Appends `[YYYY-MM-DD HH:MM:SS] the user: <text>` to `.telegram/new-messages.txt`.
 3. Runs `tmux send-keys -t claude /telegram-check Enter` to nudge Claude.
 
 Claude's `/telegram-check` slash command reads the file, classifies each message (status check vs question vs action proposal), and either replies directly or queues the action for your approval. The skill definition lives in `.claude/commands/telegram-check.md`.
@@ -126,7 +126,7 @@ For replies, Claude writes to `message.txt` — same path as outbound. It does N
 ## Tone and pacing
 
 - Be conversational, not formal — this is a private 1:1 channel, not a public announcement.
-- Replies are usually 1–3 sentences. Save longer responses for the journal where Nate can read them deliberately.
+- Replies are usually 1–3 sentences. Save longer responses for the journal where the user can read them deliberately.
 - For action requests ("can you fix X"), reply *"Understood — drafting a proposal for review"*, then queue the proposal in `.telegram/pending-actions.txt`. Don't act unilaterally on infrastructure changes.
 - Don't ping mid-thought. If you're working through something, journal it; ping when you've reached a decision point.
 

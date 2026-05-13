@@ -1,4 +1,4 @@
-# nate-bot-kit
+# nlbot
 
 A persistent Claude bot for one human. Self-contained — clone, follow [first-time-setup.md](first-time-setup.md), have a running assistant in ~30 minutes.
 

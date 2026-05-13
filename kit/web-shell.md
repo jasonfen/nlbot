@@ -188,7 +188,7 @@ Self-contained, no build step:
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Natebot Terminal</title>
+  <title>Bot Terminal</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #000; color: #d4cbb8;
@@ -241,7 +241,7 @@ Self-contained, no build step:
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-  <title>Natebot Terminal</title>
+  <title>Bot Terminal</title>
   <link rel="manifest" href="manifest.json">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -273,7 +273,7 @@ Self-contained, no build step:
 ```ini
 # /etc/systemd/system/<BOT_NAME>-web.service
 [Unit]
-Description=Natebot Web Terminal
+Description=Bot Web Terminal
 After=network.target claude-code.service
 
 [Service]
@@ -345,7 +345,7 @@ Both are fine and simpler. The custom server exists because:
 3. **Logout button.** ttyd's auth is HTTP basic — log out by clearing site data. The custom one has an explicit logout that destroys the session.
 4. **Mobile keyboard helpers.** Custom toolbar with Esc, Tab, scrolling that actually works on iOS Safari.
 
-If you don't care about any of the above, `ttyd -p 3000 -c nate:<password> tmux attach -t claude` is a one-line replacement and you can stop reading.
+If you don't care about any of the above, `ttyd -p 3000 -c <bot>:<password> tmux attach -t claude` is a one-line replacement and you can stop reading.
 
 ## Troubleshooting
 

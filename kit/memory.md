@@ -78,7 +78,7 @@ store("key phrase", "full context")
 ```
 
 **Key:** 1–5 words, semantic and searchable. Examples:
-- `"nate hobbies"` — what does Nate like to do?
+- `"user hobbies"` — what does the user like to do?
 - `"factorio mod architecture"` — design decisions for a specific project
 - `"alice preferences"` — things another person told you they like
 - `"bug fix: async race condition"` — technical solutions
@@ -292,8 +292,8 @@ None of these are wrong. The bundled secretary subagent is what fenbot uses beca
 
 If you genuinely want grep-only with no MCP memory backend at all, edit `setup-state.md` Current phase from `step-8-memory` to `step-9-telegram-daemon` before the bot reaches it. The bot will skip the memorious install and move on to the telegram phase. You can always add it back later by setting Current phase to `step-8-memory` and running `/setup` from the bot's tmux pane.
 
-The bot's CLAUDE-nate.md instructs it to fall back to `grep` if `recall()` isn't available, so a memorious-less bot still works — you just lose the semantic search layer.
+The bot's CLAUDE.md.template instructs it to fall back to `grep` if `recall()` isn't available, so a memorious-less bot still works — you just lose the semantic search layer.
 
 ---
 
-When Claude should automatically search memory: see the "Memory" section in `CLAUDE-nate.md`.
+When Claude should automatically search memory: see the "Memory" section in `CLAUDE.md.template`.

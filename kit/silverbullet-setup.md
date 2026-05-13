@@ -4,7 +4,7 @@ The bot's vault is plain Markdown on disk, which is great for the bot but inconv
 
 This is your primary day-to-day interface to the bot. You read its journal in SilverBullet. You leave handoff tasks in SilverBullet. You scroll through `decisions.md` in SilverBullet. The bot writes to the same files via plain `Write` tool calls. No sync conflicts because nobody owns the files — they live on disk and both sides edit them directly.
 
-**You will need this**, even though Nate's bot is a "no-sidechat" build. SilverBullet isn't sidechat; it's the editor for the vault.
+**You will need this**, even though the bot is a "no-sidechat" build. SilverBullet isn't sidechat; it's the editor for the vault.
 
 > **What the bot does automatically vs. what needs your hands**
 >
@@ -25,7 +25,7 @@ services:
     image: ghcr.io/silverbulletmd/silverbullet:latest
     restart: unless-stopped
     environment:
-      - SB_USER=nate:<long-random-password>           # basic auth for the web UI
+      - SB_USER=<bot>:<long-random-password>           # basic auth for the web UI
       - SB_AUTH_TOKEN=<long-random-token>             # sync token (different from password)
     volumes:
       - ../vault:/space                     # the vault root

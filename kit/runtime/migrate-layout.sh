@@ -69,7 +69,7 @@ KIT_FILES=(
   README.md bootstrap.md first-time-setup.md silverbullet-setup.md
   persistence-and-hardware.md memory.md web-shell.md
   telegram-integration.md portainer.md INTRO-FOR-HUMANS.md
-  CLAUDE-nate.md setup-orchestrator.md setup-state.md.template
+  CLAUDE.md.template setup-orchestrator.md setup-state.md.template
   docker-compose.yml
   dot-claude runtime templates web-terminal
 )

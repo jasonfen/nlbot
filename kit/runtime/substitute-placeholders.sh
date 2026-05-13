@@ -5,10 +5,10 @@
 #   * `first-time-setup.sh` Step 2: source the function and call it inline
 #     for each freshly-seeded vault file (in-process, no subprocess overhead).
 #
-#   * `/setup` interview: invokes as a script after Nate's answers have
+#   * `/setup` interview: invokes as a script after the user's answers have
 #     been written to setup-state.md, to re-substitute the seeded vault
 #     files with the real values (replacing the bracket-placeholders that
-#     first-time-setup.sh left visible for Nate's pre-interview SilverBullet
+#     first-time-setup.sh left visible for the user's pre-interview SilverBullet
 #     reading).
 #
 # Reads values from env vars first, falls back to setup-state.md Values block
@@ -78,11 +78,11 @@ substitute_placeholders() {
 
   # Build the sed argv dynamically. A placeholder that maps to an unset
   # var is SKIPPED entirely rather than replaced with an empty string —
-  # so the template literal (e.g., `[Nate]`, `[CHOOSE YOUR CANARY PHRASE]`)
+  # so the template literal (e.g., `<USER_NAME>`, `[CHOOSE YOUR CANARY PHRASE]`)
   # stays visible in the seeded vault file until the corresponding value
   # is set. This is what lets the bash bootstrap leave intentional gaps
   # for the /setup interview to fill in later; the seeded identity.md
-  # reads as legible "[Nate]" prose to a human browsing pre-interview.
+  # reads as legible `<USER_NAME>` prose to a human browsing pre-interview.
   #
   # F40 (2026-05-13): an optional question the user typed `skip` on is
   # stored as the literal string `(skipped)` in setup-state.md (so re-runs
@@ -90,9 +90,9 @@ substitute_placeholders() {
   # /setup's interview probe treats anything non-blank as already answered).
   # But naively substituting `(skipped)` into identity.md produced ugly
   # prose like "I write (skipped) when I have something to say". Treat
-  # `(skipped)` as a skip-substitution sentinel below; the bracket
-  # placeholder stays visible and Nate can fill it in later via
-  # SilverBullet if he changes his mind.
+  # `(skipped)` as a skip-substitution sentinel below; the placeholder
+  # token stays visible and the user can fill it in later via SilverBullet
+  # if they change their mind.
   _skip_sentinel() {
     [ "${1:-}" = "(skipped)" ]
   }
@@ -107,9 +107,14 @@ substitute_placeholders() {
 
   # Optional substitutions — only added to argv when the var is set
   # AND not the `(skipped)` sentinel from the /setup interview.
+  # F46.2 (2026-05-13): retired the `[Nate]` / `[Nate's]` /
+  # `[Nate: Fill this in...]` legacy bracket patterns. Templates now use
+  # `<USER_NAME>` / `<USER_NAME>'s` / `<USER_PREFS>` exclusively — the
+  # angle-bracket style reads as an obvious placeholder convention to a
+  # human browsing the unsubstituted file, and removes the "why is this
+  # template hardcoded to a specific name?" friction jason flagged on fenbot00.
   if [ -n "${USER_NAME:-}" ] && ! _skip_sentinel "${USER_NAME:-}"; then
-    cmd+=(-e "s|\[Nate's\]|${USER_NAME}'s|g")
-    cmd+=(-e "s|\[Nate\]|${USER_NAME}|g")
+    cmd+=(-e "s|<USER_NAME>'s|${USER_NAME}'s|g")
     cmd+=(-e "s|<USER_NAME>|${USER_NAME}|g")
   fi
   if [ -n "${CANARY_PHRASE:-}" ] && ! _skip_sentinel "${CANARY_PHRASE:-}"; then
@@ -117,7 +122,7 @@ substitute_placeholders() {
     cmd+=(-e "s|\[YOUR CANARY PHRASE\]|${CANARY_PHRASE}|g")
   fi
   if [ -n "${USER_PREFS:-}" ] && ! _skip_sentinel "${USER_PREFS:-}"; then
-    cmd+=(-e "s|\[Nate: Fill this in\. What are your non-negotiable preferences?\]|${USER_PREFS}|g")
+    cmd+=(-e "s|<USER_PREFS>|${USER_PREFS}|g")
   fi
   if [ -n "${IDLE_PREFS:-}" ] && ! _skip_sentinel "${IDLE_PREFS:-}"; then
     cmd+=(-e "s|\[reading/coding/writing/exploring\]|${IDLE_PREFS}|g")

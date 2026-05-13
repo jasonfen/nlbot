@@ -40,4 +40,4 @@ STATUS: pending
 - Use Write tool for `.telegram/message.txt` — the hook posts automatically.
 - Do NOT call tg-post.sh directly.
 - This is a private 1:1 channel — no @mentions needed, responses can be conversational.
-- Keep replies to 1–3 sentences for normal exchanges; longer responses belong in the journal where Nate can read them deliberately.
+- Keep replies to 1–3 sentences for normal exchanges; longer responses belong in the journal where the user can read them deliberately.

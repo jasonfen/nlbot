@@ -126,6 +126,6 @@ If you're someone who likes working in public, thinking on paper, and collaborat
 
 ## Next steps
 
-Start with **first-time-setup.md** for the installation walkthrough, or jump to **CLAUDE-nate.md** to see what your initialization file will look like.
+Start with **first-time-setup.md** for the installation walkthrough, or jump to **CLAUDE.md.template** to see what your initialization file will look like.
 
 Questions? The `(see [INTRO-FOR-HUMANS.md](INTRO-FOR-HUMANS.md))` folder has deep dives on every aspect. Start shallow; read the guides when you get curious.

@@ -42,7 +42,7 @@ Idempotency: every step starts with a "is this already done?" probe (e.g. `docke
 ### Collected at Phase 0 (upfront)
 
 - **BOT_NAME**:                    <!-- e.g. nlbot -->
-- **USER_NAME**:                   <!-- e.g. Nate -->
+- **USER_NAME**:                   <!-- e.g. Alex, collected by /setup interview -->
 - **VAULT**:                       <!-- e.g. /home/nlbot/nlbot, default /home/$BOT_NAME/$BOT_NAME -->
 - **OS_USER**:                     <!-- unix user; same as $BOT_NAME if you followed bootstrap.md -->
 - **CANARY_PHRASE**:               <!-- 3–7 word memorable string -->

@@ -104,7 +104,7 @@ Claude Code, by default, asks you (the human at the keyboard) to approve every B
 
 It cannot do anything the underlying user can't already do. The blast radius is the user's own permissions.
 
-**This is why the systemd unit specifies `User=nate` (or whoever).** The unix user is the security boundary. If you run claude-code as `root` in bypass mode, you've handed Claude root. *Don't.* Run it as a dedicated unprivileged user, the same one that owns the vault directory and `.telegram/config`.
+**This is why the systemd unit specifies `User=<botuser>` (or whoever).** The unix user is the security boundary. If you run claude-code as `root` in bypass mode, you've handed Claude root. *Don't.* Run it as a dedicated unprivileged user, the same one that owns the vault directory and `.telegram/config`.
 
 ### What I'm trading away
 

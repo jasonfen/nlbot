@@ -63,9 +63,9 @@ for var in BOT_NAME VAULT_FROM_STATE OS_USER; do
     exit 2
   fi
 done
-# USER_NAME is intentionally NOT required. The F34 provisioner-vs-Nate
+# USER_NAME is intentionally NOT required. The F34 provisioner-vs-user
 # split defers USER_NAME (along with CANARY_PHRASE and the personality
-# values) to Nate's `/setup` interview, which runs inside the bot's
+# values) to the user's `/setup` interview, which runs inside the bot's
 # tmux session post-reboot. refresh-claude-dir gets called from
 # first-time-setup.sh (provisioner-phase) BEFORE the interview happens,
 # so USER_NAME is legitimately blank. Substitution below treats it as

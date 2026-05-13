@@ -2,13 +2,13 @@
 
 A 30-minute path from "I want one of these" to "the box is running and ready to hand over." Read [INTRO-FOR-HUMANS.md](INTRO-FOR-HUMANS.md) first if you haven't — it explains *why* this is a thing. This doc is the *how*.
 
-**Audience:** the *provisioner* — the technical person standing the box up. The end user (call them Nate) doesn't see this doc; they receive a URL and a one-line instruction ("open it, log in, type `/setup`") and the bot walks them through the rest of identity setup conversationally inside the web shell.
+**Audience:** the *provisioner* — the technical person standing the box up. The end user doesn't see this doc; they receive a URL and a one-line instruction ("open it, log in, type `/setup`") and the bot walks them through the rest of identity setup conversationally inside the web shell.
 
 *If a Claude Code instance is helping you with the install, it should read [setup-orchestrator.md](setup-orchestrator.md) first. That doc covers the assisting-CC flow as a fallback to the env-var-driven path described here.*
 
 ## TL;DR — run the script with env vars, then hand over
 
-`runtime/first-time-setup.sh` automates Steps 1–4 end-to-end: vault skeleton, identity seed, placeholder substitution, keybindings, `start-claude.sh`, the systemd unit, the parallel `<BOT_NAME>-shell.service`, and bringing up both tmux sessions. It stops at the kit's explicit "hand over the keys" gate — the NOPASSWD sudoers grant and verification reboot stay with the provisioner. After reboot, *Nate's only step* is to open the web shell URL and type `/setup`.
+`runtime/first-time-setup.sh` automates Steps 1–4 end-to-end: vault skeleton, identity seed, placeholder substitution, keybindings, `start-claude.sh`, the systemd unit, the parallel `<BOT_NAME>-shell.service`, and bringing up both tmux sessions. It stops at the kit's explicit "hand over the keys" gate — the NOPASSWD sudoers grant and verification reboot stay with the provisioner. After reboot, *the user's only step* is to open the web shell URL and type `/setup`.
 
 **Provisioner order of operations** (all run as the bot's unix user, e.g. `nlbot`):
 
@@ -22,17 +22,17 @@ sudo visudo -f /etc/sudoers.d/$BOT_NAME                     # 2. NOPASSWD sudoer
 sudo reboot                                                 # 3. Verification reboot.
 ```
 
-That three-line sequence is the canonical happy path. **The provisioner does NOT need to walk Claude Code OAuth** — F42 (fenbot02 walk 2026-05-12) moved the OAuth step into Nate's web-shell-driven onboarding. The bash provisioner starts `claude-code.service` even without `~/.claude/.credentials.json`; the wrapper-around-claude in `start-claude.sh` quietly crashloops the inner `claude` process until OAuth lands, but the wrapper survives, the tmux session stays alive, and the web shell (set up in Phase 5) stays reachable throughout. Nate connects via the web shell, switches to its `?session=shell` tab, runs `claude` there, walks OAuth in the browser, then jumps back to the default claude session and types `/setup`. End-to-end without anyone SSHing into the box.
+That three-line sequence is the canonical happy path. **The provisioner does NOT need to walk Claude Code OAuth** — F42 (fenbot02 walk 2026-05-12) moved the OAuth step into the user's web-shell-driven onboarding. The bash provisioner starts `claude-code.service` even without `~/.claude/.credentials.json`; the wrapper-around-claude in `start-claude.sh` quietly crashloops the inner `claude` process until OAuth lands, but the wrapper survives, the tmux session stays alive, and the web shell (set up in Phase 5) stays reachable throughout. The user connects via the web shell, switches to its `?session=shell` tab, runs `claude` there, walks OAuth in the browser, then jumps back to the default claude session and types `/setup`. End-to-end without anyone SSHing into the box.
 
-(The pre-F42 flow — operator walks OAuth at the console before running the bash provisioner — still works if you prefer it; the OAuth pre-flight at script start is now an advisory message instead of a hard abort. If the credentials file is already present, the OAuth block in `HANDOFF-TO-NATE.txt` is omitted and Nate's instructions collapse to "open URL, log in, type `/setup`.")
+(The pre-F42 flow — operator walks OAuth at the console before running the bash provisioner — still works if you prefer it; the OAuth pre-flight at script start is now an advisory message instead of a hard abort. If the credentials file is already present, the OAuth block in `HANDOFF-TO-NATE.txt` is omitted and the user's instructions collapse to "open URL, log in, type `/setup`.")
 
-The script no longer prompts for `USER_NAME`, `CANARY_PHRASE`, hobbies, communication style, or any of the eight personality values — those get collected by the bot during Nate's `/setup` interview after he logs in. The bash phase only collects what's truly load-bearing for getting the box up to the point where Nate can connect:
+The script no longer prompts for `USER_NAME`, `CANARY_PHRASE`, hobbies, communication style, or any of the eight personality values — those get collected by the bot during the user's `/setup` interview after they log in. The bash phase only collects what's truly load-bearing for getting the box up to the point where the user can connect:
 
 - **`BOT_NAME`** — required; unix user, systemd `User=`, secrets dir at `/etc/<BOT_NAME>/secrets/`, vault dirname.
 - **`VAULT`** — defaults to `$REPO_ROOT/vault`; rarely overridden.
 - **`BOT_PASSWORD`** — required at Phase 0.5 (or supply via env). Stored as a systemd-creds blob at `/etc/<BOT_NAME>/secrets/{sb-user-password,web-ui-password}` (one shared blob if `PASSWORD_MODE=unified`, the default; two separate blobs if `separate`). Plaintext never lands on disk.
 
-Everything else gets a default in `setup-state.md`'s Values block (`USER_NAME=`, `CANARY_PHRASE=`, the eight personality values, `TELEGRAM_ENABLED=` all blank). The seeded vault files keep their bracket placeholders (`[Nate]`, `[CHOOSE YOUR CANARY PHRASE]`) visible — they read as legible template prose pre-interview, and `/setup` re-substitutes them with Nate's real answers when he runs it.
+Everything else gets a default in `setup-state.md`'s Values block (`USER_NAME=`, `CANARY_PHRASE=`, the eight personality values, `TELEGRAM_ENABLED=` all blank). The seeded vault files keep their bracket placeholders (`<USER_NAME>`, `[CHOOSE YOUR CANARY PHRASE]`) visible — they read as legible template prose pre-interview, and `/setup` re-substitutes them with the user's real answers when they run it.
 
 ### `--non-interactive` mode
 
@@ -42,7 +42,7 @@ The `--reinstall-services-only` flag is unchanged: it re-renders the two systemd
 
 ### `HANDOFF-TO-NATE.txt`
 
-End of run, the script writes `<REPO_ROOT>/HANDOFF-TO-NATE.txt` (mode 600) containing the web shell URL, login username, initial password hint, and the single instruction for Nate (`Open <URL>, log in, then type /setup`). The script also prints a banner reminding you to `shred -u HANDOFF-TO-NATE.txt` after Nate has read it. The file exists so you have a clean text artifact to send Nate over whatever channel you trust; the banner exists so you don't forget to wipe it.
+End of run, the script writes `<REPO_ROOT>/HANDOFF-TO-NATE.txt` (mode 600) containing the web shell URL, login username, initial password hint, and the single instruction for the user (`Open <URL>, log in, then type /setup`). The script also prints a banner reminding you to `shred -u HANDOFF-TO-NATE.txt` after the user has read it. The file exists so you have a clean text artifact to send the user over whatever channel you trust; the banner exists so you don't forget to wipe it.
 
 ### Linux login password opt-in
 
@@ -118,7 +118,7 @@ Build the vault skeleton and copy the kit's seed files:
 mkdir -p $VAULT/journals/fiction $VAULT/handoffs $VAULT/processes
 
 # Bot identity at the vault root (user-edited daily through SilverBullet)
-cp $KIT/CLAUDE-nate.md            $VAULT/CLAUDE.md
+cp $KIT/CLAUDE.md.template            $VAULT/CLAUDE.md
 cp $KIT/templates/identity.md     $VAULT/identity.md
 cp $KIT/templates/user-profile.md $VAULT/user-profile.md
 cp $KIT/templates/soul-loop.md    $VAULT/soul-loop.md
@@ -135,7 +135,7 @@ touch $VAULT/journals/journal.md
 bash $KIT/runtime/refresh-claude-dir.sh
 ```
 
-Now open `CLAUDE.md` in your editor and replace every `[Nate]` and `[Your Bot's Name]` placeholder with your actual name and the bot's name. Same with `identity.md` and `user-profile.md` — fill in the canary phrase, your role, what you want from this bot. There's no "right" answer; first-pass guesses are fine, you'll edit later.
+Now open `CLAUDE.md` in your editor and replace every `<USER_NAME>` and `[Your Bot's Name]` placeholder with your actual name and the bot's name. Same with `identity.md` and `user-profile.md` — fill in the canary phrase, your role, what you want from this bot. There's no "right" answer; first-pass guesses are fine, you'll edit later.
 
 The vault-page copies above also contain `<BOT_NAME>` / `<USER_NAME>` / `<VAULT>` / `<KIT>` / `<REPO_ROOT>` placeholders. `runtime/first-time-setup.sh` handles substitution automatically. If you skipped that and are running this entirely by hand, the substitution table lives in `setup-orchestrator.md` — six tokens total. A one-shot `sed` over `$VAULT/*.md $VAULT/processes/*.md` covers the most important seeded files; `$REPO_ROOT/.claude/agents/*.md` and `$REPO_ROOT/.claude/commands/*.md` are regenerated by `bash $KIT/runtime/refresh-claude-dir.sh`.
 
@@ -252,26 +252,26 @@ systemctl status claude-code.service     # active (running)
 tmux attach -t claude                    # back in the session
 ```
 
-## After the reboot — hand the URL to Nate
+## After the reboot — hand the URL to the user
 
-At this point the box is running. `claude-code.service` is up, the tmux `claude` session has the bot at its prompt, and `<BOT_NAME>-shell.service` is hosting the web-shell-accessible bash session. `Current phase: phase-0-interview-pending` — the soul-loop will fire on its 10-minute cadence but `setup-runner` short-circuits with `interview pending — user must type /setup` and does nothing else until Nate connects.
+At this point the box is running. `claude-code.service` is up, the tmux `claude` session has the bot at its prompt, and `<BOT_NAME>-shell.service` is hosting the web-shell-accessible bash session. `Current phase: phase-0-interview-pending` — the soul-loop will fire on its 10-minute cadence but `setup-runner` short-circuits with `interview pending — user must type /setup` and does nothing else until the user connects.
 
-**What you do:** read `HANDOFF-TO-NATE.txt`, copy its contents over whatever channel you trust (email, SMS, in-person), then `shred -u HANDOFF-TO-NATE.txt` once Nate confirms receipt.
+**What you do:** read `HANDOFF-TO-NATE.txt`, copy its contents over whatever channel you trust (email, SMS, in-person), then `shred -u HANDOFF-TO-NATE.txt` once the user confirms receipt.
 
-**What Nate does:**
+**What the user does:**
 
 1. Opens the web shell URL in his browser.
 2. Logs in with the username + initial password from the handoff.
 3. Lands in the tmux `claude` pane, sees the bot's prompt.
 4. Types `/setup`.
 
-The bot's `/setup` slash command runs a short conversational interview (USER_NAME, CANARY_PHRASE, 8 optional personality values, TELEGRAM opt-in). Each answer persists to `setup-state.md` immediately, so Nate can Ctrl-C / close his browser / lose the network mid-interview and resume from the first still-empty question on his next `/setup`. After the last answer, `/setup` re-substitutes the seeded vault files with Nate's real values, advances the phase to `phase-0-interview-complete`, and falls through to the bot-driven Step 5–9 walk.
+The bot's `/setup` slash command runs a short conversational interview (USER_NAME, CANARY_PHRASE, 8 optional personality values, TELEGRAM opt-in). Each answer persists to `setup-state.md` immediately, so the user can Ctrl-C / close his browser / lose the network mid-interview and resume from the first still-empty question on his next `/setup`. After the last answer, `/setup` re-substitutes the seeded vault files with the user's real values, advances the phase to `phase-0-interview-complete`, and falls through to the bot-driven Step 5–9 walk.
 
 ### What the bot drives after the interview
 
-`setup-runner` reads `setup-state.md` Current phase on every soul-loop, executes the next phase, advances state, and posts progress to the journal. Nate can watch via the web shell (or, after Step 7 finishes, via Telegram — only if he opted in at the interview's last question).
+`setup-runner` reads `setup-state.md` Current phase on every soul-loop, executes the next phase, advances state, and posts progress to the journal. The user can watch via the web shell (or, after Step 7 finishes, via Telegram — only if he opted in at the interview's last question).
 
-**Total elapsed from Nate's first `/setup`:** ~5–10 minutes, or longer if he opted in to Telegram (the BotFather BLOCKER pauses there).
+**Total elapsed from the user's first `/setup`:** ~5–10 minutes, or longer if he opted in to Telegram (the BotFather BLOCKER pauses there).
 
 ### What the bot does
 

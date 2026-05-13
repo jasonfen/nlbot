@@ -2,20 +2,20 @@
 
 > **Heads-up:** the kit's recommended install path is now env-var-driven:
 > `BOT_NAME=… BOT_PASSWORD=… bash kit/runtime/first-time-setup.sh --non-interactive`,
-> followed by Nate's `/setup` interview inside the bot's web shell. That flow
-> doesn't need an assisting Claude Code instance at all — Nate's identity
+> followed by the user's `/setup` interview inside the bot's web shell. That flow
+> doesn't need an assisting Claude Code instance at all — the user's identity
 > answers are collected by the bot itself after reboot.
 >
 > This doc is the **fallback path**: a provisioner who'd rather drive the
 > install conversationally (or whose `--non-interactive` run hit an edge
 > case) can spin up a second Claude Code instance and walk this doc with
-> Nate. See [first-time-setup.md](first-time-setup.md) for the env-var path.
+> the user. See [first-time-setup.md](first-time-setup.md) for the env-var path.
 
-If you are a Claude Code instance that has been started by Nate to help him set up this kit, **this is the doc you read first**. The other docs target Nate (the human); this one targets you.
+If you are a Claude Code instance that has been started by the user to help him set up this kit, **this is the doc you read first**. The other docs target the user (the human); this one targets you.
 
 ## Who you are
 
-You are a Claude Code instance helping Nate set up a persistent assistant on this Linux box. You are **not** the bot itself — you're the installer working alongside Nate. The bot will be a separate Claude Code process started by `claude-code.service` near the end of this setup. When that process comes up, your job is done.
+You are a Claude Code instance helping the user set up a persistent assistant on this Linux box. You are **not** the bot itself — you're the installer working alongside the user. The bot will be a separate Claude Code process started by `claude-code.service` near the end of this setup. When that process comes up, your job is done.
 
 ## What to read first
 
@@ -25,20 +25,20 @@ In this exact order:
 2. `first-time-setup.md` — read fully. **This is your spec.** The numbered steps are what you execute.
 3. `setup-state.md` — if it already exists with prior progress, **resume from there**. If not, copy the skeleton at the bottom of this doc to `setup-state.md` and start fresh.
 
-The other docs (`persistence-and-hardware.md`, `silverbullet-setup.md`, `telegram-integration.md`, `web-shell.md`, `memory.md`, `CLAUDE-nate.md`) are reference material. Read each one when its corresponding setup step calls for it.
+The other docs (`persistence-and-hardware.md`, `silverbullet-setup.md`, `telegram-integration.md`, `web-shell.md`, `memory.md`, `CLAUDE.md.template`) are reference material. Read each one when its corresponding setup step calls for it.
 
 ## Phase 0 — Collect placeholder values upfront
 
-Before running any setup step, sit with Nate for ~5 minutes and gather the values you'll need throughout the install. The kit's templates have `[bracket]` and `<angle>` placeholders that get substituted in many places — collecting them once at the start beats interrupting Nate twelve times mid-setup.
+Before running any setup step, sit with the user for ~5 minutes and gather the values you'll need throughout the install. The kit's templates have `[bracket]` and `<angle>` placeholders that get substituted in many places — collecting them once at the start beats interrupting the user twelve times mid-setup.
 
-**How to do this:** ask each question conversationally. When Nate gives an answer, store it in `setup-state.md` under a `## Values` block (see updated skeleton below). As you walk through `first-time-setup.md`, apply each value via the `Edit` tool to every file that references the corresponding placeholder. Don't ask Nate to grep and edit by hand — that's what you're for.
+**How to do this:** ask each question conversationally. When the user gives an answer, store it in `setup-state.md` under a `## Values` block (see updated skeleton below). As you walk through `first-time-setup.md`, apply each value via the `Edit` tool to every file that references the corresponding placeholder. Don't ask the user to grep and edit by hand — that's what you're for.
 
 ### Values to collect at Phase 0 (no external dependencies)
 
 | Variable | Placeholder pattern | Where it's used | Question to ask |
 |---|---|---|---|
-| `BOT_NAME` | `[Your Bot's Name]` | `CLAUDE-nate.md` heading; reference throughout | "What name do you want this bot to go by? (Lowercase preferred — it'll also be the system username and the directory name.)" |
-| `USER_NAME` | `[Nate]`, `[Nate's]` | `CLAUDE-nate.md` body | "What should the bot call you?" |
+| `BOT_NAME` | `[Your Bot's Name]` | `CLAUDE.md.template` heading; reference throughout | "What name do you want this bot to go by? (Lowercase preferred — it'll also be the system username and the directory name.)" |
+| `USER_NAME` | `<USER_NAME>`, `<USER_NAME>'s` | `CLAUDE.md.template` body | "What should the bot call you?" |
 | `VAULT_PARENT` | `<REPO_ROOT>` | bot CWD; place where the kit is cloned | "Where do you want the bot installed? Default: `/home/$BOT_NAME/$BOT_NAME`" — derive automatically. The kit goes at `$REPO_ROOT/kit`, the SilverBullet space at `$REPO_ROOT/vault`. |
 | `OS_USER` | `<USER>` (in `claude-web.service`) | systemd unit `User=` | Same as `BOT_NAME` from Step 2 of bootstrap.md. |
 | `CANARY_PHRASE` | `[CHOOSE YOUR CANARY PHRASE]`, `[YOUR CANARY PHRASE]` | `templates/identity.md`, `templates/soul-loop.md` | "Pick a memorable phrase the bot will use as an orientation anchor — anything 3–7 words. Examples: 'the lighthouse keeper waves at midnight', 'flat earth society for ants', 'green socks blue keyboard'." |
@@ -49,7 +49,7 @@ Before running any setup step, sit with Nate for ~5 minutes and gather the value
 | `USER_ROLE` | (free-form) | `templates/user-profile.md` "Who I am" section | "What do you do? What are you working on?" |
 | `USER_HOBBIES` | (free-form) | `templates/user-profile.md` "Hobbies" | "What do you do for fun?" |
 | `USER_HOURS` | (free-form) | `templates/user-profile.md` "When I work" | "Roughly when are you usually online? Helps the bot pick its idle moments." |
-| `USER_PREFS` | (free-form) | `CLAUDE-nate.md` line "[Nate: Fill this in...]"; `templates/user-profile.md` "Anything else" | "Any non-negotiable preferences? Things you definitely don't want, or strong yes-do-this-always rules?" |
+| `USER_PREFS` | (free-form) | `CLAUDE.md.template` line "[the user: Fill this in...]"; `templates/user-profile.md` "Anything else" | "Any non-negotiable preferences? Things you definitely don't want, or strong yes-do-this-always rules?" |
 
 ### Values to collect just-in-time (require external action first)
 
@@ -57,9 +57,9 @@ These you can't know up front; capture them when their setup step runs and store
 
 | Variable | Captured at | How |
 |---|---|---|
-| `TG_BOT_TOKEN` | Step 6 — Telegram | After Nate runs `/newbot` with `@BotFather`, paste the token. |
+| `TG_BOT_TOKEN` | Step 6 — Telegram | After the user runs `/newbot` with `@BotFather`, paste the token. |
 | `TG_BOT_USERNAME` | Step 6 — Telegram | The `@<botname>_bot` handle BotFather assigns. |
-| `TG_CHAT_ID` | Step 6 — Telegram | After Nate DMs the bot once, fetch from `https://api.telegram.org/bot$TG_BOT_TOKEN/getUpdates`, grep `chat.id`. |
+| `TG_CHAT_ID` | Step 6 — Telegram | After the user DMs the bot once, fetch from `https://api.telegram.org/bot$TG_BOT_TOKEN/getUpdates`, grep `chat.id`. |
 | `SB_USER_PASSWORD` | **Phase 0.5** of `first-time-setup.sh` (operator typed) | Stored as systemd-creds blob at `/etc/<BOT_NAME>/secrets/sb-user-password`. Operator typed it at the prompt or set `BOT_PASSWORD` env var; they already know it. Step 6 just reads. |
 | `SB_AUTH_TOKEN` | Step 5/6 — SilverBullet (machine-only) | `bot-secrets.sh generate sb-auth-token 24` — random base64, never seen by operator. |
 | `TAILSCALE_HOSTNAME` | Step 5 — SilverBullet (first Tailscale serve) | `tailscale status --json \| jq -r .Self.HostName` — auto-detect, confirm. |
@@ -80,10 +80,12 @@ The placeholder set (post-restructure) is six tokens, with these substitution ta
 
 | Find | Replace with | Files affected |
 |---|---|---|
-| `[Your Bot's Name]` | `$BOT_NAME` | `CLAUDE.md` (rendered from `kit/CLAUDE-nate.md`) |
-| `[Nate's]` | `$USER_NAME's` | `CLAUDE.md` |
-| `[Nate]` | `$USER_NAME` | `CLAUDE.md` |
-| `[Nate: Fill this in. ...]` (whole bracketed block) | the answer Nate gave to USER_PREFS | `CLAUDE.md` |
+| `[Your Bot's Name]` | `$BOT_NAME` | `CLAUDE.md` (rendered from `kit/CLAUDE.md.template`) |
+| `<USER_NAME>` | `$USER_NAME` | `CLAUDE.md`, `user-profile.md` |
+| `<USER_NAME>'s` | `$USER_NAME's` | `CLAUDE.md` |
+| `<USER_PREFS>` | the answer the user gave to USER_PREFS | `CLAUDE.md` |
+| `<USER_ROLE>`, `<USER_HOBBIES>`, `<USER_HOURS>` | matching `/setup`-collected values | `user-profile.md` |
+| `<TIMEZONE>` | auto-detected from `timedatectl` / `/etc/timezone` / `/etc/localtime` | `user-profile.md` |
 | `[CHOOSE YOUR CANARY PHRASE]` | `$CANARY_PHRASE` | `vault/identity.md` (rendered from `kit/templates/identity.md`) |
 | `[YOUR CANARY PHRASE]` | `$CANARY_PHRASE` | `vault/soul-loop.md` |
 | `[reading/coding/writing/exploring]` | `$IDLE_PREFS` | `vault/identity.md` |
@@ -91,7 +93,7 @@ The placeholder set (post-restructure) is six tokens, with these substitution ta
 | `[direct/gentle/playful/formal]` | `$COMM_STYLE` | `vault/identity.md` |
 | `[quality/speed/creativity/accuracy]` | `$VALUES_CARES_ABOUT` | `vault/identity.md` |
 | `<BOT_NAME>` | `$BOT_NAME` (e.g. `nlbot`) | `vault/index.md`, `vault/handoffs.md`, all kit-rendered `.claude/` files; systemd unit templates at `kit/web-terminal/claude-web.service` and `kit/runtime/telegram-bot.service` (re-rendered into `/etc/systemd/system/`); start-claude.sh; cron entries |
-| `<USER_NAME>` | `$USER_NAME` (e.g. `Nate`) | `vault/index.md`, `vault/processes/journaling.md`, `vault/processes/handoffs.md` |
+| `<USER_NAME>` | `$USER_NAME` (e.g. `the user`) | `vault/index.md`, `vault/processes/journaling.md`, `vault/processes/handoffs.md` |
 | `<USER>` | `$BOT_NAME` (the unix user the bot runs as) | `kit/web-terminal/claude-web.service` (User= line), `claude-code.service` (rendered at install time) |
 | `<VAULT>` | SilverBullet space dir = `$REPO_ROOT/vault` (e.g. `/home/nlbot/nlbot/vault`) | `kit/dot-claude/agents/*.md`, `kit/dot-claude/commands/*.md`, `vault/CONFIG.md` (paths in `space-lua` blocks if any reference them), bot-side scripts and agents that read journals/handoffs/identity |
 | `<KIT>` | kit source dir = `$REPO_ROOT/kit` (e.g. `/home/nlbot/nlbot/kit`) | bot-side commands that call `kit/runtime/` helpers (`sb-cmd.sh`, `bot-secrets.sh`, `install-plugs.sh`, `refresh-claude-dir.sh`, `setup-status.sh`, `migrate-secrets.sh`); references to `kit/docker-compose.yml`; setup-runner phase-doc lookups (`<KIT>/silverbullet-setup.md`, etc.); `kit/web-terminal/claude-web.service` `WorkingDirectory=` line (points at the kit, where `server.js` lives — not the vault) |
@@ -101,22 +103,22 @@ After each substitution batch, confirm with `grep`:
 
 ```bash
 # Should return no [bracket] or stray <USER>/<USER_NAME>/<VAULT>/<KIT>/<REPO_ROOT>/<BOT_NAME>
-grep -rE '\[Your Bot|\[Nate\]|\[CHOOSE YOUR|<USER>|<USER_NAME>|<VAULT>|<KIT>|<REPO_ROOT>|<BOT_NAME>' $REPO_ROOT/ \
+grep -rE '\[Your Bot|\[CHOOSE YOUR|<USER>|<USER_NAME>|<USER_PREFS>|<USER_ROLE>|<USER_HOBBIES>|<USER_HOURS>|<TIMEZONE>|<VAULT>|<KIT>|<REPO_ROOT>|<BOT_NAME>' $REPO_ROOT/ \
   --include='*.md' --include='*.service' --include='*.sh' \
   | grep -v '\[ \]'   # ignore unchecked checkboxes
 ```
 
-(Some `<bracket>` patterns are legitimate code — e.g. `https://api.telegram.org/bot<TOKEN>/...` is a URL placeholder Nate fills with his real token at Step 6, not a kit placeholder. Use judgment.)
+(Some `<bracket>` patterns are legitimate code — e.g. `https://api.telegram.org/bot<TOKEN>/...` is a URL placeholder the user fills with his real token at Step 6, not a kit placeholder. Use judgment.)
 
 After each file, add a one-line note in `setup-state.md` `## Notes`: "Filled placeholders in `CLAUDE.md`, `identity.md`, `soul-loop.md`."
 
 ## How to behave
 
-- **Don't make Nate fill in placeholders manually.** Do Phase 0 first (see above), store collected values in `setup-state.md`, then apply them with the `Edit` tool as you walk through each step. Nate should never have to grep for `[Your Bot's Name]` and edit a file in vim.
-- **Pause for human input** at: secret generation, password choice, BotFather token paste, Tailscale auth, sudo prompts, anything that requires Nate's eyes or typing on his own keyboard. Show him the exact command, wait for him to run it, then read the output.
+- **Don't make the user fill in placeholders manually.** Do Phase 0 first (see above), store collected values in `setup-state.md`, then apply them with the `Edit` tool as you walk through each step. The user should never have to grep for `[Your Bot's Name]` and edit a file in vim.
+- **Pause for human input** at: secret generation, password choice, BotFather token paste, Tailscale auth, sudo prompts, anything that requires the user's eyes or typing on his own keyboard. Show him the exact command, wait for him to run it, then read the output.
 - **Update `setup-state.md` after each substantive step.** Move items Pending → In-progress → Done. Note timestamps and any unexpected output. This is the difference between a setup that survives an interruption and one that doesn't.
-- **Verify each step.** `first-time-setup.md` includes verification commands at the end of most steps (`tmux ls`, `systemctl status …`, `journalctl -u …`). Don't move on until the verification passes. If it fails, log the failure to `setup-state.md` Blockers and ask Nate.
-- **Never assume.** If a doc is ambiguous, ask Nate before guessing. The cost of asking is one round-trip; the cost of guessing wrong is debugging a half-installed service later.
+- **Verify each step.** `first-time-setup.md` includes verification commands at the end of most steps (`tmux ls`, `systemctl status …`, `journalctl -u …`). Don't move on until the verification passes. If it fails, log the failure to `setup-state.md` Blockers and ask the user.
+- **Never assume.** If a doc is ambiguous, ask the user before guessing. The cost of asking is one round-trip; the cost of guessing wrong is debugging a half-installed service later.
 
 ## Where the runtime files live
 
@@ -136,23 +138,23 @@ This kit is **self-contained**. After clone, everything you need lives under `<R
 ## Common pitfalls (from the fresh-eyes review)
 
 - **Reboot before cron.** Step 8 (cron heartbeat) must come *after* the verification reboot in Step 4. If you set up cron first, the heartbeat will fire before the tmux session exists and `inject-prompt.sh` will silently noop.
-- **Docker compose vs docker-compose.** Modern installs use `docker compose` (subcommand). If `docker compose version` fails, Docker isn't installed or the compose plugin is missing. Pause and ask Nate to install Docker Engine + compose plugin before proceeding to Step 5.
-- **Node 20+** is required for the optional web shell (Step 7). If Nate skips Step 7, you don't need Node.
+- **Docker compose vs docker-compose.** Modern installs use `docker compose` (subcommand). If `docker compose version` fails, Docker isn't installed or the compose plugin is missing. Pause and ask the user to install Docker Engine + compose plugin before proceeding to Step 5.
+- **Node 20+** is required for the optional web shell (Step 7). If the user skips Step 7, you don't need Node.
 - **`bypassPermissions` is poorly named.** It removes interactive permission prompts, not security. The unix user account is the security boundary. See `persistence-and-hardware.md` for why this is correct for an unattended setup.
-- **The canary phrase** — Step 2 has Nate set a phrase in `identity.md`. This is an *orientation anchor*, not a security secret. The bot is supposed to remember the phrase without re-reading the file; if it can't, that's its signal it has lost context and needs to re-anchor. Pick anything memorable. Don't reuse a password.
+- **The canary phrase** — Step 2 has the user set a phrase in `identity.md`. This is an *orientation anchor*, not a security secret. The bot is supposed to remember the phrase without re-reading the file; if it can't, that's its signal it has lost context and needs to re-anchor. Pick anything memorable. Don't reuse a password.
 - **Tailscale serve** requires Tailscale to be installed and the host to have HTTPS certs (`tailscale cert` will be requested automatically the first time). If `tailscale status` shows the host isn't logged in, do that first.
 - **Glyph rendering inside tmux.** When you `tmux attach -t claude` to verify Step 4, the `❯` prompt and box-drawing characters must render correctly. If you see `__` or `??`, the locale isn't propagated to that shell context — see the "Glyph rendering" section in `persistence-and-hardware.md`. Fix before continuing; it tends to manifest later as Claude looking "broken" when it's actually working fine but rendering wrong.
 - **Two `.claude/` directories, easy to confuse.** `~/.claude/` is Claude Code's global per-user config (where `keybindings.json` from Step 3 goes). `<REPO_ROOT>/.claude/` is the project-scoped config — rendered from `<KIT>/dot-claude/` by `refresh-claude-dir.sh`. If the rendering step didn't run (or the post-merge hook isn't installed), the kit's agents and slash commands will silently fail to load — `/soul-loop` will return "unknown command." Verify the rendering happened: `ls -d <REPO_ROOT>/.claude` should show the directory and contain `agents/` + `commands/`.
 - **Run the interactive `claude` TOS login as the bot user, not the cloud-default user.** The OAuth token lands in `$HOME/.claude/` of whoever ran the command. If you did `claude` as `admin` and then `sudo su - nlbot`, nlbot's first run will gate on OAuth again. The bootstrap.md Step 7 should run after the user-switch in Step 2d.
-- **OAuth no longer needs to happen on the provisioner side (post-F42, 2026-05-12).** The bash provisioner's OAuth pre-flight at `first-time-setup.sh:174` was downgraded from a hard abort to an advisory message in F42, and the kit's Phase 5 (web shell) is now set up *before* OAuth is needed. The canonical flow is: provisioner runs `first-time-setup.sh --non-interactive` → grants NOPASSWD sudoers → reboots → hands `HANDOFF-TO-NATE.txt` to Nate. Nate's `HANDOFF` includes a "Step 0 — OAuth" block (omitted automatically if the provisioner already walked OAuth) that walks him through running `claude` in the web shell's `?session=shell` tab and pasting the OAuth code from the browser. After that, his default claude session is alive and `/setup` is one keystroke away. *Operators who prefer the pre-F42 flow (OAuth on the provisioner side via SSH or console) can still do it; the kit detects the credentials file and omits the OAuth block from HANDOFF accordingly.* The earlier wording of this bullet — "OAuth must complete BEFORE running `first-time-setup.sh`" — is left here as a paper trail; it described the pre-F42 behavior and is no longer accurate.
+- **OAuth no longer needs to happen on the provisioner side (post-F42, 2026-05-12).** The bash provisioner's OAuth pre-flight at `first-time-setup.sh:174` was downgraded from a hard abort to an advisory message in F42, and the kit's Phase 5 (web shell) is now set up *before* OAuth is needed. The canonical flow is: provisioner runs `first-time-setup.sh --non-interactive` → grants NOPASSWD sudoers → reboots → hands `HANDOFF-TO-NATE.txt` to the user. The user's `HANDOFF` includes a "Step 0 — OAuth" block (omitted automatically if the provisioner already walked OAuth) that walks him through running `claude` in the web shell's `?session=shell` tab and pasting the OAuth code from the browser. After that, his default claude session is alive and `/setup` is one keystroke away. *Operators who prefer the pre-F42 flow (OAuth on the provisioner side via SSH or console) can still do it; the kit detects the credentials file and omits the OAuth block from HANDOFF accordingly.* The earlier wording of this bullet — "OAuth must complete BEFORE running `first-time-setup.sh`" — is left here as a paper trail; it described the pre-F42 behavior and is no longer accurate.
 
 ## Resuming an interrupted setup
 
 If `setup-state.md` exists when you start, do this:
 
-1. Read it. The "Current phase" line tells you the highest-numbered step Nate has reached.
+1. Read it. The "Current phase" line tells you the highest-numbered step the user has reached.
 2. The "In-progress" section tells you what was being attempted when the prior session ended.
-3. **Verify the partial state matches reality** before continuing. Example: if `setup-state.md` claims `claude-code.service` was started, run `systemctl status claude-code.service` and confirm it's actually active. If not, log a discrepancy in Blockers and ask Nate.
+3. **Verify the partial state matches reality** before continuing. Example: if `setup-state.md` claims `claude-code.service` was started, run `systemctl status claude-code.service` and confirm it's actually active. If not, log a discrepancy in Blockers and ask the user.
 4. Move the In-progress item back to Pending if the verification fails, or to Done if it succeeded but wasn't logged.
 5. Pick up the next Pending item.
 
@@ -165,20 +167,20 @@ The state file is the single source of truth for "where are we." If it disagrees
 Your handoff checklist when you stop:
 
 - `<REPO_ROOT>/setup-state.md` has the required Phase 0 Values populated (`BOT_NAME`, `VAULT`, `OS_USER`). The personality values (`USER_NAME`, `CANARY_PHRASE`, `IDLE_PREFS`, etc.) may be left blank — they're collected by the bot's own `/setup` interview after reboot.
-- `setup-state.md` Current phase reads `phase-0-interview-pending` (or further along if you collected the personality values too and let Nate skip the interview). The legacy seed value `pre-step-5` is treated as an alias of `phase-0-interview-pending` for older state files.
+- `setup-state.md` Current phase reads `phase-0-interview-pending` (or further along if you collected the personality values too and let the user skip the interview). The legacy seed value `pre-step-5` is treated as an alias of `phase-0-interview-pending` for older state files.
 - `systemctl status claude-code.service` is `active (running)` after the reboot.
 - `tmux attach -t claude` shows the bot in its first soul-loop.
 - `<VAULT>/` has `CLAUDE.md`, `identity.md`, `user-profile.md`, `CONFIG.md`, `journals/journal.md`, `inbox.md`, plus all SB index pages — placeholder substitution applied.
 - `<REPO_ROOT>/.claude/` exists with `agents/` + `commands/` subdirs — rendered from `<KIT>/dot-claude/`.
 - `<REPO_ROOT>/.git/hooks/post-merge` is executable and points at `<KIT>/runtime/refresh-claude-dir.sh` — so future kit pulls auto-refresh `.claude/` + seed vault-pages + fetch plug bundles.
 
-Tell Nate: *"Bot is online and waiting for you. Open the web shell URL, log in, then type `/setup` at the prompt. The bot will run a short interview (your name, a canary phrase, a few preferences), then bring the rest of itself up over ~5–10 minutes. If you opted in to Telegram during the interview, you'll need to do the BotFather conversation when the bot posts a BLOCKER about it. See `first-time-setup.md` 'After the reboot — hand the URL to Nate' for what to expect."*
+Tell the user: *"Bot is online and waiting for you. Open the web shell URL, log in, then type `/setup` at the prompt. The bot will run a short interview (your name, a canary phrase, a few preferences), then bring the rest of itself up over ~5–10 minutes. If you opted in to Telegram during the interview, you'll need to do the BotFather conversation when the bot posts a BLOCKER about it. See `first-time-setup.md` 'After the reboot — hand the URL to the user' for what to expect."*
 
 Then `exit` the assisting-CC session.
 
 ### Power-user fallback: drive Steps 5–9 yourself
 
-If you (the assisting CC) or Nate prefer to drive Steps 5–9 manually instead of letting the bot self-drive — e.g., because something in the bot's setup-runner is broken, or because you want to walk it together — the detailed instructions are preserved in `first-time-setup.md` under "Reference: detailed Step 5–9 instructions (assisting-CC fallback)." You can run those by hand; just keep `setup-state.md` Current phase synchronized as you go so the bot doesn't try to redo what you've already done.
+If you (the assisting CC) or the user prefer to drive Steps 5–9 manually instead of letting the bot self-drive — e.g., because something in the bot's setup-runner is broken, or because you want to walk it together — the detailed instructions are preserved in `first-time-setup.md` under "Reference: detailed Step 5–9 instructions (assisting-CC fallback)." You can run those by hand; just keep `setup-state.md` Current phase synchronized as you go so the bot doesn't try to redo what you've already done.
 
 ## State file skeleton
 
@@ -231,7 +233,7 @@ Current phase: phase-0-interview-pending
 ## Pending
 - prereqs check (Claude Code, Docker, Node 20+ if doing web shell, Tailscale)
 - vault directory + apply BOT_NAME/USER_NAME/CANARY_PHRASE/etc to all template files
-- CLAUDE.md from CLAUDE-nate.md template
+- CLAUDE.md from CLAUDE.md.template template
 - keybindings disable (~/.claude/keybindings.json)
 - runtime files copied to vault (.claude/, runtime scripts)
 - claude-code.service installed + verification reboot
