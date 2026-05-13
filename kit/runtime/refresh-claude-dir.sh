@@ -178,7 +178,7 @@ fi
 # someone re-copies by hand. This phase keeps the deployed copies in sync.
 # OVERWRITE intentional — kit owns these files; local edits will be
 # blown away on each refresh. State files (queue/, inject.log,
-# .secretary-last-hash, .soul-loop-last-action, job-log.md, .inject.lock)
+# .secretary-last-hash, .soul-loop-last-action, .inject.lock; job-log.md now lives in vault root)
 # live alongside but are not touched. Caught by ansi on nlbot0 after F30
 # (sidechat msg 2771, F31).
 CRON_DST="$REPO_ROOT/cron-prompts"

@@ -16,7 +16,7 @@ NEW_HASH=$(grep -E '^❯' /tmp/secretary-context.txt | grep -v -E '^❯ ?/' | ta
 LAST_HASH=$(cat "$HASH_FILE" 2>/dev/null || echo "")
 
 if [ "$NEW_HASH" = "$LAST_HASH" ]; then
-  echo "| $(date '+%Y-%m-%d %H:%M') | secretary | 0 | noop (no new user input) |" >> <REPO_ROOT>/cron-prompts/job-log.md
+  echo "| $(date '+%Y-%m-%d %H:%M') | secretary | 0 | noop (no new user input) |" >> <VAULT>/job-log.md
   rm -f /tmp/secretary-context.txt
   # Stay silent and stop here
 fi
@@ -40,7 +40,7 @@ After the agent finishes:
 - Run `rm -f /tmp/secretary-context.txt`
 - Log the result + `total_tokens` from the agent's usage block:
   ```bash
-  echo "| $(date '+%Y-%m-%d %H:%M') | secretary | <total_tokens> | <agent return value> |" >> <REPO_ROOT>/cron-prompts/job-log.md
+  echo "| $(date '+%Y-%m-%d %H:%M') | secretary | <total_tokens> | <agent return value> |" >> <VAULT>/job-log.md
   ```
 - If the agent returned `nothing new`, stay silent.
 - Otherwise display the agent's one-line summary.

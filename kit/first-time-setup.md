@@ -358,7 +358,7 @@ Then `crontab -e`:
 5 0 * * *      <REPO_ROOT>/cron-prompts/inject-prompt.sh /midnight-maintenance
 ```
 
-Within 10 minutes you should see soul-loop fires in `cron-prompts/job-log.md`, and the secretary fires every 30 minutes capturing journal-worthy moments from your conversations.
+Within 10 minutes you should see soul-loop fires in `job-log.md`, and the secretary fires every 30 minutes capturing journal-worthy moments from your conversations.
 
 ### Step 6 detail — SilverBullet (the vault editor)
 
@@ -418,7 +418,7 @@ Installed by default during bot-driven setup. Walked through in [memory.md](memo
 ## What "done" looks like
 
 - You DM the bot, it replies within a minute.
-- `cron-prompts/job-log.md` shows clean heartbeat fires every 10 minutes.
+- `job-log.md` shows clean heartbeat fires every 10 minutes.
 - `journals/journal.md` has Claude's first morning entry.
 - You reboot the box; everything comes back up in under 30 seconds.
 

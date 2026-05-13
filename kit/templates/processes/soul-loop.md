@@ -7,7 +7,7 @@ The 10–30 minute heartbeat that runs when <BOT_NAME> is idle. Prevents "defaul
 - **Cron driver:** system crontab, fires `/soul-loop` slash command via `cron-prompts/inject-prompt.sh`
 - **Skill:** `.claude/commands/soul-loop.md` (shell triage) — runs Tier 1 pre-check, decides whether to spawn an agent
 - **Agent:** `.claude/agents/soul-loop-runner.md` (decision menu, picks one action, logs the loop)
-- **Log:** `soul-loop-log.md` (non-rest entries only); `cron-prompts/job-log.md` (every fire incl. rest)
+- **Log:** `soul-loop-log.md` (non-rest entries only); `job-log.md` (every fire incl. rest)
 
 ## Three-tier triage
 
@@ -51,7 +51,7 @@ Filter out: `templates/`, `node_modules`, `CLAUDE.md`.
 
 ## Invariants
 
-- Every fire logs to `cron-prompts/job-log.md`, even rests (with 0 tokens).
+- Every fire logs to `job-log.md`, even rests (with 0 tokens).
 - Only non-rest, real-action fires get a row in `soul-loop-log.md`.
 - Do not fabricate work when idle. Real rest > invented busywork.
 - Ramp heartbeat / start immediately when a new `#handoff` lands; don't wait for next scheduled loop.
