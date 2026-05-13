@@ -112,19 +112,46 @@ Drop a one-line confirmation to the user:
 
 Then fall through to **Phase B** (dispatch setup-runner) in this same turn. setup-runner will work through Step 5 (cron) → Step 6 (SilverBullet) → Step 7 (web shell) → Step 8 (memory) → either skip Step 9 if TELEGRAM_ENABLED=no, or pause at the BotFather blocker if yes.
 
-## Phase B — Dispatch setup-runner (when interview is complete or we just finished it)
+## Phase B — Dispatch setup-runner in a loop until done or blocker (F44)
 
-Spawn the `setup-runner` sub-agent (Agent tool, `subagent_type: "setup-runner"`) with this prompt:
+setup-runner executes ONE phase per dispatch by design (bounded token cost
++ observability per phase). The cron-driven `/soul-loop` re-dispatches the
+agent every 10 minutes so the bot walks to `done` eventually on its own.
+But when a human types `/setup` they expect the bot to walk all the way
+through, not pause for a cron tick after each phase. Jason hit this
+explicitly on the fenbot03 walk 2026-05-13 — typed `/setup`, watched it
+do step-5-cron, watched it stop, had to re-type `/setup` for step-6,
+again for step-7, again for step-8.
+
+So in this human-driven path, dispatch setup-runner in a loop:
+
+1. Spawn the `setup-runner` sub-agent (Agent tool, `subagent_type:
+   "setup-runner"`) with the prompt below.
+2. Log the agent's `total_tokens` + return value to `cron-prompts/job-log.md`.
+3. Re-read `Current phase` from `<REPO_ROOT>/setup-state.md`.
+4. If the new phase is `done`, OR ends in `-blocker`, OR is the same
+   as the phase before the dispatch (the agent made no progress —
+   probable failure, do not spin), exit the loop and report final state
+   to the user.
+5. Otherwise loop back to step 1 and dispatch the next phase.
+
+Safety cap: 12 dispatches max per `/setup` invocation. If still not at
+a terminal state after 12 dispatches, exit with the current phase noted
+to the user — something is clearly stuck and re-running `/setup` is
+preferable to looping forever.
+
+Dispatch prompt:
 
 > Read /home/<BOT_NAME>/<REPO_ROOT>/setup-state.md, find the Current phase, and execute that phase. One phase per dispatch. Update state when done. Return one line.
 
-After the agent returns, log the result + `total_tokens` from the agent's usage block:
+Log line format (same as before):
 
 ```bash
 echo "| $(date '+%Y-%m-%d %H:%M') | setup | <total_tokens> | <agent return value> |" >> <REPO_ROOT>/cron-prompts/job-log.md 2>/dev/null || true
 ```
 
-Display only the agent's one-line return value.
+After the loop exits, display the chain of one-line return values from
+each dispatch (one per phase walked) so the user can see what happened.
 
 ## Re-entrancy
 
