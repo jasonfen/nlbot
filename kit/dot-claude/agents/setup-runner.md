@@ -94,10 +94,23 @@ If the count is 6, advance to the container probe.
 **Probe (container):** `docker compose -f <KIT>/docker-compose.yml ps --status running --services 2>/dev/null | grep -qx silverbullet` → if true, advance phase.
 
 **Execute:**
-1. Generate two encrypted credentials. `bot-secrets.sh generate` pipes openssl through `systemd-creds encrypt` in one pipeline — the plaintext never lands in a shell variable, a journal entry, or any non-encrypted file:
+1. Generate encrypted credentials, **only when the slot is empty** (F45,
+   fenbot00 walk 2026-05-13). Phase 0.5 of `first-time-setup.sh` already
+   stored `sb-user-password` (operator-typed `BOT_PASSWORD`, shared with
+   web-ui-password when `PASSWORD_MODE=unified`). Generating
+   unconditionally overwrites that value with a random one, breaking
+   the unified-password promise — caught by ansi when fenbot00's SB
+   password came back as `GkmMyN7HBfBVPsNrEwOhewCsUCHVrJL9` instead of
+   the operator's BOT_PASSWORD. `sb-auth-token` is always machine-only
+   so it can use the same probe-then-generate pattern for idempotence.
+   `bot-secrets.sh generate` pipes openssl through `systemd-creds
+   encrypt` in one pipeline — the plaintext never lands in a shell
+   variable, a journal entry, or any non-encrypted file:
    ```
-   <KIT>/runtime/bot-secrets.sh generate sb-user-password 24
-   <KIT>/runtime/bot-secrets.sh generate sb-auth-token    24
+   [ -f /etc/<BOT_NAME>/secrets/sb-user-password ] \
+     || <KIT>/runtime/bot-secrets.sh generate sb-user-password 24
+   [ -f /etc/<BOT_NAME>/secrets/sb-auth-token ] \
+     || <KIT>/runtime/bot-secrets.sh generate sb-auth-token 24
    ```
    In `setup-state.md` Values block, record `(systemd-creds: sb-user-password)` and `(systemd-creds: sb-auth-token)` — pointers, not values.
 2. Read `tailscale status --json | jq -r .Self.HostName`. Write as `TAILSCALE_HOSTNAME`.
