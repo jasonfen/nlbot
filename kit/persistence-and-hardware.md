@@ -108,7 +108,7 @@ It cannot do anything the underlying user can't already do. The blast radius is 
 
 ### What I'm trading away
 
-In bypass mode, you don't see "Claude wants to run X — allow?" prompts. You also don't see them as a log entry — there's no per-action audit trail unless you go look at what Claude did in the journal or in `cron-prompts/job-log.md`. If you want a record, that's where it lives.
+In bypass mode, you don't see "Claude wants to run X — allow?" prompts. You also don't see them as a log entry — there's no per-action audit trail unless you go look at what Claude did in the journal or in `job-log.md`. If you want a record, that's where it lives.
 
 For a personal-use bot run by one person on one machine, the trade is correct: the friction of approving every action would make the persistent setup unusable, and the user-level isolation is sufficient containment for the threat model ("I trust the bot to operate within my own user account").
 

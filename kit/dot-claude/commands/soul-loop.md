@@ -60,7 +60,7 @@ In priority order:
 
 - **If `BLOCKER_GATED == 1`:** setup is parked on a `-blocker` phase with an active BLOCKER line. Bot can't advance until the human acts. Shell-only rest:
   ```bash
-  echo "| $(date '+%Y-%m-%d %H:%M') | soul-loop | 0 | shell-only rest (setup blocker pending: $SETUP_PHASE) |" >> <REPO_ROOT>/cron-prompts/job-log.md
+  echo "| $(date '+%Y-%m-%d %H:%M') | soul-loop | 0 | shell-only rest (setup blocker pending: $SETUP_PHASE) |" >> <VAULT>/job-log.md
   ```
   Stay silent. Stop here.
 
@@ -73,7 +73,7 @@ In priority order:
 
 - **If `HANDOFFS == 0` AND `SECONDS_SINCE < 3600` (under 1 hour since last real action):** no agent. Log to job-log only (soul-loop-log.md only gets non-rest entries now):
   ```bash
-  echo "| $(date '+%Y-%m-%d %H:%M') | soul-loop | 0 | shell-only rest |" >> <REPO_ROOT>/cron-prompts/job-log.md
+  echo "| $(date '+%Y-%m-%d %H:%M') | soul-loop | 0 | shell-only rest |" >> <VAULT>/job-log.md
   ```
   Stay silent. Stop here.
 
@@ -93,7 +93,7 @@ Then spawn `soul-loop-runner` (Agent tool, `subagent_type: "soul-loop-runner"`) 
 
 After the agent returns, log the result + `total_tokens` from the agent's usage block:
 ```bash
-echo "| $(date '+%Y-%m-%d %H:%M') | soul-loop | <total_tokens> | <agent return value> |" >> <REPO_ROOT>/cron-prompts/job-log.md
+echo "| $(date '+%Y-%m-%d %H:%M') | soul-loop | <total_tokens> | <agent return value> |" >> <VAULT>/job-log.md
 ```
 
 Display ONLY the agent's one-line return value.
