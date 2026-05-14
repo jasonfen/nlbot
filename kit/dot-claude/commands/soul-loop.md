@@ -17,16 +17,26 @@ if [ -f <REPO_ROOT>/setup-state.md ]; then
   SETUP_PHASE=$(grep '^Current phase:' <REPO_ROOT>/setup-state.md 2>/dev/null | head -1 | sed 's/^Current phase: *//; s/[[:space:]]*$//')
 fi
 
-# Count open handoff tasks. Scoped to <VAULT>/handoffs/ + <VAULT>/inbox.md
-# only — those are the canonical handoff locations. Scanning the whole
-# vault picked up example checkboxes inside docs (silverbullet-setup.md
-# line 94 had `- [ ] do the thing #handoff` as illustrative prose) and
-# inflated the count, causing soul-loop-runner spawns with no real work.
-# Skip handoffs tagged #blocked-on-human — they can't progress without
-# the user answering, so spawning a 15-20k-token agent to re-ack the
-# same blocker is pure burn. Handoffs need both tags for the short-
-# circuit: #handoff and #blocked-on-human on the same checkbox line.
-HANDOFFS=$(grep -rhn "\- \[ \].*#handoff" <VAULT>/handoffs/ <VAULT>/inbox.md 2>/dev/null | grep -v "#blocked-on-human" | grep -v "\.conflicted" | wc -l)
+# Count open handoff tasks via SilverBullet's index API.
+# Queries the live SB task index rather than grepping files — catches
+# #handoff tasks anywhere in the vault, uses SB's parsed done-state
+# (not raw checkbox text), and excludes template pages automatically.
+# Filters out #blocked-on-human tasks (can't progress without the user)
+# and _templates/ pages (false positives from template prose).
+# Falls back to 0 (shell-only rest) if SB is unavailable.
+HANDOFFS=$(bash <KIT>/runtime/sb-cmd.sh --lua 'index.queryLuaObjects("task", {limit=200})' 2>/dev/null | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+count = 0
+for t in d.get('result', []):
+    tags = t.get('itags', [])
+    page = t.get('page', '')
+    if ('handoff' in tags and not t.get('done', True)
+            and 'blocked-on-human' not in tags
+            and not page.startswith('_templates')):
+        count += 1
+print(count)
+" 2>/dev/null || echo 0)
 
 # Time since the last non-rest soul loop (creative/handoff action)
 LAST_ACTION_FILE=<REPO_ROOT>/cron-prompts/.soul-loop-last-action
