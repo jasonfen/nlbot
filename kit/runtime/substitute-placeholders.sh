@@ -32,10 +32,21 @@ STATE_FILE="$REPO_ROOT/setup-state.md"
 
 # Read a value from setup-state.md (Values block format:
 # `- **KEY**: value <!-- optional comment -->`).
+#
+# "Key not in the state file" is a normal case — the bash bootstrap only
+# writes BOT_NAME / VAULT / OS_USER; the /setup interview fills the rest
+# later. The TIMEZONE block below has its own auto-detect fallback for
+# the key that has historically been absent from setup-state.md.template.
+# So when grep finds nothing, return the empty string with status 0 —
+# don't let pipefail propagate grep's exit 1 up to the calling script's
+# `set -e`. Reproduced on nlbot first-run 2026-05-14: this function ran
+# inside `state_val=$(_state_read TIMEZONE)`, grep no-match exited 1,
+# pipefail bubbled, command substitution returned 1, and first-time-setup.sh
+# aborted silently right after "Files seeded. Now substituting placeholders…".
 _state_read() {
   local key="$1"
   [ -f "$STATE_FILE" ] || { echo ""; return 0; }
-  grep "^- \*\*$key\*\*:" "$STATE_FILE" 2>/dev/null \
+  { grep "^- \*\*$key\*\*:" "$STATE_FILE" 2>/dev/null || true; } \
     | sed 's/^[^:]*: *//; s/ *<!--.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' \
     | head -1
 }
