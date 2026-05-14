@@ -75,7 +75,11 @@ state_read() {
   local file="$REPO_ROOT/setup-state.md"
   [ -f "$file" ] || return 0
   local value
-  value=$(grep "^- \*\*$key\*\*:" "$file" 2>/dev/null \
+  # `grep || true` so a missing key produces empty string + status 0,
+  # not a pipefail-propagated exit 1 that trips the caller's set -e.
+  # See substitute-placeholders.sh:_state_read for the field repro that
+  # motivated this — same pattern, same fix.
+  value=$({ grep "^- \*\*$key\*\*:" "$file" 2>/dev/null || true; } \
     | sed 's/^[^:]*: *//; s/ *<!--.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' \
     | head -1)
   echo "$value"
