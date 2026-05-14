@@ -14,9 +14,15 @@ The 10–30 minute heartbeat that runs when <BOT_NAME> is idle. Prevents "defaul
 The command reads two signals:
 
 ```bash
-HANDOFFS=$(grep -rn "\- \[ \].*#handoff" <VAULT>/ ...)
-SECONDS_SINCE=$(NOW - cat cron-prompts/.soul-loop-last-action)
+# Pseudo-code; real form lives in .claude/commands/soul-loop.md
+HANDOFFS = sb-cmd.sh --lua 'index.queryLuaObjects("task", {limit=200})'
+           filtered to: itags includes "handoff", not done,
+                        itags excludes "blocked-on-human",
+                        page not under _templates/
+SECONDS_SINCE = NOW - cat <REPO_ROOT>/cron-prompts/.soul-loop-last-action
 ```
+
+`HANDOFFS` queries SilverBullet's task index (`index.queryLuaObjects`), not a filesystem grep — see *Why SB index, not grep* below.
 
 Decision tree:
 
@@ -31,7 +37,7 @@ Timestamp is updated *before* spawning so rate-limit holds regardless of what th
 ## Decision menu (inside the agent)
 
 In priority order:
-1. **Pending work** — open handoffs grep-matched under `handoffs/`, `inbox.md`
+1. **Pending work** — open handoffs from SB's task index anywhere in the vault, filtered for `#handoff` tag, not-done, not `#blocked-on-human`
 2. **Journal maintenance** — if `journals/journal.md` > 300 lines, compact into the daily file
 3. **Check messaging channels** — poll for unanswered threads, if any
 4. **Build something** — concrete task calls itself
@@ -41,13 +47,25 @@ In priority order:
 8. **Tidy** — vault hygiene, broken-link sweep
 9. **Rest** — when none of the above crystallizes in 10 seconds
 
-## Grep patterns
+## Why SB index, not grep
 
-- Open handoff: `- \[ \].*#handoff`
-- Waiting-on-review: `- \[ \].*#review`
-- Action items: `- \[ \].*#action`
+The earlier implementation used `grep -rhn "\- \[ \].*#handoff" <VAULT>/handoffs/ <VAULT>/inbox.md`. Two failure modes pushed it to the SB index:
 
-Filter out: `templates/`, `node_modules`, `CLAUDE.md`.
+1. **Scope blindness.** Grep only checked `<VAULT>/handoffs/` and `<VAULT>/inbox.md`. Handoff checkboxes in journals, processes docs, or random subpages were invisible. Widening the grep to the whole vault then caught example checkboxes in doc prose (a kit doc legitimately had `- [ ] do the thing #handoff` as illustrative text) and inflated the count, causing soul-loop spawns with no real work.
+2. **Parse-by-regex fragility.** `- [ ]` matches any open-checkbox-shaped string in the file, including code blocks, quoted snippets, and frontmatter.
+
+`index.queryLuaObjects("task", ...)` returns every parsed task object SilverBullet sees, with its tag set and done-state already resolved. That's the same source `inbox.md`'s render template uses, same source `Page: From Template` reads. Asking the editor what it actually indexed beats re-inferring from raw text.
+
+The filter set:
+
+| Field | Condition | Why |
+|---|---|---|
+| `itags` | includes `"handoff"` | The handoff tag is what flags the work |
+| `done` | falsy | Don't re-count completed handoffs |
+| `itags` | excludes `"blocked-on-human"` | Skip handoffs waiting on operator input — spawning an agent to re-ack pure burn |
+| `page` | not under `_templates/` | Exclude template prose (false positives from `meta/template/page` files) |
+
+The filesystem fallback (`|| echo 0`) makes SB unavailability a safe degrade: the bot logs a shell-only rest rather than crashing.
 
 ## Invariants
 
