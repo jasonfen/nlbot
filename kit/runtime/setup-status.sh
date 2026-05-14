@@ -460,6 +460,13 @@ fi
 if [ -n "$NEED_BOOTSTRAP" ]; then
   echo "Mode:                 PRE-SETUP (still in bootstrap.md)"
   echo "Next manual step:     $NEED_BOOTSTRAP"
+  # bootstrap.sh covers bootstrap.md Steps 3-9 non-interactively. The two
+  # carve-outs (adduser, tailscale up) need a real prompt or browser auth,
+  # so we skip the automation hint there.
+  case "$NEED_BOOTSTRAP" in
+    *"create bot user"*|*Tailscale*) ;;
+    *) echo "Next automated:       bash $KIT/runtime/bootstrap.sh  (bootstrap.md Steps 3-9, idempotent)" ;;
+  esac
   echo
   echo "${Y}You're not at the bot-driven phase yet. Complete bootstrap.md, then first-time-setup.md Steps 1–4, then the bot wakes up and finishes Steps 5–9 itself.${N}"
   exit 1
@@ -467,6 +474,13 @@ fi
 if [ -n "$NEED_FIRSTTIME" ]; then
   echo "Mode:                 PRE-SETUP (in first-time-setup.md Steps 1–4)"
   echo "Next manual step:     $NEED_FIRSTTIME"
+  # first-time-setup.sh covers Steps 1-4 *except* the final NOPASSWD
+  # sudoers grant — that one stays manual on purpose as the "hand over
+  # the keys" gate before the verification reboot.
+  case "$NEED_FIRSTTIME" in
+    *"final action"*) ;;
+    *) echo "Next automated:       bash $KIT/runtime/first-time-setup.sh  (Steps 1-4 except final NOPASSWD grant)" ;;
+  esac
   echo
   echo "${Y}Once the service is active and you've rebooted, the bot wakes up and drives Steps 5–9 itself.${N}"
   exit 1
@@ -542,6 +556,7 @@ else
 fi
 
 echo "Recommended next:     $NEXT"
+echo "Next automated:       /setup  (dispatches the setup-runner subagent; soul-loop will also pick it up on next fire)"
 echo
 
 if [ "$DECLARED" = "$NEXT" ]; then
