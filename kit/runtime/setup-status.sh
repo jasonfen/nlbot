@@ -310,10 +310,24 @@ if [ -d "$VAULT" ]; then
           -e "s|<VAULT>|$_VAULT|g" \
           -e "s|<REPO_ROOT>|$REPO_ROOT|g" \
           {} \;
-        if diff -rq "$drift_tmpdir/.claude" "$REPO_ROOT/.claude" >/dev/null 2>&1; then
+        # One-directional drift check. diff -rq is bidirectional, so it
+        # also flags live-only paths — but Claude Code writes runtime
+        # artifacts into .claude/ (backups/, cache/, settings.json,
+        # settings.local.json, todos, shell-snapshots) that dot-claude/
+        # never shipped. refresh-claude-dir.sh Phase 1 only overwrites/
+        # adds kit files; it never deletes extras, so counting live-only
+        # entries produces a drift warning that can never be cleared.
+        # Drop `Only in <live>:` lines; keep `Files ... differ` (stale
+        # kit file) and `Only in <scratch>:` (kit file missing from
+        # live) — the cases the refresh actually fixes. Caught on
+        # nlbot real box 2026-05-15 (3 stuck entries: backups, cache,
+        # settings.json).
+        drift_out=$(diff -rq "$drift_tmpdir/.claude" "$REPO_ROOT/.claude" 2>/dev/null \
+          | grep -v "^Only in ${REPO_ROOT}/\.claude")
+        if [ -z "$drift_out" ]; then
           pass ".claude/ in sync with dot-claude/"
         else
-          drift_count=$(diff -rq "$drift_tmpdir/.claude" "$REPO_ROOT/.claude" 2>/dev/null | wc -l)
+          drift_count=$(printf '%s\n' "$drift_out" | grep -c .)
           warn ".claude/ drift" "($drift_count file(s) differ — run bash $KIT/runtime/refresh-claude-dir.sh)"
         fi
       fi
