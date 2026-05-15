@@ -40,12 +40,11 @@ if [ ! -x "$BOT_SECRETS" ]; then
   exit 1
 fi
 
-banner() {
-  echo
-  echo "============================================================"
-  echo "  $1"
-  echo "============================================================"
-}
+# Shared UI helpers (banner, pass, fail, warn, skip, colors). Replaces
+# the local 3-line `====` banner with the bold one-line header used by
+# setup-status.sh and the rest of the install flow.
+# shellcheck source=/dev/null
+. "$SCRIPT_DIR/ui.sh"
 
 # Encrypt one value, stripped of the surrounding plaintext context, into
 # a named credential. Skip if the encrypted blob already exists.
@@ -164,26 +163,26 @@ encrypt_one web-ui-username    "$WEB_USER"
 
 banner "Phase 2 — Verify"
 ok=0
-fail=0
+fail_count=0  # renamed from `fail` to avoid shadowing the fail() helper from ui.sh
 for name in tg-bot-token tg-chat-id tg-bot-username \
             sb-user-password sb-auth-token \
             web-session-secret web-ui-password web-ui-username; do
   if sudo test -f "$SECRETS_DIR/$name"; then
     if "$BOT_SECRETS" verify "$name" >/dev/null 2>&1; then
-      echo "  ✓ $name"
+      pass "$name"
       ok=$((ok+1))
     else
-      echo "  ✗ $name — exists but fails decryption" >&2
-      fail=$((fail+1))
+      fail "$name" "exists but fails decryption"
+      fail_count=$((fail_count+1))
     fi
   else
-    echo "  -  $name — not stored (empty/missing input value, OK if you didn't use that feature yet)"
+    skip "$name — not stored (empty/missing input value, OK if you didn't use that feature yet)"
   fi
 done
 
-if [ "$fail" -gt 0 ]; then
+if [ "$fail_count" -gt 0 ]; then
   echo
-  echo "  $fail credential(s) failed verification. Plaintext NOT removed." >&2
+  echo "  $fail_count credential(s) failed verification. Plaintext NOT removed." >&2
   echo "  Investigate before re-running. Most likely cause: TPM seal mismatch or systemd-creds binary missing." >&2
   exit 1
 fi

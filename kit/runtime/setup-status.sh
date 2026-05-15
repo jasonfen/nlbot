@@ -96,23 +96,21 @@ else
   MODE="PRE-SETUP"
 fi
 
-# Colors only if stdout is a TTY
-if [ -t 1 ]; then
-  G=$'\033[32m'; R=$'\033[31m'; Y=$'\033[33m'; B=$'\033[1m'; N=$'\033[0m'
-else
-  G=""; R=""; Y=""; B=""; N=""
-fi
+# Shared UI helpers (colors G/R/Y/B/N, pass, _ui_fail, warn, banner, skip).
+# shellcheck source=/dev/null
+. "$SCRIPT_DIR/ui.sh"
 
-pass() { printf "  [%s✓%s] %-38s %s\n" "$G" "$N" "$1" "${2:-}"; }
-# fail() also captures the FIRST failing phase name into FIRST_FAIL, so the
-# recommendation block can suggest "go back and fix this" even when later
-# phases coincidentally completed. The `${VAR:=val}` form only sets if VAR
-# is currently empty — subsequent fails don't overwrite the earliest one.
+# Override the shared fail() with one that also captures the FIRST failing
+# phase name into FIRST_FAIL, so the recommendation block at the bottom
+# can suggest "go back and fix this" even when later phases coincidentally
+# completed. The `${VAR:=val}` form only sets if VAR is currently empty —
+# subsequent fails don't overwrite the earliest one. This wrapper is
+# setup-status-specific; bootstrap/first-time-setup/migrate-secrets use
+# the plain inherited fail() from ui.sh.
 fail() {
-  printf "  [%s✗%s] %-38s %s\n" "$R" "$N" "$1" "${2:-}"
+  _ui_fail "$@"
   : "${FIRST_FAIL:=$1}"
 }
-warn() { printf "  [%s!%s] %-38s %s\n" "$Y" "$N" "$1" "${2:-}"; }
 
 # --- Header ------------------------------------------------------------------
 

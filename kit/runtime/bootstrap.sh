@@ -18,16 +18,13 @@
 
 set -euo pipefail
 
-banner() {
-  echo
-  echo "============================================================"
-  echo "  $1"
-  echo "============================================================"
-}
-
-skip() {
-  echo "  [skip] $1"
-}
+# Shared UI helpers (banner, skip, pass, fail, warn, colors). The local
+# banner/skip definitions this replaced rendered as a 3-line `====` block
+# with no colour; the shared version emits a bold one-line header so
+# bootstrap.sh now matches setup-status.sh's visual style end-to-end.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+. "$SCRIPT_DIR/ui.sh"
 
 #
 # Step 3: Locale — Claude Code uses box-drawing glyphs; broken locale

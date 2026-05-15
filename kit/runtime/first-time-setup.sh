@@ -25,23 +25,19 @@ set -euo pipefail
 
 # --- Helpers ----------------------------------------------------------------
 
-banner() {
-  echo
-  echo "============================================================"
-  echo "  $1"
-  echo "============================================================"
-}
-
-skip() {
-  echo "  [skip] $1"
-}
-
 # Path triple resolution. Script lives at kit/runtime/first-time-setup.sh,
 # so two levels up is the repo root; vault is repo_root/vault.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 KIT="$(cd "$SCRIPT_DIR/.." && pwd)"           # kit/runtime/ → kit/
 REPO_ROOT="$(cd "$KIT/.." && pwd)"            # kit/ → repo root
 VAULT_DEFAULT="$REPO_ROOT/vault"
+
+# Shared UI helpers (banner, skip, pass, fail, warn, colors). The local
+# banner/skip definitions this replaced rendered as a 3-line `====` block
+# with no colour; the shared version emits a bold one-line header so the
+# install flow now matches setup-status.sh's visual style end-to-end.
+# shellcheck source=/dev/null
+. "$SCRIPT_DIR/ui.sh"
 
 # --reinstall-services-only: skip Phase 0/Steps 1–3 and jump straight to
 # Step 4. Used by migrate-layout.sh on existing installs whose Phase 0
@@ -433,7 +429,7 @@ if [ -t 0 ] && [ "$(state_read LINUX_PASSWORD_SET)" != "yes" ] \
         printf '%s:%s\n' "$BOT_NAME" "$lpw1" | sudo chpasswd
         unset lpw1 lpw2
       fi
-      echo "  ✓ Linux user password updated for $BOT_NAME."
+      pass "Linux user password" "updated for $BOT_NAME"
       state_write LINUX_PASSWORD_SET "yes"
       ;;
     *)
@@ -502,12 +498,12 @@ if [ -x "$KIT/runtime/setup-status.sh" ]; then
   PREREQ_FAILS=$(printf '%s\n' "$PROBE" \
     | awk '/^Vault and bot service/{exit} /\[✗\]/{print}')
   if [ -n "$PREREQ_FAILS" ]; then
-    echo "  ✗ Genuine prereq failures (bootstrap.md territory):" >&2
+    fail "Prereq failures" "(bootstrap.md territory):"
     printf '%s\n' "$PREREQ_FAILS" | sed 's/^/      /' >&2
     echo "    Resolve those, then re-run this script." >&2
     exit 1
   fi
-  echo "  ✓ System + bot-user prereqs OK. Vault/service items below will be addressed by Steps 2-4."
+  pass "System + bot-user prereqs OK" "(vault/service items below addressed by Steps 2-4)"
 else
   skip "setup-status.sh not executable (continuing — re-bootstrap recommended)"
 fi
@@ -620,9 +616,9 @@ esac
 mkdir -p "$GIT_DIR_PATH/hooks"
 if install -m 755 "$KIT/runtime/hooks/post-merge" "$GIT_DIR_PATH/hooks/post-merge" \
    && [ -x "$GIT_DIR_PATH/hooks/post-merge" ]; then
-  echo "  ✓ .claude/ generated and post-merge hook installed at $GIT_DIR_PATH/hooks/post-merge"
+  pass ".claude/ + post-merge hook" "installed at $GIT_DIR_PATH/hooks/post-merge"
 else
-  echo "  ✗ post-merge hook FAILED to install at $GIT_DIR_PATH/hooks/post-merge" >&2
+  fail "post-merge hook" "failed to install at $GIT_DIR_PATH/hooks/post-merge"
   echo "    (.claude/ was rendered but auto-refresh on git pull is not wired)" >&2
 fi
 
@@ -652,10 +648,10 @@ while IFS= read -r f; do
 done < <(find "$VAULT/processes" "$REPO_ROOT/.claude" "$VAULT/_templates" -name '*.md' 2>/dev/null)
 
 if [ -n "$LEFTOVER" ]; then
-  echo "  ⚠ Files still contain placeholders (edit by hand if needed):"
+  warn "Files still contain placeholders" "(edit by hand if needed):"
   printf '%s' "$LEFTOVER" | sed 's/^/      /'
 else
-  echo "  ✓ All Phase 0 placeholders substituted."
+  pass "All Phase 0 placeholders substituted"
 fi
 
 # --- Step 3: disable runaway keybindings ------------------------------------
@@ -829,18 +825,18 @@ echo "  Waiting for tmux sessions to register…"
 for i in 1 2 3 4 5; do
   if tmux ls 2>/dev/null | grep -q '^claude:' && \
      tmux ls 2>/dev/null | grep -q '^shell:'; then
-    echo "  ✓ tmux sessions 'claude' and 'shell' are up."
+    pass "tmux sessions" "'claude' and 'shell' are up"
     break
   fi
   sleep 1
 done
 if ! tmux ls 2>/dev/null | grep -q '^claude:'; then
-  echo "  ✗ tmux session 'claude' did NOT come up." >&2
+  fail "tmux session 'claude'" "did NOT come up"
   echo "    Check: sudo journalctl -u claude-code.service -n 50" >&2
   exit 1
 fi
 if ! tmux ls 2>/dev/null | grep -q '^shell:'; then
-  echo "  ✗ tmux session 'shell' did NOT come up." >&2
+  fail "tmux session 'shell'" "did NOT come up"
   echo "    Check: sudo journalctl -u ${BOT_NAME}-shell.service -n 50" >&2
   exit 1
 fi
@@ -904,11 +900,11 @@ fi
 if [ ! -d "$KIT/web-terminal/node_modules" ]; then
   echo "  Running npm install in $KIT/web-terminal/ (may take 30-60s)…"
   (cd "$KIT/web-terminal" && npm install --no-audit --no-fund --silent) || {
-    echo "  ✗ npm install failed in $KIT/web-terminal/" >&2
+    fail "npm install" "failed in $KIT/web-terminal/"
     echo "    Check that node 20+ is installed and the directory is writable." >&2
     exit 1
   }
-  echo "  ✓ npm install complete"
+  pass "npm install" "complete"
 else
   echo "  npm dependencies already installed (node_modules present)"
 fi
@@ -942,20 +938,20 @@ sudo systemctl enable --now "${BOT_NAME}-web.service"
 # Verify the service came up.
 sleep 2
 if ! systemctl is-active --quiet "${BOT_NAME}-web.service"; then
-  echo "  ✗ ${BOT_NAME}-web.service did not become active." >&2
+  fail "${BOT_NAME}-web.service" "did not become active"
   echo "    Check: sudo journalctl -u ${BOT_NAME}-web.service -n 50" >&2
   exit 1
 fi
-echo "  ✓ ${BOT_NAME}-web.service active"
+pass "${BOT_NAME}-web.service" "active"
 
 # Publish via tailscale serve. --bg backgrounds the serve config; the
 # command returns immediately and the config persists across reboots.
 # If tailscale serve is already configured on :8443, this is idempotent
 # (tailscale will just confirm the existing route).
 if sudo tailscale serve --bg --https=8443 http://127.0.0.1:3000 >/dev/null 2>&1; then
-  echo "  ✓ tailscale serve published on :8443"
+  pass "tailscale serve" "published on :8443"
 else
-  echo "  ⚠ tailscale serve failed — web shell is up locally but not on the tailnet." >&2
+  warn "tailscale serve" "failed — web shell is up locally but not on the tailnet"
   echo "    The URL written into HANDOFF-TO-NATE.txt will not load until this is fixed:" >&2
   echo "    sudo tailscale serve --bg --https=8443 http://127.0.0.1:3000" >&2
 fi
