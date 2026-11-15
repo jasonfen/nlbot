@@ -1,4 +1,5 @@
-require('dotenv').config();
+// Secrets live outside the vault: SilverBullet serves any file in the vault.
+require('dotenv').config({ path: process.env.WEB_TERMINAL_ENV || '${SECRETS_DIR}/web-terminal.env' });
 const express = require('express');
 const session = require('express-session');
 const http = require('http');

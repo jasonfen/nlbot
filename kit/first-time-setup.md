@@ -51,6 +51,7 @@ bash render.sh kit.env ~/kit-rendered
 | `${TAILNET}` | Your tailnet name, the part before `.ts.net` |
 | `${SB_PORT}`, `${TERM_PORT}` | Localhost ports for SilverBullet and the web terminal (3001 and 3000 on the source system) |
 | `${SB_DATA_DIR}` | Host directory for SilverBullet's own state |
+| `${SECRETS_DIR}` | Where tokens and passwords live, **outside** the vault (for example `~/.config/<bot>/secrets`) |
 
 ## 3. Lay out the vault
 
@@ -87,6 +88,9 @@ printf '# Soul Loop Log\n\n| Time | Action | Notes |\n|------|--------|-------|\
 printf '# Proposed decisions and facts (secretary queue)\n\n' > cron-prompts/proposed-decisions.md
 
 cp "$R"/gitignore.example .gitignore
+
+# secrets go OUTSIDE the vault: SilverBullet serves any file in it, dotfiles included
+mkdir -p ${SECRETS_DIR} && chmod 700 ${SECRETS_DIR} "$(dirname ${SECRETS_DIR})"
 git init && git add -A && git commit -m "Initial vault"
 ```
 
@@ -156,7 +160,7 @@ What `bin/start-claude.sh` does, in order:
 
 ## 6. SilverBullet
 
-Follow [silverbullet.md](silverbullet.md), "Install". You finish that section with the bot's API token in `$V/.sb-token` and:
+Follow [silverbullet.md](silverbullet.md), "Install". You finish that section with the bot's API token in `${SECRETS_DIR}/sb-token` and:
 
 ```bash
 cd "$V" && ./bin/sb.sh ready && ./bin/sb.sh lua 'system.getVersion()'
@@ -175,7 +179,8 @@ A small Node app (Express, `ws`, `node-pty`, xterm.js) that attaches a browser t
 ```bash
 cp -a "$R"/web-terminal "$V"/web-terminal
 cd "$V"/web-terminal
-cp env.example .env && chmod 600 .env && $EDITOR .env    # UI_USERNAME, UI_PASSWORD, SESSION_SECRET, PORT
+cp env.example ${SECRETS_DIR}/web-terminal.env && chmod 600 ${SECRETS_DIR}/web-terminal.env
+$EDITOR ${SECRETS_DIR}/web-terminal.env    # UI_USERNAME, UI_PASSWORD, SESSION_SECRET, PORT
 npm install
 sudo cp "$R"/systemd/claude-web.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now claude-web.service
@@ -230,4 +235,4 @@ sudo systemctl daemon-reload && sudo systemctl enable --now bot-vault-snapshot.t
 - Leave the decision menu and the gates alone until you have watched them for a few days.
 - Don't run two sessions against the same vault.
 - Don't put the bot on a machine that sleeps.
-- Tokens and passwords in the vault are plaintext files. The `.gitignore` template keeps the known ones out of git. If you ever push the repo anywhere, check what is tracked first.
+- Tokens and passwords are plaintext files in `${SECRETS_DIR}`, outside the vault. Keep it that way: anything in the vault can be read by any SilverBullet login, and it ends up in git. Don't paste a password into a page or the journal either. If you ever push the repo anywhere, check what is tracked first.

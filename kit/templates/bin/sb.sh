@@ -23,7 +23,7 @@
 # for chrome launch failures (2026-09-11: HOME=/ unwritable for uid 1001 →
 # chrome_crashpad_handler abort; fix is HOME=/tmp in the live compose).
 #
-# Token: SB_AUTH_TOKEN env, else ${BOT_NAME}'s per-account API token from .sb-token
+# Token: SB_AUTH_TOKEN env, else ${BOT_NAME}'s per-account API token from ${SECRETS_DIR}/sb-token
 # (2026-09-22 multi-space cutover; SB_AUTH_TOKEN is single-space-only and is gone
 # from the live stack). The stale compose copy this comment used to point at was
 # deleted 2026-09-22 and fed nothing here; recover it from git history if the old
@@ -37,10 +37,11 @@ set -uo pipefail
 # /vault/.runtime/lua before auth was the space LOGIN GATE, not the endpoint.
 U=${SB_URL:-http://127.0.0.1:${SB_PORT}}
 # Multi-space uses PER-ACCOUNT API tokens; SB_AUTH_TOKEN is single-space only and
-# no longer exists in the live stack. ${BOT_NAME}'s own token lives in .sb-token
-# (mode 600, gitignored). Env still wins.
-T=${SB_AUTH_TOKEN:-$(cat ${VAULT_DIR}/.sb-token 2>/dev/null)}
-[ -n "$T" ] || { echo "sb.sh: no token — put ${BOT_NAME}'s SilverBullet API token in ${VAULT_DIR}/.sb-token (Dashboard → Users → ${BOT_NAME} → API tokens)" >&2; exit 2; }
+# no longer exists in the live stack. ${BOT_NAME}'s own token lives in ${SECRETS_DIR}/sb-token
+# (mode 600), outside the vault, because SilverBullet serves every file in the vault
+# to any logged-in account, dotfiles included. Env still wins.
+T=${SB_AUTH_TOKEN:-$(cat ${SECRETS_DIR}/sb-token 2>/dev/null)}
+[ -n "$T" ] || { echo "sb.sh: no token — put ${BOT_NAME}'s SilverBullet API token in ${SECRETS_DIR}/sb-token, mode 600 (Dashboard → Users → ${BOT_NAME} → API tokens)" >&2; exit 2; }
 A=(-H "Authorization: Bearer $T")
 TO=(-H "X-Timeout: ${TIMEOUT:-60}")
 

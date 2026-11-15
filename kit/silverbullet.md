@@ -71,7 +71,7 @@ Settings for the space live in `${SB_DATA_DIR}/spaces.json`. The file is read at
 | Field | Value | Why |
 |---|---|---|
 | `revisions` | `"managed"` | SilverBullet commits page edits into the vault's git repo about 30 seconds after they settle, with the editing account as author |
-| `spaceIgnore` | `"node_modules/\n"` plus any noisy folders | Newline-separated gitignore-style patterns. This is the only way to hide paths. 2.11+ does not read `.gitignore`, and the `SB_SPACE_IGNORE` variable is ignored in multi-space mode |
+| `spaceIgnore` | `"node_modules/\n"` plus any noisy folders | Newline-separated gitignore-style patterns. This hides paths from the listing, the index and search. It does **not** stop a direct `GET /.fs/<path>`, so it is no protection for secrets (see below). 2.11+ does not read `.gitignore`, and the `SB_SPACE_IGNORE` variable is ignored in multi-space mode |
 | `shell.enabled` | `true` | Defaults to `false`. Only needed for `bin/sb.sh shell` and Space Lua `shell.run` |
 
 Ignoring `node_modules/` matters if you install the web terminal inside the vault. On the source system, ignoring `node_modules/` and one folder of logs took the visible file count from 2,652 to 891.
@@ -81,19 +81,21 @@ Ignoring `node_modules/` matters if you install the web terminal inside the vaul
 - **The vault is already a git repo,** which it is if you followed `first-time-setup.md`. SilverBullet adopts it at startup and sets `silverbullet.managed = true` in its git config itself. Nothing needs setting by hand, and your existing history stays.
 - **The vault is not a git repo.** SilverBullet runs `git init`, sets the same flag and makes an "Initial space snapshot" commit.
 - **Commits.** Edits made in the browser or through the API are committed with the editing account as author (for example `${BOT_NAME} <email>`). Files changed directly on disk by the bot are committed as `External <external@silverbullet.local>`. Both happen within about 30 seconds ("Responsive", under the space's Revisions tab). `bin/sb.sh snapshot` returns `{"committed":true}` and commits everything outstanding straight away.
-- **Get `.gitignore` in place before the first snapshot.** A snapshot commits untracked dotfiles too. In the test, a vault with no `.gitignore` had its `.sb-token` committed by the first `sb.sh snapshot`. The kit's step 3 copies `gitignore.example` before SilverBullet ever sees the folder, so follow that order. If a secret does get in, remove it from history before the repo goes anywhere.
+- **Get `.gitignore` in place before the first snapshot.** A snapshot commits untracked dotfiles too. In the test, a vault with no `.gitignore` had a token file committed by the first `sb.sh snapshot`. The kit's step 3 copies `gitignore.example` before SilverBullet ever sees the folder, so follow that order. If a secret does get in, remove it from history before the repo goes anywhere.
 
 ### 5. Give the bot its token
 
 ```bash
 cd ${VAULT_DIR}
-printf '%s' '<the API token>' > .sb-token && chmod 600 .sb-token
+printf '%s' '<the API token>' > ${SECRETS_DIR}/sb-token && chmod 600 ${SECRETS_DIR}/sb-token
 ./bin/sb.sh ready                       # first call starts headless Chrome; up to 3 minutes
 ./bin/sb.sh lua 'system.getVersion()'   # {"result":"2.12.0-…"}
 ./bin/sb.sh ls | head
 ```
 
-`.sb-token` is in the `.gitignore` template. `bin/sb.sh` reads the token from there unless `SB_AUTH_TOKEN` is set in its environment.
+`bin/sb.sh` reads the token from `${SECRETS_DIR}/sb-token` unless `SB_AUTH_TOKEN` is set in its environment.
+
+**Why the token is not in the vault.** SilverBullet serves any file in the space to any logged-in account. Dotfiles are left out of the file listing, but `GET /.fs/.sb-token` still returns the file, and adding a pattern to `spaceIgnore` doesn't change that: it filters the listing and the index, not a direct read. On the source system, the root token files, the web terminal's `.env` and the Telegram config were all readable that way until they were moved out on 2026-11-15. Keep every secret in `${SECRETS_DIR}`.
 
 ### 6. Pages
 

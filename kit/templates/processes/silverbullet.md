@@ -18,7 +18,7 @@ updates.
 | Mode | multi-space. The vault is bind-mounted at `/data/spaces/vault` as one space. SilverBullet's own state lives in `${SB_DATA_DIR}` (mounted at `/data`) |
 | Space | this repo, `${VAULT_DIR}`. Nothing moved on the host |
 | URLs | `http://127.0.0.1:${SB_PORT}` on the box; `https://${BOT_NAME}-notes.${TAILNET}.ts.net` on the tailnet |
-| Auth | per-account API tokens: `Authorization: Bearer <token>`. ${BOT_NAME}'s token is in `${VAULT_DIR}/.sb-token` (mode 600); `bin/sb.sh` reads it there. `SB_USER` / `SB_AUTH_TOKEN` are single-space-only and must not be set |
+| Auth | per-account API tokens: `Authorization: Bearer <token>`. ${BOT_NAME}'s token is in `${SECRETS_DIR}/sb-token` (mode 600, outside the vault); `bin/sb.sh` reads it there. `SB_USER` / `SB_AUTH_TOKEN` are single-space-only and must not be set |
 | Revisions | `managed`: SilverBullet auto-commits page edits into the vault's git repo about 30 s after quiet. It skips dotfiles, so `bin/vault-snapshot.sh` is the second committer for `.claude/` and other dot-paths |
 
 **A binding prefix is the browser route only. Every API endpoint is at the server
@@ -105,6 +105,7 @@ Useful one-liners, once the runtime is up:
 
 - **Config lives in `CONFIG.md`** as `space-lua` blocks. The schema is validated as a whole, so **one bad key rejects the entire CONFIG**. `taskStates` is an object keyed by checkbox character. After a change, run `System: Reload` or reload the client.
 - **A `space-lua` block is all-or-nothing.** An error partway through aborts everything after it in that block, silently. Lua errors surface in the **browser console**, not in `docker logs`. Put `command.define` in its own block, before anything that can throw.
+- **SilverBullet serves every file in the vault to any logged-in account**, dotfiles included: `GET /.fs/<path>` returns it even though dotfiles are left out of the listing, and `spaceIgnore` only filters the listing and index, not a direct read. Never keep a secret in the vault; they live in `${SECRETS_DIR}`.
 - **`.gitignore` is not a visibility switch in 2.11+.** Hide paths with `spaceIgnore` in `spaces.json`: newline-separated gitignore-style patterns. In multi-space mode the `SB_SPACE_IGNORE` env var is ignored. Ignore `node_modules/` at least. `.gitignore` still controls git, and so what managed revisions commit.
 - **Folders:** the page `foo.md` is the page *for* folder `foo/`, as a sibling, not `foo/index.md`. That's why monthly summaries are `journals/YYYY/MM.md`.
 - **No empty first header cell in tables:** SilverBullet drops a blank leading header cell (`| | A | B |`), so every title shifts one column left. Label it.

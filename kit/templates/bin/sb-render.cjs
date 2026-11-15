@@ -11,7 +11,7 @@
 // then reuse the same PROFILE with ~15000. An empty list on a cold profile is
 // not a broken query; test a known-good page (one whose query you have seen render) as a control.
 // Needs Playwright (npm install playwright) somewhere on NODE_PATH; it has no install of its own.
-// SBU is a BROWSER login (user:password), not the API token in .sb-token. Before the
+// SBU is a BROWSER login (user:password), not the API token in ${SECRETS_DIR}/sb-token. Before the
 // 2026-09-22 multi-space cutover it came from SB_USER in the repo's stale compose copy;
 // that file is gone and the live stack sets no SB_USER, so the password now has to be
 // supplied by hand (${HUMAN_NAME} holds it). With the Runtime API live, ./bin/sb.sh lua/query/shot

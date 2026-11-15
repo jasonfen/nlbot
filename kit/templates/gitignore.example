@@ -1,4 +1,5 @@
-# Secrets: never commit
+# Secrets: these belong in ${SECRETS_DIR}, outside the vault. Listed here only as a
+# backstop in case a copy lands in the vault by mistake.
 .telegram/
 .sb-token
 web-terminal/.env

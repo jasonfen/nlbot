@@ -12,7 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-CONFIG_FILE = SCRIPT_DIR / "config"
+# The token lives outside the vault: SilverBullet serves any file in the vault.
+CONFIG_FILE = Path("${SECRETS_DIR}/telegram.conf")
 MSG_FILE = SCRIPT_DIR / "message.txt"
 TRIGGER_FILE = SCRIPT_DIR / "new-messages.txt"
 OFFSET_FILE = SCRIPT_DIR / ".last-update-id"

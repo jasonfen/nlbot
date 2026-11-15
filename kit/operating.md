@@ -57,7 +57,7 @@ The vault is a git repo with two committers:
 
 Before a multi-file edit, the bot runs `./bin/sb.sh snapshot`, which commits everything outstanding immediately. `./bin/sb.sh revlog 10` lists recent commits. To undo, use `Revision: Page History` → Restore in SilverBullet, or plain git.
 
-Not in git, by the `.gitignore` template: tokens, `.telegram/`, `.memorious/`, the Chrome profile, and ephemeral cron state. **Back those up some other way** if you care about them. The vector store can be rebuilt only by re-storing.
+Not in git: `${SECRETS_DIR}` (tokens and passwords, outside the vault), and by the `.gitignore` template `.telegram/`, `.memorious/`, the Chrome profile, and ephemeral cron state. **Back those up some other way** if you care about them. A machine-level backup (Option B below) covers `${SECRETS_DIR}`; a git remote never should. The vector store can be rebuilt only by re-storing.
 
 ## Off-box backup
 
@@ -69,6 +69,7 @@ Everything above lives on one disk. Git history protects you from bad edits, not
 |---|---|---|
 | Journals, tasks, decisions, the bot's instructions | `${VAULT_DIR}` | yes |
 | SilverBullet accounts and space settings | `${SB_DATA_DIR}` (`spaces.json`, account store) | no |
+| Tokens and passwords | `${SECRETS_DIR}` | no, and never put it in one |
 | MCP registrations, Claude Code project state | `~/.claude.json` | no |
 | Auto-memory, session transcripts | `~/.claude/projects/` | no |
 | Vector memory | `${VAULT_DIR}/.memorious/` | no (gitignored) |
@@ -107,7 +108,7 @@ This gives you an off-box copy of the vault with full history, and it's cheap. I
 This covers every row in the table, including the ones git doesn't.
 
 - **The box is a Proxmox LXC or VM:** schedule a `vzdump` backup job (Datacenter → Backup) to a Proxmox Backup Server or to storage on a *different* physical disk or host. Use snapshot mode so the bot keeps running. Daily, keeping a week or two, is plenty.
-- **Any other Linux box:** use `restic` (or `borg`) to an off-box target, such as another machine over SFTP or an S3-compatible bucket. Back up `${VAULT_DIR}`, `${SB_DATA_DIR}`, `~/.claude.json` and `~/.claude/`. Exclude `node_modules/` and browser profiles. Run it from a systemd timer, and keep the restic password somewhere that isn't the box.
+- **Any other Linux box:** use `restic` (or `borg`) to an off-box target, such as another machine over SFTP or an S3-compatible bucket. Back up `${VAULT_DIR}`, `${SB_DATA_DIR}`, `${SECRETS_DIR}`, `~/.claude.json` and `~/.claude/`. Exclude `node_modules/` and browser profiles. Run it from a systemd timer, and keep the restic password somewhere that isn't the box.
 
 Whichever you pick, **do one restore** before you rely on it: restore to a scratch directory or a spare container and open a journal page. A backup you've never restored from is only a hope.
 

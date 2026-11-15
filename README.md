@@ -42,5 +42,6 @@ No shared chat channel and nothing multi-bot. Telegram is optional. ClaudeBerry 
   - SilverBullet first-run walked on a throwaway 2.12.0 instance. This added the bot's space-access step and the `.gitignore`-first warning.
   - Tailscale Services and the access policy filled in from a read-only API readout
   - off-box backup section added
+- **2026-11-15:** secrets moved out of the vault. SilverBullet serves any vault file to any logged-in account, dotfiles included, and `spaceIgnore` doesn't block a direct read. A new `${SECRETS_DIR}` placeholder (outside `VAULT_DIR`) holds the SilverBullet token, the web terminal's env file and the Telegram config. `sb.sh`, `server.js`, `tg-bot.py` and `tg-post.sh` read from it, and `render.sh` checks it.
 - **Open:** `telegram.md` still has one `TODO(verify)`: the trigger-file rewire has never been run. Deferred by Jason.
 - The previous kit (May 2026) is tagged `v1`.

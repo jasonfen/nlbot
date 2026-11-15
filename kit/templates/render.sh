@@ -28,6 +28,6 @@ rm -f "$OUT/render.sh" "$OUT/kit.env" "$OUT/kit.env.example"
 grep -rlIZ --exclude-dir=xterm -e '\${[A-Z_]*}' "$OUT" | xargs -0 -r sed -i "${SED[@]}"
 
 # Anything still shaped like a kit placeholder was not in kit.env.
-LEFT=$(grep -rnI --exclude-dir=xterm -oE '\$\{(BOT_NAME|HUMAN_NAME|HUMAN_HANDLE|UNIX_USER|HOME_DIR|VAULT_DIR|PROJECT_SLUG|BOT_UID|BOT_GID|TIMEZONE|TAILNET|SB_PORT|TERM_PORT|SB_DATA_DIR)\}' "$OUT" || true)
+LEFT=$(grep -rnI --exclude-dir=xterm -oE '\$\{(BOT_NAME|HUMAN_NAME|HUMAN_HANDLE|UNIX_USER|HOME_DIR|VAULT_DIR|PROJECT_SLUG|BOT_UID|BOT_GID|TIMEZONE|TAILNET|SB_PORT|TERM_PORT|SB_DATA_DIR|SECRETS_DIR)\}' "$OUT" || true)
 if [ -n "$LEFT" ]; then echo "render.sh: unfilled placeholders:" >&2; echo "$LEFT" | sort | uniq -c >&2; exit 1; fi
 echo "rendered to $OUT"

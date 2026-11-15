@@ -10,7 +10,7 @@ One Python daemon, `.telegram/tg-bot.py`, under `bot-telegram.service`. It uses 
 
 **Inbound.** The daemon long-polls Telegram's `getUpdates` with a 5-second timeout. For each text message:
 
-1. It checks the chat id against `CHAT_ID` in `.telegram/config`. Anything else is rejected and logged to stderr.
+1. It checks the chat id against `CHAT_ID` in `${SECRETS_DIR}/telegram.conf`. Anything else is rejected and logged to stderr.
 2. It appends `[YYYY-MM-DD HH:MM:SS] <first name>: <text>` to `.telegram/new-messages.txt`. The timestamp is UTC.
 3. It runs `tmux send-keys -t claude /telegram-check Enter`.
 
@@ -36,8 +36,8 @@ Messages over 4096 characters are split on paragraph or line breaks. The reply m
    mkdir -p .telegram/hooks
    cp "$R"/telegram/tg-bot.py "$R"/telegram/tg-post.sh .telegram/
    cp "$R"/telegram/hooks/*.sh .telegram/hooks/
-   cp "$R"/telegram/config.example .telegram/config && chmod 600 .telegram/config
-   $EDITOR .telegram/config                      # BOT_TOKEN, CHAT_ID, BOT_USERNAME
+   cp "$R"/telegram/config.example ${SECRETS_DIR}/telegram.conf && chmod 600 ${SECRETS_DIR}/telegram.conf
+   $EDITOR ${SECRETS_DIR}/telegram.conf          # BOT_TOKEN, CHAT_ID, BOT_USERNAME
    chmod +x .telegram/tg-bot.py .telegram/tg-post.sh .telegram/hooks/*.sh
    cp "$R"/telegram/telegram-check.md .claude/commands/
    ```
@@ -51,7 +51,7 @@ Messages over 4096 characters are split on paragraph or line breaks. The reply m
    journalctl --no-pager -u bot-telegram -n 20
    ```
 
-`.telegram/` is in the `.gitignore` template because the config holds the token.
+The config holds the token, so it lives in `${SECRETS_DIR}`, outside the vault, where SilverBullet can't serve it. `.telegram/` is still in the `.gitignore` template for its message and state files.
 
 **Check:** message the bot. `.telegram/new-messages.txt` appears, `/telegram-check` runs in the session, and a reply arrives.
 
@@ -89,7 +89,7 @@ From `telegram-check.md`:
 
 ## Troubleshooting
 
-- **The daemon exits at start.** `.telegram/config` is missing or lacks `BOT_TOKEN` or `CHAT_ID`.
+- **The daemon exits at start.** `${SECRETS_DIR}/telegram.conf` is missing or lacks `BOT_TOKEN` or `CHAT_ID`.
 - **Your messages are ignored.** Wrong `CHAT_ID`. The rejection is in `journalctl -u bot-telegram`.
 - **Messages arrive in the file but the session does not react.** The tmux session is not named `claude`, or the keystroke was dropped. Type `/telegram-check` yourself.
 - **Replies do not send.** Check the hook is in `settings.local.json` and that the reply was written with the Write tool.

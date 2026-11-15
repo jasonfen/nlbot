@@ -4,7 +4,7 @@
 #        echo "msg" | ./tg-post.sh -   (reads from stdin)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG="$SCRIPT_DIR/config"
+CONFIG="${SECRETS_DIR}/telegram.conf"   # outside the vault: SilverBullet serves any vault file
 MSG_FILE="$SCRIPT_DIR/message.txt"
 
 if [[ ! -f "$CONFIG" ]]; then
