@@ -1,0 +1,15 @@
+[Unit]
+Description=${BOT_NAME} Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=${UNIX_USER}
+WorkingDirectory=${VAULT_DIR}
+ExecStart=/usr/bin/python3 ${VAULT_DIR}/.telegram/tg-bot.py
+Restart=on-failure
+RestartSec=10
+Environment=HOME=${HOME_DIR}
+
+[Install]
+WantedBy=multi-user.target

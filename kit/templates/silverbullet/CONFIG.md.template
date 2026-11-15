@@ -1,0 +1,60 @@
+This is where you configure SilverBullet to your liking. See [[^Library/Std/Config]] for a full list of configuration options.
+
+```space-lua
+-- Custom task states: click to cycle through
+-- [ ] open → [>] in progress → [x] done
+-- Also available: [?] blocked, [~] deferred, [!] urgent
+-- SB 2.x schema: taskStates is an OBJECT keyed by the checkbox char,
+-- each value { name, done?, order? }. `order` sets the click-cycle sequence.
+config.set("taskStates", {
+  [" "] = { name = "Open",        order = 1 },
+  [">"] = { name = "In Progress", order = 2 },
+  ["x"] = { name = "Done",        order = 3, done = true },
+  ["?"] = { name = "Blocked",     order = 4 },
+  ["~"] = { name = "Deferred",    order = 5 },
+  ["!"] = { name = "Urgent",      order = 6 },
+})
+
+```
+
+## Tag definitions
+
+Index-time rules for the collaboration tags, so queries don't each carry their own filter list.
+A `transform` only runs when
+a page is indexed: after changing this block, run `System: Reload` **and** `Space: Reindex` in each
+client, or old index entries keep their old attributes.
+
+- **Every task** gets `live = false` when it sits somewhere that isn't a live to-do list: the
+  kit, templates, and checklists inside handoff **response** pages
+  (`handoffs/YYYY/MM/DD/<page>`, which are write-ups). Queries filter with `_.live ~= false`, so a
+  client that hasn't reindexed yet shows extra rows instead of breaking.
+- `#handoff` links to [[handoffs]] instead of the generic tag page.
+- Pages tagged `handoff-response` get an icon in the page picker and file tree.
+
+```space-lua
+local function inertPath(p)
+  return string.find(p, "^kit/") or string.find(p, "^templates/")
+    or string.find(p, "^handoffs/%d+/%d+/%d+/")
+end
+
+tag.define {
+  name = "task",
+  transform = function(o)
+    if o.page and inertPath(o.page) then o.live = false end
+    return o
+  end,
+}
+
+tag.define {
+  name = "handoff",
+  tagPage = "handoffs",
+}
+
+tag.define {
+  name = "handoff-response",
+  transform = function(o)
+    if o.tag == "page" then o.pageDecoration = { icon = "corner-down-right" } end
+    return o
+  end,
+}
+```

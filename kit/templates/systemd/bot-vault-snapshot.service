@@ -1,0 +1,9 @@
+[Unit]
+Description=Snapshot the ${BOT_NAME} vault into git
+
+[Service]
+Type=oneshot
+User=${UNIX_USER}
+Group=${UNIX_USER}
+WorkingDirectory=${VAULT_DIR}
+ExecStart=${VAULT_DIR}/bin/vault-snapshot.sh

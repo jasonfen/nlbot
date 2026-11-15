@@ -1,0 +1,30 @@
+# Secrets: never commit
+.telegram/
+.sb-token
+web-terminal/.env
+**/*.env
+
+# Ephemeral cron state
+cron-prompts/queue/
+cron-prompts/.*-last-*
+cron-prompts/.*.lock
+cron-prompts/inject.log
+cron-prompts/.journaled-through
+cron-prompts/.soul-loop-rest-streak
+cron-prompts/claude-restart.log
+.cron-triggers/
+.cron-trigger-monitor.lock
+
+# Headless-Chrome profile for SilverBullet's server-side runtime, if it lands in the vault
+.chrome-data/
+# Live vector DB: rebuilt from stores, churns on every write
+.memorious/
+
+node_modules/
+
+# OS / editor noise
+.DS_Store
+*.swp
+*.swo
+*~
+*.bak-*

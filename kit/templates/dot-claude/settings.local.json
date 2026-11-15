@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "Edit",
+      "Glob",
+      "Grep",
+      "Read",
+      "Skill(*)",
+      "ToolSearch",
+      "WebFetch(*)",
+      "WebSearch",
+      "Write"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${VAULT_DIR}/hooks/sessionstart-autoarm-cron.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${VAULT_DIR}/hooks/sessionstart-orient.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

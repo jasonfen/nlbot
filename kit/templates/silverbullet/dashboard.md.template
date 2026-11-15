@@ -1,0 +1,38 @@
+# Dashboard
+
+Live view: queries only, nothing is typed here. The hand-kept to-do list is [[inbox]].
+**The checkboxes work:** ticking one here ticks the task on its own page (the link before each
+task goes there). Tasks in the kit, templates and handoff
+**response** pages aren't live to-dos. The `live` rule in [[CONFIG]] → "Tag definitions" marks them
+and every query below skips them.
+
+## Bookmarked for later
+
+Open tasks with a `[due: …]` date, soonest first. When one comes due, the soul-loop gate wakes ${BOT_NAME} to do it (see [[collaboration]] → "Bookmarking tasks for later").
+
+${(template.each(query[[from index.tag "task" where not _.done and _.live ~= false and _.due order by _.due]], template.new([==[* [${state}] [[${string.find(ref, "[@#]") and ref or "$" .. ref}|${page}]] **${due}** ${name}
+]==]))) or "_None._"}
+
+## Waiting on ${HUMAN_NAME}
+
+${(template.each(query[[from index.tag "task" where not _.done and _.live ~= false and (table.includes(_.itags or {}, "${HUMAN_HANDLE}") or table.includes(_.itags or {}, "blocked-on-human")) order by _.page]], template.new([==[* [${state}] [[${string.find(ref, "[@#]") and ref or "$" .. ref}|${page}]] ${name}
+]==]))) or "_None._"}
+
+## Open handoffs (not blocked)
+
+${(template.each(query[[from index.tag "task" where not _.done and _.live ~= false and table.includes(_.itags or {}, "handoff") and not table.includes(_.itags or {}, "blocked-on-human") order by _.page]], template.new([==[* [${state}] [[${string.find(ref, "[@#]") and ref or "$" .. ref}|${page}]] ${name}
+]==]))) or "_None._"}
+
+## Other open tasks
+
+${(template.each(query[[from index.tag "task" where not _.done and _.live ~= false and not table.includes(_.itags or {}, "${HUMAN_HANDLE}") and not table.includes(_.itags or {}, "blocked-on-human") and not table.includes(_.itags or {}, "handoff") and not table.includes(_.itags or {}, "idea") order by _.page]], template.new([==[* [${state}] [[${string.find(ref, "[@#]") and ref or "$" .. ref}|${page}]] ${name}
+]==]))) or "_None._"}
+
+## Ideas
+
+${(template.each(query[[from index.tag "task" where not _.done and _.live ~= false and table.includes(_.itags or {}, "idea") order by _.page]], template.new([==[* [${state}] [[${string.find(ref, "[@#]") and ref or "$" .. ref}|${page}]] ${name}
+]==]))) or "_None._"}
+
+## Recently changed pages
+
+${(template.each(query[[from index.tag "page" where not string.find(_.name, "^kit/") order by _.lastModified desc limit 10]], templates.pageItem)) or "_None._"}

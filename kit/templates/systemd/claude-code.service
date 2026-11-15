@@ -1,0 +1,15 @@
+[Unit]
+Description=Claude Code
+After=network.target
+
+[Service]
+Type=forking
+User=${UNIX_USER}
+ExecStart=${VAULT_DIR}/bin/start-claude.sh
+ExecStop=/usr/bin/tmux kill-session -t claude
+Restart=on-failure
+RestartSec=30
+Environment=HOME=${HOME_DIR}
+
+[Install]
+WantedBy=multi-user.target

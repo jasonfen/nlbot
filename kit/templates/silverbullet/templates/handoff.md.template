@@ -1,0 +1,15 @@
+---
+tags: meta/template/page
+command: "${BOT_NAME}: New Handoff"
+suggestedName: "handoffs/${string.sub(date.today(), 1, 4)}/${string.sub(date.today(), 6, 7)}/${string.sub(date.today(), 9, 10)}"
+confirmName: true
+frontmatter: "tags: handoff"
+---
+# Handoff — ${date.today()}
+
+
+## Tasks
+
+- [ ] |^| #handoff ${"@" .. "${BOT_NAME}"}
+
+*${BOT_NAME} responds in a linked subpage under each task (anchored `$h-…`, signed `authors: ${BOT_NAME}`). The `@${BOT_NAME}` on each task puts it in ${BOT_NAME}'s Mention Inbox; ticking the task closes it.*

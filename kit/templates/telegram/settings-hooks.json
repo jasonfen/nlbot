@@ -1,0 +1,29 @@
+{
+  "_comment": "Optional. Merge these two entries into the hooks object of .claude/settings.local.json if you use Telegram.",
+  "hooks": {
+    "FileChanged": [
+      {
+        "matcher": ".telegram/new-messages.txt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${VAULT_DIR}/.telegram/hooks/on-new-messages.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${VAULT_DIR}/.telegram/hooks/post-message.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

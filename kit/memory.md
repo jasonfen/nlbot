@@ -1,299 +1,133 @@
-# Memory & note-capture
+# Memory
 
-Two recurring needs in any persistent-bot setup:
+A Claude Code context lasts hours. After a restart or a compaction the session knows only what it reads back from disk. So the bot's memory is whatever it wrote down, and how well it can find it.
 
-1. **Semantic recall** — finding what was discussed by *meaning*, not exact words. Grep handles exact strings; you also need a way to ask "that conversation about Factorio mod architecture" and get back the right journal entry without remembering the keywords.
-2. **Background note-capture** — automatically writing down decisions, facts, and the texture of conversations as they happen, so the journal accumulates without you having to ask.
+There are three layers. They hold different things and are searched differently.
 
-Both are patterns, not products. This kit ships **memorious** (semantic recall) and a **secretary subagent** (note-capture). They're well-tested with fenbot. They're also swappable — if memorious changes its API, or you prefer a different note-capture approach, the rest of the bot doesn't care.
+| Layer | Where | Searched with | Good for |
+|---|---|---|---|
+| Vault files | `${VAULT_DIR}`: journals, `decisions.md`, `inbox.md`, handoffs | `grep` | Exact words, full context. The source of truth |
+| Vector memory (memorious) | `${VAULT_DIR}/.memorious/` | `recall`, `store`, `forget` MCP tools | Finding something by meaning when you don't remember the words |
+| Auto-memory | `~/.claude/projects/${PROJECT_SLUG}/memory/` | Loaded by Claude Code at session start | Standing rules: preferences, corrections, pointers |
 
-The rest of this doc walks through both: how to set up the bundled implementations, plus what the swap-out points look like if you outgrow them.
+## Layer 1: the vault
 
-> **What the bot does automatically vs. what needs your hands**
->
-> During Step 9 of bot-driven setup, the bot installs memorious-mcp itself (`claude mcp add ...` and verifies it shows up in `claude mcp list`). You don't run any of the commands in this doc by hand for the standard install — they're here for reference, troubleshooting, and the swap-out paths if you want a different backend.
->
-> The bot will *not* register a memory backend that doesn't already have its prerequisites met (Python 3.12+, `uv` if needed). Those come from `bootstrap.md`. If Step 9 fails, the bot posts a BLOCKER pointing you here.
+| File | Holds |
+|---|---|
+| `journals/journal.md` | Today's running journal. Entries are appended with a `### YYYY-MM-DD — ~HH:MM — <topic>` heading |
+| `journals/YYYY/MM/DD.md` | One narrative file per past day, written by the journal synthesizer after midnight |
+| `journals/YYYY/MM.md` | Monthly index: two or three lines per day, each linking to its daily file |
+| `decisions.md` | Decisions and facts, with reasoning |
+| `inbox.md` | Open tasks |
+| `handoffs/YYYY/MM/DD.md` and `handoffs/YYYY/MM/DD/*.md` | Tasks you delegated, and the bot's write-ups |
+| `cron-prompts/proposed-decisions.md` | Decisions the secretary proposed and nobody has verified yet |
 
-## When grep is enough
+Link to a day as `[[journals/YYYY/MM/DD|YYYY-MM-DD]]`. SilverBullet shortens wiki links to their last path segment, so without the alias the link reads "DD".
 
-For the first month while you have <30 journal entries, plain `grep -r "keyword" journals/` is fine — and the kit installs memorious anyway because adding it later is a hassle and the cost of "I don't need it yet" is essentially zero RAM. If you really want a grep-only setup, see the "Skip the memory backend entirely" subsection at the bottom of this doc.
+Who writes the journal:
 
-## Installation (5 minutes)
+- The **main session**, as it works. `CLAUDE.md` tells it to write during the session, not at the end, and to record the reasoning with the outcome.
+- The **secretary**, twice an hour when you have said something new, for whatever the main session did not capture. After journaling an exchange itself, the main session runs `bash cron-prompts/mark-journaled.sh` so the next secretary run is skipped.
+- The **journal synthesizer**, after midnight, which turns the day's entries into the daily file and empties `journal.md` of everything before today.
 
-**Prerequisites:**
-- Python 3.12+ (check: `python3 --version`)
-- `uv` package manager
+Timestamps come from `date` on the box. Agents are told never to infer the date or weekday.
 
-**Install uv** (if you don't have it):
+## Layer 2: memorious
 
-Linux/macOS:
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
+[memorious-mcp](https://pypi.org/project/memorious-mcp/) is a small MCP server over a local Chroma store. It gives the session three tools: `store(key, value)`, `recall(query)` and `forget(key)`.
 
-Windows (PowerShell):
-```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
+### Install memorious
 
-**Then install memorious:**
-
-```bash
-# Resolve uvx to an absolute path so Claude Code's MCP subprocess can find
-# it even when PATH isn't inherited (the systemd-managed `claude-code.service`
-# does not by default put $HOME/.local/bin on PATH at MCP-spawn time, which
-# causes a "Failed to connect" status despite a successful registration —
-# F39, fenbot00 walk 2026-05-12).
-UVX=$(command -v uvx || echo "$HOME/.local/bin/uvx")
-claude mcp add memorious-mcp -- "$UVX" memorious-mcp
-```
-
-**Verify the connection actually works:**
+Run this from the vault directory, because the default `local` scope registers the server for the current directory's project only:
 
 ```bash
-claude mcp list 2>&1 | grep memorious-mcp
+cd ${VAULT_DIR}
+claude mcp add-json memorious-mcp \
+  '{"type":"stdio","command":"${VAULT_DIR}/bin/run-memorious.sh","args":[],"env":{},"timeout":120000}'
+jq '.projects["${VAULT_DIR}"].mcpServers' ~/.claude.json
 ```
 
-The line should end in `✓ Connected`. If it shows `✗ Failed to connect`,
-the registration succeeded but the MCP subprocess can't launch — usually
-because `uvx` resolution differs between your shell and Claude Code's
-service environment. Re-run the `claude mcp add` line with an absolute
-path verified by `which uvx` (e.g. `/home/<bot>/.local/bin/uvx`).
+`add-json` sets the 120-second per-server timeout in the same step. The shorter `claude mcp add memorious-mcp -- ${VAULT_DIR}/bin/run-memorious.sh` writes the same entry without `timeout`, which you'd then have to add to `~/.claude.json` by hand. Both forms were checked on Claude Code 2.1 in a scratch project on 2026-11-14 and produced exactly the source system's entry. Start a new session (or `/mcp` → Reconnect) to pick it up, then confirm that `recall` and `store` appear in the tool list.
 
-When the connection is healthy, restart your Claude Code session (quit
-and reopen) and try:
-```
-recall("test")
-```
-
-If it returns an empty results list, you're good — memorious is running.
-
-## How to use it — The three commands
-
-### 1. Store — Save something you want to find later
-
-```
-store("key phrase", "full context")
-```
-
-**Key:** 1–5 words, semantic and searchable. Examples:
-- `"user hobbies"` — what does the user like to do?
-- `"factorio mod architecture"` — design decisions for a specific project
-- `"alice preferences"` — things another person told you they like
-- `"bug fix: async race condition"` — technical solutions
-
-**Value:** Full context. Don't abbreviate. You're writing this so your future self can *understand it immediately* without re-reading a journal.
-
-**Bad:**
-```
-store("bug", "Fixed it with try-catch")
-```
-
-**Good:**
-```
-store("bug: async race condition", "Race condition in payment webhook handler. Multiple concurrent requests were writing to same file simultaneously. Solution: use lock file pattern with flock() before write, unlock after close. Tested with 100 concurrent requests, no conflicts.")
-```
-
-### 2. Recall — Search for something by meaning
-
-```
-recall("what do I like to do for fun")
-recall("game development")
-recall("person named alice")
-```
-
-Results come back with the key and value. Read the results, pick the one you need, and — if you want — read the full journal entry it came from via grep.
-
-### 3. Forget — Remove a memory (optional, rarely needed)
-
-```
-forget("key to remove")
-```
-
-Use this when you want to purge outdated info or sensitive data (passwords, old email addresses, etc.).
-
-## When to store — Decision tree
-
-**Store when:**
-- You made a decision and the reasoning is important — "Decided to focus on game dev over web work for the next 3 months because indie games are the thing that actually excites me"
-- You learned something technical — "Python's asyncio requires explicit `.gather()` for concurrent tasks, not automatic like JS Promises"
-- Someone told you a preference — "Alice prefers async communication, no Slack"
-- You completed a project milestone — "Finished first version of Factorio mod, 500 lines Python, submitted to forum"
-- You discovered a pattern about yourself — "I do my best creative work between 10–11am, after coffee, before emails"
-
-**Don't store when:**
-- It's already in your journal (the journal is the source of truth; vector memory is the index)
-- It's recent enough that you'll remember it anyway (< 1 week old)
-- It's temporary — "I'm tired today" doesn't need storing
-- You have the exact text in a file somewhere (grep it instead)
-
-**The rule:** If you'd want to find this 6 months from now using a *feeling* or *concept* rather than exact words, store it.
-
-## Examples
-
-### Personal project tracking
-
-```
-store("project: lego city modular", "Building a Lego city with modular buildings, 10x10 baseplate sections, working on minifig scale consistency, needs custom street parts, will eventually be 5x5 grid = 25 sections, each ~8-10 hours of building. Started May 2026.")
-
-store("lego building techniques", "Masonry techniques help with stability: brick the walls so vertical seams don't align. Use corner braces on tall walls. Standard doorframe is 4x4 studs (minifig width + frame).")
-```
-
-### Hobby progress
-
-```
-store("hobby: shrimp tank", "20-gallon planted tank, cherry shrimp colony, TDS 150, PH 6.2, water changes 20% weekly. Colony started with 10, now ~40 visible. Losing some shrimplets to predation by other shrimp or fish. Need to research safe tank-mates.")
-```
-
-### Preferred workflow
-
-```
-store("work preferences", "Prefer deep work sessions (4+ hours uninterrupted). Batch communications (answer email 2x daily, not constantly). Morning 7–11am is peak focus. Afternoon best for meetings, reviews, async work.")
-```
-
-### Technical knowledge
-
-```
-store("postgres performance", "For large JSON columns: don't query inside JSON with complex logic. Denormalize the query to app layer. Indexes on integer primary keys are cheap; indexes on JSON paths are expensive unless specific operator classes used.")
-```
-
-## Combining grep and memorious
-
-You have two tools. Use both.
-
-| Question | Tool | Why |
-|----------|------|-----|
-| "Did I solve this error before?" | memorious — `recall("error type")` | You don't remember exact message |
-| "Where's the exact error log?" | grep — `grep "error string" journals/` | You need the source file/timestamp |
-| "What's my hobby?" | memorious — `recall("hobbies")` | You want meaning, not specific dates |
-| "When did I do X?" | grep — `grep "specific project" journals/YYYY-MM-DD*` | You need exact dates |
-| "What did I decide about X?" | memorious — `recall("X decision")` | You want reasoning, not dates |
-
-## Privacy and security
-
-Memorious stores data in `.memorious/` folder on your local disk. The data is:
-- **Not encrypted** — anyone with access to your machine can read it
-- **Not synced** — stays local only
-- **Not backed up automatically** — you're responsible for backups
-
-**Don't store:**
-- Passwords, API keys, secrets (use environment variables instead)
-- Sensitive personal data about others (names, addresses, relationships)
-- Anything you wouldn't want on your machine unencrypted
-
-## Troubleshooting
-
-**"I installed memorious but `recall()` doesn't work"**
-- Check Claude Code has memorious in its MCP list: `claude mcp list` should show `memorious-mcp`
-- Restart Claude Code (quit and reopen)
-- If still broken, check Python 3.12: `python3 --version`
-
-**"Recall gives me results but they're not quite right"**
-- Vector memory finds *meaning*, not exact matches. If you ask "What's my favorite color?" and stored "I like teal", it might return that, but it might also return "I prefer cool colors" from a different memory
-- If the results aren't specific enough, use grep instead
-
-**"I'm storing too much and recall is noisy"**
-- This is normal! Prune occasionally: `forget()` old/outdated keys
-- Be more specific with search: instead of `recall("projects")`, try `recall("game development projects 2026")`
-
-## Next steps
-
-1. **Install memorious** — run the command above, restart Claude Code
-2. **Try storing** — write one memory about yourself: hobbies, preferences, a project, a decision
-3. **Try recalling** — ask for that memory back: `recall("key phrase")`
-4. **Use it naturally** — when you want to remember something, store it. When you want to *find* something, recall it
-
-After a week, you'll have 10–20 stored facts about yourself, your projects, and your preferences. After a month, memorious becomes essential — grep alone won't scale.
-
-## What else could you use for vector memory
-
-A real survey, evaluated for **single-user, 2c/2GB Linux box, 5k–20k lifetime entries, MCP-native preferred, no cloud dependency, hobbyist ops budget** (May 2026). Vector memory is a replaceable component — Claude doesn't care which backend is wrapped behind `recall()` — but the options vary a lot in maintenance burden and lifespan.
-
-### Honest framing first
-
-For roughly the **first six months** while you have <30 journal entries, plain `grep -r "keyword" journals/` is strictly better than embeddings. SilverBullet's tag system (already in your stack) handles "find the note about X" with a coherent tagging discipline. Don't add vector memory before you actually need it. You'll know you need it when grep starts missing things you *know* are in the journal but you can't remember the words you used.
-
-### Survivors worth a real look
-
-| Option | Backend | Repo health (May 2026) | Scale ceiling | Setup LoE |
-|---|---|---|---|---|
-| **memorious-mcp** *(this kit's default)* | ChromaDB + sentence-transformers, local | 9⭐, single maintainer, last push Oct 2025 | ~50k entries before sluggish on 2GB | Low — `claude mcp add memorious-mcp uvx memorious-mcp` |
-| **chroma-core/chroma-mcp** | Chroma persistent client | 544⭐, official, slowed after Sep 2025 | ~50k | Low — `uvx chroma-mcp --client-type persistent --data-dir ~/chroma` |
-| **basicmachines-co/basic-memory** | Markdown files + SQLite hybrid index | 3k⭐, very active, org-backed | Effectively unbounded at this scale | Low — `uv tool install basic-memory` |
-| **qdrant/mcp-server-qdrant** | Qdrant (separate Docker service) | 1.4k⭐, official, active | 1M+ vectors comfortably | Medium — extra Docker container + ~300MB RAM idle |
-| **doobidoo/mcp-memory-service** | Pluggable: SQLite-vec / Chroma / Qdrant + knowledge graph + autonomous consolidation | 1.8k⭐, very active, single maintainer | Tens of thousands easily | Medium — more config surface |
-| **iAchilles/memento** | SQLite + FTS5 + sqlite-vec + BGE-M3 | 11⭐, last push Oct 2025, single maintainer | ~100k | Low — single Node binary |
-
-### Don't bother
-
-- **Pinecone, Weaviate Cloud, Mongo Atlas Vector** — cloud SaaS, monthly cost, requires net.
-- **Mem0 self-hosted** — runs Qdrant + Neo4j + Ollama in containers, 6–8 GB realistic. Wrong scale.
-- **Postgres + pgvector** — running Postgres for one user storing 2k facts is operational overkill heavier than running Qdrant.
-- **Milvus / Vespa / Vald** — designed for multi-node clusters.
-- **Anthropic's `@modelcontextprotocol/server-memory`** — knowledge-graph in JSON, not a vector store. People confuse them.
-
-### Recommended upgrade paths
-
-**Path #1 — when memorious-mcp gets uncomfortable** (it's abandoned, broken on a Python bump, or your `recall()` queries are slow): **`basic-memory`**. Markdown files on disk means your memory survives the tool. Plays well with the SilverBullet vault you already run. Most actively maintained option in the survivor list.
+`bin/run-memorious.sh` is one line:
 
 ```bash
-uv tool install basic-memory
-claude mcp add basic-memory basic-memory mcp
+exec uvx --with 'mcp<2' --from memorious-mcp python ${VAULT_DIR}/bin/memorious-localtime.py "$@"
 ```
 
-**Path #2 — for the curious-tinkerer** who wants a real vector DB and room to grow: **`qdrant/mcp-server-qdrant`** with Qdrant in Docker. Official on both sides, scales 100x past where you'd ever need, and the experience translates to professional work later.
+Each part is there for a reason:
 
-```yaml
-# Add to docker-compose.yml
-qdrant:
-  image: qdrant/qdrant
-  volumes:
-    - ./qdrant:/qdrant/storage
-  ports: ["127.0.0.1:6333:6333"]
-```
+- **`--with 'mcp<2'`**. Unpinned, `uvx` resolves the newest dependencies on every launch. When the `mcp` SDK released 2.0.0 it renamed an exception class that the server's framework (fastmcp 2.14.1) still imported, the server died at startup, and the session had no memory tools with no error on screen. Revisit the pin when the framework supports 2.x.
+- **`memorious-localtime.py`**. memorious-mcp 0.0.2 stamps entries in UTC, so anything stored in the evening carried tomorrow's date. The wrapper patches the timestamp call to local time at launch and converts old UTC stamps once. It patches at launch and not on disk because `uvx` can re-resolve the package into a new cache directory at any start. If the patch cannot be applied it prints a warning and the server runs unpatched.
+- **`MCP_TIMEOUT=120000`** in `bin/start-claude.sh`, plus the per-server timeout. A cold `uvx` cache once spent more than the default 30 seconds downloading packages. The client gave up and the session ran without memory while the server itself was fine.
 
-```bash
-claude mcp add qdrant-memory uvx mcp-server-qdrant --qdrant-url http://localhost:6333
-```
+The store is `.memorious/` in the directory the server starts in, which is the vault. It is in `.gitignore`.
 
-### Skepticism worth carrying forward
+### When the tools are missing
 
-- `memorious-mcp`, `memento`, and most of the small-stars MCP "memory" servers are **single-maintainer hobby projects**. They work today; plan to migrate someday.
-- `chroma-core/chroma-mcp` is official but commit velocity slowed after Sep 2025 — glance at the repo before installing.
-- `basic-memory` and `qdrant/mcp-server-qdrant` are the two options here that pass a "still maintained in 12 months" smell test.
-- Anything that demands **Docker + Neo4j + Ollama + Qdrant simultaneously** is not a hobbyist setup, regardless of how the README markets it.
+1. Read the client's log first: `~/.cache/claude-cli-nodejs/${PROJECT_SLUG}/mcp-logs-memorious-mcp/*.jsonl`. It names the cause in one line.
+2. An `ImportError` and a dead server is the pin. A `CONNECT_TIMEOUT` with a healthy server is the cold cache.
+3. Run `bin/run-memorious.sh` by hand and read stderr. Be careful with what a hand run proves: the failed boot warmed the cache, so every later run succeeds.
+4. `/mcp` in the session reconnects a failed server in place. A full restart is not needed.
 
-The point: **don't build the rest of the bot around assumptions about which store you're using**. The store is the smallest piece.
+### Sharp edges
 
-## Secretary — the note-capture pattern
+- **`store` does not overwrite.** Storing under an existing key returns an id exactly like a successful write, and `recall` still returns the old value.
+- **`forget` deletes neighbours.** It matches by similarity, not by exact key. One call on the source system returned three `deleted_ids` for one named key. The two extras were the nearest neighbours of that key.
 
-The other half of this doc. Different problem, different tool.
+So correcting an entry is a procedure:
 
-**The pattern:** every ~30 minutes, a background process scans the recent conversation context and silently appends what's worth remembering — decisions, action items, life texture — to your inbox and journal. You never see it run. You just notice the journal is fuller than you wrote.
+1. `recall` the key and keep what comes back. Those neighbours are what is at risk.
+2. `forget` the key and read `deleted_ids` in the response.
+3. Re-`store` anything that was deleted by accident.
+4. `store` the corrected value.
+5. `recall` again and check the new text came back.
 
-**The bundled implementation:** `templates/secretary-agent.md` (also at the canonical `kit/templates/secretary-agent.md`) defines a Claude Code subagent with a "be silent, capture, exit" prompt, fired by cron at `:03` and `:33` past the hour (offset from the soul loop so they don't collide). Read that file directly — don't duplicate its contents here.
+### Using it well
 
-**Why it's separate from the soul loop.** The loop is *doing* (what should I work on next?). The secretary is *remembering* (what just happened?). Combining them makes both worse — the loop slows down checking conversation history, and note-taking gets skipped when the loop decides to build something instead. Two crons, two prompts, clear ownership.
+- **Keys are 1 to 5 words naming the topic**: `backup timer fix`, not `what I did today`.
+- **Values carry the reasoning and the vault path** where the detail lives.
+- **Query with topic words, not time words.** The index is keyed by subject. "Recent decisions" matches nothing and returns unrelated old entries at a high distance. Treat any hit with distance above 1.4 as no match.
+- **Don't store what is not established.** The secretary may mirror journal and inbox entries to memorious, but not proposed decisions, because an entry is harder to retract than a line in a file.
 
-**What the bundled secretary does NOT do:** auto-store to vector memory. We tested this on fenbot and it was strictly worse — it duplicated journal content as embeddings and made `recall()` results noisy. The right division of labor is: secretary writes the journal; the bot's main session decides when to call `store()` based on what's *interesting*. The canonical template documents this lesson; carry it forward in any reimplementation.
+## Layer 3: auto-memory
 
-**Alternative implementations:**
+Claude Code keeps a per-project folder of Markdown notes and an index file, `MEMORY.md`, that it loads at the start of each conversation. On the source system these are short rule files in four kinds: `user_*` (who the human is), `feedback_*` (corrections and preferences), `project_*` (slow-moving state) and `reference_*` (pointers to systems and gotchas), with one line each in the index.
 
-- **Cron + LLM API call.** A shell script that scrapes the tmux pane, sends it to an external API, parses the response, appends to files. Fewer moving parts than a Claude Code subagent; loses the in-process tool access.
-- **File-change hooks.** Trigger note-capture only when you actually had a conversation. More reactive, less periodic.
-- **Just journal manually.** If you're disciplined about writing in the journal yourself, you don't need a secretary at all. The bot still gets the value (it reads the journal); you just lose the automation.
+This layer needs no setup. Its job here is behavioural memory: "after a launcher change, prove a trigger is delivered", "tag a blocked handoff at the moment it blocks". Facts and history belong in the vault.
 
-None of these are wrong. The bundled secretary subagent is what fenbot uses because the in-process approach is the cheapest way to get a real Claude reading the actual context. Pick what fits your style.
+## How the layers work together
 
----
+- **The vault is primary.** Nothing important lives only in memorious or only in chat.
+- **Each layer points at the others.** A memorious entry names the vault path with the detail. A vault page names its memorious key, so finding the page by grep tells you what to `recall` for related material.
+- **Link, don't duplicate.** The same content in two places drifts, and then you cannot tell which copy is current.
+- **A `recall` hit is directions, not the answer.** Follow it to the file.
+- **When a memory contradicts the files, the files win,** and the memory gets corrected or deleted. A stale memory is worse than none because it is trusted.
 
-## Skip the memory backend entirely
+## When the bot must search
 
-If you genuinely want grep-only with no MCP memory backend at all, edit `setup-state.md` Current phase from `step-8-memory` to `step-9-telegram-daemon` before the bot reaches it. The bot will skip the memorious install and move on to the telegram phase. You can always add it back later by setting Current phase to `step-8-memory` and running `/setup` from the bot's tmux pane.
+From `CLAUDE.md`. These are triggers, not suggestions:
 
-The bot's CLAUDE.md.template instructs it to fall back to `grep` if `recall()` isn't available, so a memorious-less bot still works — you just lose the semantic search layer.
+1. A past event is referenced ("last time we…", "didn't we already…").
+2. A name it cannot place.
+3. It is about to state a fact about history or a past decision.
+4. After a compaction or restart: `recall` on two or three concrete topics taken from `decisions.md` and `inbox.md`.
+5. A topic that probably has prior context.
+6. Before theorising about a bug. "Have I hit this before?" is a diagnostic step.
+7. Before proposing a fix to anything automated. Find out when it was last touched and why.
+8. After being corrected. The real answer is often already written down.
 
----
+And one habit: search the mistakes, not only the work. The journal records what went wrong and why, and that half is skipped most often.
 
-When Claude should automatically search memory: see the "Memory" section in `CLAUDE.md.template`.
+## When the bot must store
+
+- Decisions, with the reasoning ("chose X over Y because Z").
+- Technical fixes: the problem and what worked.
+- Facts about people, places and projects.
+- Anything it would want to find in a month.
+
+Time-sensitive claims name the version, the date, or the condition that would make them wrong, so a later reader knows when to re-check.
+
+## Re-anchoring after a restart
+
+The checklist is at the end of `CLAUDE.md`. In short: run `bin/orient.sh` and read the bundle, read `collaboration.md`, `decisions.md` and `inbox.md`, check `cron-prompts/soul-loop-log.md`, `recall` a few concrete topics, check `crontab -l` and that the poller is running, and grep for open handoffs. The SessionStart hook starts this automatically.

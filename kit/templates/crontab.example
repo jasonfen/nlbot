@@ -1,0 +1,26 @@
+# ${BOT_NAME} persistent crons. Install with: crontab crontab.example  (as ${UNIX_USER})
+# Each entry runs cron-wake.sh <name>: gate in shell, then a non-injecting,
+# idle-gated wake (see processes/cron-wake-path.md).
+# Survives Claude restarts, context fills, and system reboots.
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Soul loop, every 10 minutes (the gate decides rest vs act)
+*/10 * * * * ${VAULT_DIR}/cron-prompts/cron-wake.sh soul-loop
+
+# Secretary agent, twice an hour (the gate skips when there is no new human input)
+3,33 * * * * ${VAULT_DIR}/cron-prompts/cron-wake.sh secretary
+
+# Weekday morning wake-up (no gate, always fires). Pick your own time.
+57 5 * * 1-5 ${VAULT_DIR}/cron-prompts/cron-wake.sh wake-up
+
+# Midnight journal maintenance (no gate). Must run AFTER midnight.
+15 0 * * * ${VAULT_DIR}/cron-prompts/cron-wake.sh midnight-maintenance
+
+# SilverBullet @mention watcher, every 5 minutes. The gate calls the Runtime
+# API, diffs against a seen-keys state file, and noops on a quiet cycle.
+*/5 * * * * ${VAULT_DIR}/cron-prompts/cron-wake.sh sb-mentions
+
+# Restart Claude Code onto an installed update, nightly when idle. See bin/claude-restart.
+40 3 * * * ${VAULT_DIR}/bin/claude-restart --if-update >/dev/null 2>&1
