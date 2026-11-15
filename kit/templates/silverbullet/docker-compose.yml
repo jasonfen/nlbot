@@ -1,0 +1,48 @@
+# SilverBullet for the ${BOT_NAME} vault. Multi-space mode (the 2.11+ default).
+# Genericised from a running stack on 2.12.0. Read kit/v2/silverbullet.md before
+# the first `up`: multi-space only initialises into an EMPTY data folder, so the
+# vault mount below has to stay commented out for the first boot.
+services:
+  silverbullet:
+    # Pin an exact version. `:latest` and `:latest-runtime-api` float, and a
+    # routine `docker compose pull` then becomes an unannounced upgrade (seen
+    # 2026-09-22: 2.10.0 -> 2.11.1). Since 2.11 the default images include
+    # Chromium, which the Runtime API needs; `-slim` is the no-Chromium variant
+    # and `-runtime-api` is a redundant alias. Upgrade deliberately: change this line.
+    image: ghcr.io/silverbulletmd/silverbullet:2.12.0-runtime-api
+    container_name: silverbullet
+    # Stable hostname: Chrome's profile SingletonLock records host-pid, and a new
+    # random container hostname on every recreate made it refuse its own stale
+    # lock (exit 21, profile in use). Same host + dead pid lets Chrome reclaim it.
+    hostname: silverbullet
+    # Run as the unix user that owns the vault, so files SilverBullet writes
+    # keep that owner. Find the numbers with `id -u` and `id -g`.
+    user: "${BOT_UID}:${BOT_GID}"
+    restart: unless-stopped
+    environment:
+      # Do NOT set SB_USER, SB_AUTH_TOKEN or SB_LOG_PUSH. Each is a single-space
+      # variable, and any one of them present selects legacy single-space mode
+      # (boot log: `boot mode: single-space (<VAR> is set)`). Multi-space is
+      # account-based: accounts and per-space access are created in the
+      # Dashboard, and API access uses per-account tokens.
+      #
+      # A numeric uid with no passwd entry gets HOME=/, which is root-owned, so
+      # headless Chromium could not create ~/.config and ~/.pki and its crash
+      # handler aborted: the Runtime API sat at 503 bridge_unavailable.
+      # /tmp is scratch; the Chrome profile itself persists under /data.
+      - HOME=/tmp
+    volumes:
+      # In multi-space mode /data HOLDS the spaces rather than being one, and
+      # SilverBullet's own state (accounts, spaces.json) lives there too. Give it
+      # a dedicated host directory owned by ${BOT_UID}:${BOT_GID}.
+      - ${SB_DATA_DIR}:/data
+      # The vault, bind-mounted in as one space. Nothing moves on the host:
+      # ${VAULT_DIR} stays the vault for every cron, unit, script and git path.
+      # FIRST BOOT: leave this line commented out. With the vault mounted into a
+      # fresh data folder, 2.11.1 logged `boot mode: single-space (folder is not
+      # empty)`. Let it initialise, create the space in the Dashboard, check which
+      # folder it got under ${SB_DATA_DIR}/spaces/, then uncomment and recreate.
+      # - ${VAULT_DIR}:/data/spaces/vault
+    ports:
+      # Localhost only. tailscale serve is the front door (kit/v2/tailscale.md).
+      - 127.0.0.1:${SB_PORT}:3000

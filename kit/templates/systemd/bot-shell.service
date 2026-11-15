@@ -1,0 +1,28 @@
+[Unit]
+Description=Bot user persistent shell tmux session
+After=network-online.target claude-code.service
+Wants=network-online.target
+# Same restart-burst cap as claude-code.service in case the create-or-attach
+# fails repeatedly (tmux server gone, etc.).
+StartLimitBurst=10
+StartLimitIntervalSec=60
+
+[Service]
+# oneshot + RemainAfterExit because we're attaching to an already-running
+# tmux server (started by claude-code.service). The tmux client call returns
+# immediately after creating the session, so Type=forking can't track the
+# daemon. The session itself lives in the existing tmux server process.
+Type=oneshot
+RemainAfterExit=yes
+User=${UNIX_USER}
+Environment=HOME=${HOME_DIR}
+Environment=LANG=C.utf8
+Environment=LC_ALL=C.utf8
+# Idempotent: create the session only if it doesn't exist. -A on new-session
+# would attach instead of erroring on duplicate, but we want detached. The
+# `||` form keeps `set -e`-style failures from leaking to systemd.
+ExecStart=/bin/bash -c 'tmux has-session -t shell 2>/dev/null || tmux new-session -d -s shell -c ${HOME_DIR} /bin/bash -l'
+ExecStop=/usr/bin/tmux kill-session -t shell
+
+[Install]
+WantedBy=multi-user.target

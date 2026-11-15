@@ -1,0 +1,68 @@
+#!/bin/bash
+# Restart ${BOT_NAME}'s Claude Code onto the installed version, keeping the conversation.
+# Typing /restart always refuses here: the cron poller is a permanent background task
+# ("Can't restart while work is running in the background") and Remote Control may be
+# connected ("Can't restart while Remote Control is connected"), both seen 2026-10-30. So
+# this exits the session and relaunches through bin/start-claude.sh, the boot path: claude
+# update, claude --continue (resumes this conversation), then the /start nudge that re-arms
+# the cron poller.
+# The worker runs under the tmux server (run-shell -b): it has to outlive the claude
+# session, and processes detached from Claude's Bash tool get killed.
+# Usage: claude-restart [--if-update]   (--if-update: do nothing unless the footer shows
+#        "Restart to update"; this is what cron runs). Log: cron-prompts/claude-restart.log
+set -u
+PANE=claude:0.0
+LOG=${VAULT_DIR}/cron-prompts/claude-restart.log  # not /tmp: a reboot wiped it 11-03
+if [[ "${1:-}" != --worker ]]; then
+  if [[ "${1:-}" == --if-update ]] && ! tmux capture-pane -p -t "$PANE" 2>/dev/null | tail -n 8 | grep -q 'Restart to update'; then
+    exit 0
+  fi
+  exec tmux run-shell -b "'$(readlink -f "$0")' --worker >>$LOG 2>&1"
+fi
+# busy = spinner line (glyph, verb…, elapsed) in the footer, or a background agent still
+# running (exiting would kill it). Breaks if the spinner format changes.
+busy() {
+  local f; f=$(tmux capture-pane -p -t "$PANE" | tail -n 12)
+  grep -qE '^[^ ]+ [^ ]+… \([0-9]+[smh]' <<<"$f" || grep '⏵⏵' <<<"$f" | grep -qE '[0-9]+ [a-z ]*agents?'
+}
+echo "$(date '+%F %T') waiting for idle"
+# Need 5 consecutive idle seconds: a single idle sample can land in the gap between two
+# tool calls of a still-running turn (11-03 15:20: idle, then busy 2 s later, gave up).
+idle=0
+for _ in $(seq 1 600); do
+  if busy; then idle=0; else idle=$((idle+1)); fi
+  (( idle >= 5 )) && break
+  sleep 1
+done
+(( idle >= 5 )) || { echo "$(date '+%F %T') still busy after 10 min, gave up"; exit 1; }
+# Keep the tmux server alive while the claude session is gone. This worker runs inside
+# that server (run-shell -b), and the server is claude-code.service's main PID: if
+# `claude` is the last session, /exit ends the server, systemd reaps the cgroup, the
+# worker dies, and nothing relaunches (11-03 15:16, the `shell` session wasn't up).
+tmux has-session -t restart-keepalive 2>/dev/null || tmux new-session -d -s restart-keepalive 'sleep 900'
+trap 'tmux kill-session -t restart-keepalive 2>/dev/null' EXIT
+tmux send-keys -t "$PANE" -l '/exit'; sleep 0.5; tmux send-keys -t "$PANE" Enter
+echo "$(date '+%F %T') sent /exit"
+# 2.1.317+ asks "Exit and stop tasks / Move to background and exit / Stay" when
+# background tasks (the cron poller) are running; option 1 is preselected. Seen 11-03.
+for _ in $(seq 1 10); do
+  tmux has-session -t claude 2>/dev/null || break
+  if tmux capture-pane -p -t "$PANE" | tail -n 12 | grep -q 'Exit and stop tasks'; then
+    tmux send-keys -t "$PANE" Enter; echo "$(date '+%F %T') confirmed 'Exit and stop tasks'"; break
+  fi
+  sleep 1
+done
+for _ in $(seq 1 30); do tmux has-session -t claude 2>/dev/null || break; sleep 1; done
+if tmux has-session -t claude 2>/dev/null; then
+  # /exit didn't end it (a confirm prompt, a dropped key); the turn is idle and the
+  # transcript is already on disk, so end the session directly.
+  echo "$(date '+%F %T') /exit didn't end the session in 30 s; killing it"
+  tmux capture-pane -p -t "$PANE" | tail -5
+  tmux kill-session -t claude; sleep 2
+fi
+${VAULT_DIR}/bin/start-claude.sh
+echo "$(date '+%F %T') relaunched via start-claude.sh"
+for _ in $(seq 1 60); do pgrep -f 'cron-trigger-monitor\.sh' >/dev/null && break; sleep 5; done
+pgrep -f 'cron-trigger-monitor\.sh' >/dev/null \
+  && echo "$(date '+%F %T') cron poller re-armed; done" \
+  || echo "$(date '+%F %T') cron poller NOT up after 5 min"

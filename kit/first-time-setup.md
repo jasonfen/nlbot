@@ -1,448 +1,233 @@
-# First-time setup walkthrough
+# First-time setup
 
-A 30-minute path from "I want one of these" to "the box is running and ready to hand over." Read [INTRO-FOR-HUMANS.md](INTRO-FOR-HUMANS.md) first if you haven't — it explains *why* this is a thing. This doc is the *how*.
+Zero to a running bot on a Debian LXC or VM that is joined to your tailnet. Plan on about an hour if nothing goes wrong. The source system runs on Debian 13 with 2 cores, 4 GB RAM and a 16 GB disk.
 
-**Audience:** the *provisioner* — the technical person standing the box up. The end user doesn't see this doc; they receive a URL and a one-line instruction ("open it, log in, type `/setup`") and the bot walks them through the rest of identity setup conversationally inside the web shell.
+Do the steps in order. Several of them end with a check. Run the check before moving on, because later steps assume the earlier ones work.
 
-*If a Claude Code instance is helping you with the install, it should read [setup-orchestrator.md](setup-orchestrator.md) first. That doc covers the assisting-CC flow as a fallback to the env-var-driven path described here.*
+## 0. What you need
 
-## TL;DR — run the script with env vars, then hand over
+- A Linux box that stays on, with systemd and outbound HTTPS.
+- A dedicated unix user for the bot. Claude Code will run as that user with permission prompts turned off, so that account is the security boundary. Don't use root.
+- A Claude account that can run Claude Code.
+- A Tailscale account.
 
-`runtime/first-time-setup.sh` automates Steps 1–4 end-to-end: vault skeleton, identity seed, placeholder substitution, keybindings, `start-claude.sh`, the systemd unit, the parallel `<BOT_NAME>-shell.service`, and bringing up both tmux sessions. It stops at the kit's explicit "hand over the keys" gate — the NOPASSWD sudoers grant and verification reboot stay with the provisioner. After reboot, *the user's only step* is to open the web shell URL and type `/setup`.
-
-**Provisioner order of operations** (all run as the bot's unix user, e.g. `nlbot`):
-
-```bash
-cd ~/nlbot                                                  # <REPO_ROOT>
-BOT_NAME=nlbot BOT_PASSWORD=Welcome2026 \
-  bash kit/runtime/first-time-setup.sh --non-interactive    # 1. Env-var provisioner — Steps 1–5
-                                                            #    (Step 5 brings up the web shell).
-sudo visudo -f /etc/sudoers.d/$BOT_NAME                     # 2. NOPASSWD sudoers grant (template printed by
-                                                            #    the script's end-of-run banner).
-sudo reboot                                                 # 3. Verification reboot.
-```
-
-That three-line sequence is the canonical happy path. **The provisioner does NOT need to walk Claude Code OAuth** — F42 (fenbot02 walk 2026-05-12) moved the OAuth step into the user's web-shell-driven onboarding. The bash provisioner starts `claude-code.service` even without `~/.claude/.credentials.json`; the wrapper-around-claude in `start-claude.sh` quietly crashloops the inner `claude` process until OAuth lands, but the wrapper survives, the tmux session stays alive, and the web shell (set up in Phase 5) stays reachable throughout. The user connects via the web shell, switches to its `?session=shell` tab, runs `claude` there, walks OAuth in the browser, then jumps back to the default claude session and types `/setup`. End-to-end without anyone SSHing into the box.
-
-(The pre-F42 flow — operator walks OAuth at the console before running the bash provisioner — still works if you prefer it; the OAuth pre-flight at script start is now an advisory message instead of a hard abort. If the credentials file is already present, the OAuth block in `HANDOFF-TO-NATE.txt` is omitted and the user's instructions collapse to "open URL, log in, type `/setup`.")
-
-The script no longer prompts for `USER_NAME`, `CANARY_PHRASE`, hobbies, communication style, or any of the eight personality values — those get collected by the bot during the user's `/setup` interview after they log in. The bash phase only collects what's truly load-bearing for getting the box up to the point where the user can connect:
-
-- **`BOT_NAME`** — required; unix user, systemd `User=`, secrets dir at `/etc/<BOT_NAME>/secrets/`, vault dirname.
-- **`VAULT`** — defaults to `$REPO_ROOT/vault`; rarely overridden.
-- **`BOT_PASSWORD`** — required at Phase 0.5 (or supply via env). Stored as a systemd-creds blob at `/etc/<BOT_NAME>/secrets/{sb-user-password,web-ui-password}` (one shared blob if `PASSWORD_MODE=unified`, the default; two separate blobs if `separate`). Plaintext never lands on disk.
-
-Everything else gets a default in `setup-state.md`'s Values block (`USER_NAME=`, `CANARY_PHRASE=`, the eight personality values, `TELEGRAM_ENABLED=` all blank). The seeded vault files keep their bracket placeholders (`<USER_NAME>`, `[CHOOSE YOUR CANARY PHRASE]`) visible — they read as legible template prose pre-interview, and `/setup` re-substitutes them with the user's real answers when they run it.
-
-### `--non-interactive` mode
-
-With the flag set, the script fails fast (with a clear error) if any required value is unset. Without it, the script falls back to `read -rp` for `BOT_NAME` and `VAULT` (handy if you're driving the install at a console). `BOT_PASSWORD` always either reads from env or prompts no-echo + confirm at the terminal; non-TTY without `BOT_PASSWORD` is a hard fail — the script refuses to silently auto-generate an unreadable password.
-
-The `--reinstall-services-only` flag is unchanged: it re-renders the two systemd units from their templates and is the way to apply unit-template fixes from `git pull` without re-running the whole bootstrap.
-
-### `HANDOFF-TO-NATE.txt`
-
-End of run, the script writes `<REPO_ROOT>/HANDOFF-TO-NATE.txt` (mode 600) containing the web shell URL, login username, initial password hint, and the single instruction for the user (`Open <URL>, log in, then type /setup`). The script also prints a banner reminding you to `shred -u HANDOFF-TO-NATE.txt` after the user has read it. The file exists so you have a clean text artifact to send the user over whatever channel you trust; the banner exists so you don't forget to wipe it.
-
-### Linux login password opt-in
-
-After Phase 0.5 the script offers an optional `[y/N]` to also set the Linux user's `/etc/shadow` login password via `chpasswd`; default `N` keeps the box SSH-key-only, which is the recommended posture for a tailnet-only LXC.
-
-The rest of this doc is the canonical reference: read along to know exactly what the script is doing, or use the prose blocks to do any step by hand.
-
-## What you'll need before you start
-
-- A Linux machine you can leave running (LXC container, spare laptop, small VPS — see [persistence-and-hardware.md](persistence-and-hardware.md) for the floor: 2 cores / 2 GB RAM / 8 GB disk).
-- A Claude Code subscription (the CLI tool, not the API).
-- A Telegram account with a phone (to talk to BotFather).
-- About 30 minutes of focused time. You can stretch it over a weekend; nothing here is time-pressured.
-
-### Where am I? (sanity check)
-
-At any point — including right now, before you've started — you can run the kit's state probe to see what's installed, what's missing, and which manual step to do next:
+Packages (versions are what the source system runs, not minimums):
 
 ```bash
-BOT_NAME=<your-bot-name> bash <repo-root>/kit/runtime/setup-status.sh
+sudo apt install tmux git jq curl python3 cron util-linux   # util-linux provides flock
+docker --version        # 29.x, with the compose plugin: `docker compose version`
+node --version          # v20, only for the web terminal
+uv --version            # 0.11, only for memorious; installs `uvx`
+tailscale version       # 1.102
 ```
 
-It runs read-only and prints a column-aligned report of system prereqs, bot-user state, vault state, and (after the Step 4 reboot) bot-driven phase progress. Each missing item shows you the doc + step that addresses it. **You can re-run it any time you're unsure where you are.**
+Install Claude Code with the official installer so the binary is at `~/.local/bin/claude`. The launcher and the restart script call it by that path.
 
-## Step 1 — Install Claude Code + prereqs (5 min)
+## 1. Join the tailnet
 
-On the Linux box, follow the official install: <https://claude.com/download>. Then log in once interactively:
+Follow [tailscale.md](tailscale.md) up to "Join". Come back here once `tailscale status` shows the box. Publishing the services happens in step 7.
+
+## 2. Fill in the placeholders
 
 ```bash
-claude
+cd kit/v2/templates
+cp kit.env.example kit.env
+$EDITOR kit.env
+bash render.sh kit.env ~/kit-rendered
 ```
 
-Follow the prompts, accept the TOS. **Do this at a real terminal, not in a tmux session you'll later detach** — the TOS gate doesn't render well in a detached pane and the persistent setup we'll build relies on having that gate already cleared.
+`render.sh` copies `templates/` to the output directory and replaces each `${NAME}` listed in `kit.env`. It refuses to write into an existing directory and exits non-zero if any kit placeholder is left unfilled. It does not touch anything else on the box.
 
-Verify the rest of the prereqs:
+| Placeholder | Meaning |
+|---|---|
+| `${BOT_NAME}` | The bot's name. Lowercase, no spaces. It is also the SilverBullet account name, the `@mention` handle and the hostname prefix of the two tailnet services |
+| `${HUMAN_NAME}` | How the bot refers to you in prose |
+| `${HUMAN_HANDLE}` | Your SilverBullet account name and `@mention` handle |
+| `${UNIX_USER}`, `${HOME_DIR}` | The bot's unix user and its home |
+| `${VAULT_DIR}` | The vault directory |
+| `${PROJECT_SLUG}` | Claude Code's folder name for the vault under `~/.claude/projects/`: `${VAULT_DIR}` with each `/` replaced by `-` |
+| `${BOT_UID}`, `${BOT_GID}` | `id -u` and `id -g` of the unix user |
+| `${TIMEZONE}` | The box's IANA timezone. Used only in comments and prose; every script takes local time from `date` |
+| `${TAILNET}` | Your tailnet name, the part before `.ts.net` |
+| `${SB_PORT}`, `${TERM_PORT}` | Localhost ports for SilverBullet and the web terminal (3001 and 3000 on the source system) |
+| `${SB_DATA_DIR}` | Host directory for SilverBullet's own state |
+
+## 3. Lay out the vault
+
+From here on, `R` is the rendered directory and `V` is the vault.
 
 ```bash
-claude --version
-docker compose version
-tmux -V
-tailscale status
-node --version
+R=~/kit-rendered; V=<your VAULT_DIR>
+mkdir -p "$V" && cd "$V"
+
+# instructions and system map
+cp "$R"/CLAUDE.md.template CLAUDE.md     # shipped with a suffix so Claude Code does not load the kit copy as instructions
+cp "$R"/collaboration.md "$R"/identity.md "$R"/user-profile.md .
+
+# scripts, hooks, process docs, cron machinery
+cp -a "$R"/bin "$R"/hooks "$R"/processes "$R"/cron-prompts .
+mkdir -p cron-prompts/state
+
+# Claude Code project config: agents, commands, hooks
+cp -a "$R"/dot-claude .claude            # note the rename
+
+# SilverBullet pages (shipped as *.md.template so they are inert inside another vault)
+cp "$R"/silverbullet/CONFIG.md.template CONFIG.md
+cp "$R"/silverbullet/dashboard.md.template dashboard.md
+mkdir -p templates
+for f in "$R"/silverbullet/templates/*.md.template; do cp "$f" "templates/$(basename "${f%.template}")"; done
+
+# vault skeleton
+mkdir -p journals handoffs projects fiction
+touch journals/journal.md inbox.md decisions.md cron-prompts/.journaled-through
+printf '# Handoffs\n' > handoffs.md
+printf '# Journals\n' > journals.md
+printf '# Cron Job Log\n\nEvery cron fire appends a row here.\n\n' > cron-prompts/job-log.md
+printf '# Soul Loop Log\n\n| Time | Action | Notes |\n|------|--------|-------|\n' > cron-prompts/soul-loop-log.md
+printf '# Proposed decisions and facts (secretary queue)\n\n' > cron-prompts/proposed-decisions.md
+
+cp "$R"/gitignore.example .gitignore
+git init && git add -A && git commit -m "Initial vault"
 ```
 
-Each should print a version string. Notes:
+Why the page files sit where they do: in SilverBullet the page for a folder is a sibling file, so `handoffs.md` is the page for `handoffs/`.
 
-- `docker compose version` needs the compose plugin (needed by SilverBullet in Step 5).
-- `tailscale status` should show your tailnet — if it errors, run `sudo tailscale up`.
-- `node --version` only matters if you're doing the optional web shell (Step 7); Node 20+.
-
-Anything that fails: install the missing piece before continuing. `docker compose version` is the trickiest — modern installs use the compose plugin (`docker compose`, two words), not the old standalone binary (`docker-compose`, hyphen).
-
-## Step 2 — Drop in the vault (5 min)
-
-The kit clone lives at `<REPO_ROOT>` (e.g. `~/nlbot`). After the restructure, the clone has a clean three-way split:
-
-- `<REPO_ROOT>/kit/` — kit source (read-only after install; pulled from upstream).
-- `<REPO_ROOT>/vault/` — the SilverBullet space (where `journals/`, `handoffs/`, `CLAUDE.md`, identity files live).
-- `<REPO_ROOT>/` itself — bot-runtime state (`.claude/`, `.telegram/`, `cron-prompts/`, `setup-state.md`, `start-claude.sh`).
-
-Set three shell variables once and every later code block uses them:
+Two files go outside the vault:
 
 ```bash
-REPO_ROOT=~/nlbot         # change to wherever you cloned the kit
-KIT=$REPO_ROOT/kit
-VAULT=$REPO_ROOT/vault
-cd $REPO_ROOT
+cp "$R"/keybindings.json ~/.claude/keybindings.json   # unbinds ctrl+x ctrl+e and ctrl+x ctrl+k
+cp "$R"/tmux.conf ~/.tmux.conf
 ```
 
-Build the vault skeleton and copy the kit's seed files:
+The two unbound chords open an external editor and kill agents. Either can take down an unattended session if it is hit by accident. The tmux config passes PgUp through to fullscreen apps, which the web terminal's scroll buttons rely on.
+
+### The humanizer skill
+
+The journal synthesizer preloads a skill called `humanizer`, and `CLAUDE.md` tells the main session to use it on long prose. Install it with the `skills` CLI, from the vault directory:
 
 ```bash
-mkdir -p $VAULT/journals/fiction $VAULT/handoffs $VAULT/processes
-
-# Bot identity at the vault root (user-edited daily through SilverBullet)
-cp $KIT/CLAUDE.md.template            $VAULT/CLAUDE.md
-cp $KIT/templates/identity.md     $VAULT/identity.md
-cp $KIT/templates/user-profile.md $VAULT/user-profile.md
-cp $KIT/templates/soul-loop.md    $VAULT/soul-loop.md
-
-# SilverBullet vault — top-level index pages + process docs + handoff template
-cp -n $KIT/templates/vault-pages/*.md  $VAULT/
-cp -n $KIT/templates/processes/*.md    $VAULT/processes/
-cp -rn $KIT/templates/vault-pages/_templates $VAULT/_templates 2>/dev/null || true
-
-touch $VAULT/journals/journal.md
-
-# Render .claude/ from kit/dot-claude/ — substitutes placeholders, lives at
-# the REPO_ROOT (bot CWD) so Claude Code finds it.
-bash $KIT/runtime/refresh-claude-dir.sh
+cd ${VAULT_DIR}
+npx -y skills add blader/humanizer --agent claude-code -y
+ls .claude/skills/humanizer/SKILL.md
 ```
 
-Now open `CLAUDE.md` in your editor and replace every `<USER_NAME>` and `[Your Bot's Name]` placeholder with your actual name and the bot's name. Same with `identity.md` and `user-profile.md` — fill in the canary phrase, your role, what you want from this bot. There's no "right" answer; first-pass guesses are fine, you'll edit later.
+This copies the skill into `.claude/skills/humanizer/` and writes `skills-lock.json` (source repo plus content hash), so `npx skills update` can refresh it later. It was run on a fresh scratch vault on 2026-11-14 and needs Node, which you already have for the web terminal. Without `--agent claude-code -y` the CLI asks which agents to install for. The source system has an older layout (`.agents/skills/` with a symlink from `.claude/skills/`) left over from an earlier version of the CLI. Both work, because Claude Code only reads `.claude/skills/`.
 
-The vault-page copies above also contain `<BOT_NAME>` / `<USER_NAME>` / `<VAULT>` / `<KIT>` / `<REPO_ROOT>` placeholders. `runtime/first-time-setup.sh` handles substitution automatically. If you skipped that and are running this entirely by hand, the substitution table lives in `setup-orchestrator.md` — six tokens total. A one-shot `sed` over `$VAULT/*.md $VAULT/processes/*.md` covers the most important seeded files; `$REPO_ROOT/.claude/agents/*.md` and `$REPO_ROOT/.claude/commands/*.md` are regenerated by `bash $KIT/runtime/refresh-claude-dir.sh`.
+If you skip the skill, remove the `skills:` block from `.claude/agents/journal-synthesizer.md`; the runners fall back to `processes/writing-style.md`.
 
-**About the canary phrase:** in `identity.md`, you'll set a short string ("the lighthouse keeper waves at midnight" — anything memorable). The bot is supposed to remember it without re-reading the file. If at any point it can't recall the phrase, that's its signal it has lost context (post-restart, post-compaction) and needs to re-anchor by reading `identity.md` and `user-profile.md`. It's not a security secret; just an orientation anchor.
+## 4. Give the bot an identity
 
-## Step 3 — Disable the keybindings that kill sessions (1 min)
+Edit `identity.md` and `user-profile.md`. The only field that matters on day one is the **canary phrase** in `identity.md`: a short phrase the model could not guess. `CLAUDE.md` tells the bot that if it does not know the phrase without reading the file, its context has been compacted and it must re-orient. It is an orientation check, not a secret.
 
-Edit `~/.claude/keybindings.json`:
+`bin/orient.sh` prints both files into every fresh context (the main session after a restart, and each runner agent), so keep them short. On the source system the whole bundle is about 22 KB.
 
-```json
-{
-  "bindings": [
-    { "keys": "ctrl+x ctrl+e", "action": "none" },
-    { "keys": "ctrl+x ctrl+k", "action": "none" }
-  ]
-}
-```
+## 5. Start Claude Code as a service
 
-The `"action": "none"` form is the current Claude Code schema. (Older docs and older kit versions used a top-level `"disabled": [...]` array — that's now rejected with a `keybindings.json must have a "bindings" array` warning. If you see that error on `claude` startup, your file is in the legacy format; replace it with the block above.)
-
-Skip this and you'll discover why on day three. See [persistence-and-hardware.md](persistence-and-hardware.md) for the story.
-
-> ### ⚠ Heads-up: two `.claude/` directories
->
-> By this point in setup you have **two distinct `.claude/` directories** doing different things. People confuse them; this is the most common kit-bring-up footgun after the locale issue.
->
-> | Path | Scope | What it holds |
-> |---|---|---|
-> | `~/.claude/` (your `$HOME`) | Global — applies to every Claude Code session you start as this unix user | `keybindings.json` (the file you just edited), `settings.json`, `mcp.json`, `projects/<encoded-cwd>/` (history), and any agents/commands/hooks you want available everywhere |
-> | `~/<bot-name>/.claude/` (inside the vault, the renamed `dot-claude/` from Step 2) | Project — applies **only** when Claude Code is launched with the vault as its CWD | The kit's `agents/*.md` (soul-loop-runner, secretary, etc.) and `commands/*.md` (`/soul-loop`, `/secretary`, …) |
->
-> Three specific things that bite:
->
-> 1. **Forgetting the `dot-claude` → `.claude` rename in Step 2.** If you copied it as `dot-claude/` instead of `.claude/`, Claude Code won't find the project agents or slash commands and they'll silently do nothing — `/soul-loop` will just return "unknown command." Verify: `ls -d ~/<bot-name>/.claude` should show the directory.
->
-> 2. **Editing the wrong `.claude/`.** Want a slash command everywhere? Edit `~/.claude/commands/`. Want one only in this vault? Edit `~/<bot-name>/.claude/commands/`. Both directories accept the same kinds of files; the difference is scope.
->
-> 3. **Project config wins on merge.** If both directories contain `agents/secretary.md`, the vault's version overrides the global one when Claude Code is running with the vault as CWD. If you ever wonder "why isn't my edit taking effect," you might be editing the loser.
->
-> Also worth knowing: `~/.claude/projects/<encoded-cwd>/` stores per-CWD session history. If you ever move the vault (`mv ~/oldname ~/newname`), the bot's "recent sessions" go orphaned and a fresh project entry is created under the new path. The journal and the bot itself are unaffected — only `claude --continue`'s memory of "what was I doing in that other directory" resets.
-
-## Step 4 — Wire up persistence (10 min)
-
-Render the launcher script into the repo root (bot CWD), then drop the systemd unit:
+Run it once by hand first, in the vault, with the same flags the service uses:
 
 ```bash
-cp $KIT/runtime/start-claude.sh $REPO_ROOT/start-claude.sh
-chmod +x $REPO_ROOT/start-claude.sh
+cd "$V" && ~/.local/bin/claude --permission-mode bypassPermissions
 ```
 
-The script has a `cd` line near the top that hardcodes the bot's CWD. Open `$REPO_ROOT/start-claude.sh` and update that line if it doesn't already point at `$REPO_ROOT`.
+Log in, accept the prompts, say hello, and exit. Do this at a real terminal. The launcher starts Claude with `--continue`, which resumes the most recent conversation in that directory.
 
-Then drop two sibling systemd units at `/etc/systemd/system/`:
+If there's no earlier conversation in that directory, `--continue` starts a new session instead of failing (checked with Claude Code 2.1 on 2026-11-14: `claude --continue -p '…'` in an empty directory answered normally and exited 0). The manual first run is still worth doing, because the login and the first-start prompts need a human at a keyboard.
 
-- `claude-code.service` (template in [persistence-and-hardware.md](persistence-and-hardware.md) — change `User=` and the path).
-- `<BOT_NAME>-shell.service` (parallel unit running `tmux new-session -d -s shell -c %h /bin/bash -l` as the bot user). The web shell exposes both tmux sessions; `?session=shell` lands here, `tmux attach -t shell` over SSH gets the same thing.
+Then install the unit:
 
 ```bash
+sudo cp "$R"/systemd/claude-code.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now claude-code.service
-sudo systemctl enable --now <BOT_NAME>-shell.service
-tmux ls                         # should show "claude" AND "shell" sessions
-tmux attach -t claude           # see Claude Code running
-# Check that the ❯ prompt renders correctly. If you see __ or ?? instead,
-# the locale isn't set right in some shell context. See the "Glyph rendering"
-# section in persistence-and-hardware.md — fix it before continuing.
-# detach with ctrl+b then d (don't kill it)
+tmux attach -t claude        # detach with ctrl+b d
 ```
 
-`first-time-setup.sh` automates both `claude-code.service` and `<BOT_NAME>-shell.service` together — Step 4 of the script writes both heredocs, enables both, and verifies both tmux sessions came up.
+What `bin/start-claude.sh` does, in order:
 
-### Final action: grant the bot scoped sudo NOPASSWD (then reboot)
+1. Exits if a tmux session named `claude` already exists.
+2. Sets `LANG=C.utf8` (without it the prompt glyphs render as `__`) and `MCP_TIMEOUT=120000` (a cold `uvx` start for memorious took longer than the default 30 s once, and the session ran without memory tools).
+3. Runs `claude update`, bounded to 120 s, so a boot does not start on yesterday's build.
+4. Starts `claude --permission-mode bypassPermissions --continue` in a detached tmux session named `claude`, in the vault.
+5. In the background, waits for the prompt and types `/start` once. `/start` arms the cron poller and orients. It re-sends once if the poller is still not running after about four minutes.
 
-This is the privilege grant that lets the bot drive Steps 5–9 from inside the detached tmux session (where there's no terminal for sudo to prompt against). **Do this only after the steps above all worked** — by this point you have a working `claude-code.service`, a verified tmux session, and everything else from bootstrap.md sane. The NOPASSWD entry is the "I'm ready to hand the keys over" gate.
+`bypassPermissions` removes Claude Code's per-action prompts. The bot can do whatever its unix user can do, which is why step 0 asks for a dedicated user.
+
+**Check:** `pgrep -af cron-trigger-monitor` shows the poller within a few minutes of boot. Then reboot the box and check again. Don't skip the reboot.
+
+## 6. SilverBullet
+
+Follow [silverbullet.md](silverbullet.md), "Install". You finish that section with the bot's API token in `$V/.sb-token` and:
 
 ```bash
-# Substitute $BOTUSER with your bot's unix username
-# (the one from bootstrap.md Step 2)
-sudo tee /etc/sudoers.d/$BOTUSER >/dev/null <<EOF
-# Service + container + cron management
-$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/systemctl
-$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/crontab
-$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/docker
-# Service-file + log inspection (setup-runner step-7 step-9)
-$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/tee
-$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/journalctl
-# Tailscale serve (setup-runner step-6 + step-7)
-$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/tailscale
-# systemd-creds + secret-blob ops (runtime/bot-secrets.sh,
-# migrate-secrets.sh, silverbullet-up.sh — the encrypted-secrets
-# path needs all of these to run unattended from the soul-loop)
-$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/systemd-creds
-$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/install
-$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/mktemp
-$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/rm
-$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/test
-$BOTUSER ALL=(ALL) NOPASSWD: /usr/bin/ls
-EOF
-sudo chmod 440 /etc/sudoers.d/$BOTUSER
-sudo visudo -cf /etc/sudoers.d/$BOTUSER
-
-# Verify the bot user can actually use it
-sudo -u $BOTUSER sudo -ln | grep NOPASSWD
+cd "$V" && ./bin/sb.sh ready && ./bin/sb.sh lua 'system.getVersion()'
 ```
 
-Anything outside the list above still prompts for the password and stays your job. The list pairs to specific bot operations: `systemctl/crontab/docker` for service + cron + container management; `tee/journalctl` for writing service files and tailing logs during steps 7 and 9; `tailscale` for the `tailscale serve` publishes in steps 6 and 7; `systemd-creds + install/mktemp/rm/test/ls` for the encrypted-secrets path (bot-secrets.sh, migrate-secrets.sh, silverbullet-up.sh) that needs root to write/read `/etc/$BOTUSER/secrets/`. If something feels off here, **don't reboot yet** — debug first. If you want to undo: `sudo rm /etc/sudoers.d/$BOTUSER`. If you'd rather grant blanket `NOPASSWD: ALL` instead of scoped (bigger blast radius if the bot ever runs amok), substitute `NOPASSWD: ALL` for the comma-list above. The kit's recommended path is scoped.
+## 7. Publish the two services on the tailnet
 
-### Reboot
+Follow [tailscale.md](tailscale.md), "Publish with tailscale serve".
 
-**Reboot the box now and verify it comes back up.** This is non-negotiable — verify the persistence works before you start trusting it. After the reboot:
+**Check:** from another device on the tailnet, `https://${BOT_NAME}-notes.${TAILNET}.ts.net` shows the SilverBullet login.
+
+## 8. Web terminal (optional, recommended)
+
+A small Node app (Express, `ws`, `node-pty`, xterm.js) that attaches a browser tab to the `claude` tmux session. It listens on `127.0.0.1` only and has its own login.
 
 ```bash
-systemctl status claude-code.service     # active (running)
-tmux attach -t claude                    # back in the session
+cp -a "$R"/web-terminal "$V"/web-terminal
+cd "$V"/web-terminal
+cp env.example .env && chmod 600 .env && $EDITOR .env    # UI_USERNAME, UI_PASSWORD, SESSION_SECRET, PORT
+npm install
+sudo cp "$R"/systemd/claude-web.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now claude-web.service
 ```
 
-## After the reboot — hand the URL to the user
+The server only attaches to tmux sessions on a fixed allowlist: `claude` (default) and `shell` (`?session=shell`). `systemd/bot-shell.service` creates that second session, a plain login shell, if you want one.
 
-At this point the box is running. `claude-code.service` is up, the tmux `claude` session has the bot at its prompt, and `<BOT_NAME>-shell.service` is hosting the web-shell-accessible bash session. `Current phase: phase-0-interview-pending` — the soul-loop will fire on its 10-minute cadence but `setup-runner` short-circuits with `interview pending — user must type /setup` and does nothing else until the user connects.
+`npm install` compiles `node-pty`, a native module, when there's no prebuilt binary for your platform. The box needs the usual native-addon build tools: `make`, a C/C++ compiler (gcc/g++ or clang) and Python 3. Your distribution's build-tools metapackage usually covers it. Install those before `npm install`. If the build fails, the error names the missing tool, and `npm rebuild node-pty` retries once it's installed. The same applies after a major Node upgrade, which can leave the compiled module unloadable until you run `npm rebuild`.
 
-**What you do:** read `HANDOFF-TO-NATE.txt`, copy its contents over whatever channel you trust (email, SMS, in-person), then `shred -u HANDOFF-TO-NATE.txt` once the user confirms receipt.
+## 9. Vector memory (optional on day one)
 
-**What the user does:**
+Follow [memory.md](memory.md), "Install memorious". Grep is enough for the first weeks.
 
-1. Opens the web shell URL in his browser.
-2. Logs in with the username + initial password from the handoff.
-3. Lands in the tmux `claude` pane, sees the bot's prompt.
-4. Types `/setup`.
-
-The bot's `/setup` slash command runs a short conversational interview (USER_NAME, CANARY_PHRASE, 8 optional personality values, TELEGRAM opt-in). Each answer persists to `setup-state.md` immediately, so the user can Ctrl-C / close his browser / lose the network mid-interview and resume from the first still-empty question on his next `/setup`. After the last answer, `/setup` re-substitutes the seeded vault files with the user's real values, advances the phase to `phase-0-interview-complete`, and falls through to the bot-driven Step 5–9 walk.
-
-### What the bot drives after the interview
-
-`setup-runner` reads `setup-state.md` Current phase on every soul-loop, executes the next phase, advances state, and posts progress to the journal. The user can watch via the web shell (or, after Step 7 finishes, via Telegram — only if he opted in at the interview's last question).
-
-**Total elapsed from the user's first `/setup`:** ~5–10 minutes, or longer if he opted in to Telegram (the BotFather BLOCKER pauses there).
-
-### What the bot does
-
-| Phase | What runs |
-|---|---|
-| `step-5-cron` | **First bot phase, intentionally.** Installs crontab entries (soul-loop / secretary / wake-up / midnight-maintenance) for the bot's unix user so the heartbeat + journaling pipeline starts on minute one. Everything downstream becomes re-drivable from the heartbeat. |
-| `step-6-silverbullet` | Generates the machine-only `sb-auth-token` (`bot-secrets.sh generate`), runs `silverbullet-up.sh` which reads `sb-user-password` (typed by operator in Phase 0.5) + `sb-auth-token` from systemd-creds blobs and brings up the container, `sudo tailscale serve --https=443`. |
-| `step-7-web-shell` | `npm install`, generates the machine-only `web-session-secret` (`bot-secrets.sh generate`), reads `web-ui-password` (typed by operator in Phase 0.5) from the systemd-creds blob, installs `<BOT_NAME>-web.service`, `sudo tailscale serve --https=8443`. |
-| `step-8-memory` | Installs memorious-mcp as the baseline memory backend. |
-| `step-9-telegram-daemon` | Copies `tg-bot.py` + `tg-post.sh` into `.telegram/`, drops the systemd unit, posts a BLOCKER asking for BotFather token. (Last phase — by the time you hit this, the rest of the bot is fully operational, so the BotFather handoff isn't gating anything else.) |
-| `step-9-telegram-creds-blocker` | **Waits on you.** See "What you still do" below. |
-| `step-9-telegram-activate` | Enables + starts `telegram-bot.service`, sends a test message round-trip. |
-| `done` | Bot transitions to operational mode. |
-
-Each phase is **idempotent** — re-running is safe if anything mid-fails. The bot's soul-loop will keep retrying until the phase succeeds or hits a blocker.
-
-### What you still do
-
-The bot writes `BLOCKER <name>: <instruction>` lines in `setup-state.md` `## Blockers` whenever it needs you. The soul-loop stops dispatching setup-runner until you remove (or `RESOLVED <name>:` the BLOCKER). Expected blockers:
-
-1. **`BLOCKER telegram-botfather`** — happens during `step-9-telegram-daemon` (the *last* phase, intentionally — everything else is already running by this point). Open Telegram, message `@BotFather`, `/newbot`, save the token. DM your new bot once. Visit `https://api.telegram.org/bot<TOKEN>/getUpdates` and find your `chat.id`. Paste `TG_BOT_TOKEN`, `TG_BOT_USERNAME` (`@<name>_bot`), and `TG_CHAT_ID` into `setup-state.md` Values. Remove the BLOCKER line.
-
-2. ~~**`BLOCKER web-shell-credentials`**~~ — no longer fires. The web-shell password is the one the operator typed in Phase 0.5 of `first-time-setup.sh`, so there's nothing to "write down" — they already have it.
-
-3. **`BLOCKER tailscale-cert`** *(may not appear)* — Tailscale's first `serve --https` triggers a cert provisioning. If Tailscale needs interactive approval, the bot will pause here.
-
-### Watching it happen
+## 10. Crons
 
 ```bash
-tmux attach -t claude          # see the bot working in real time
-# ctrl+b then d to detach (don't kill it)
-
-# Or, just read the journal as the bot writes it:
-tail -f <VAULT>/journals/journal.md
+crontab "$R"/crontab.example      # as the bot user; replaces that user's crontab
+crontab -l
 ```
 
-Once Step 6 completes, all further progress reports go to your Telegram.
+**Check the gate side.** Within ten minutes `cron-prompts/inject.log` gets a line: `cron-wake TRIGGER soul-loop (…)` or `cron-wake GATE noop soul-loop`. A fresh vault has no last-action timestamp, so the first soul-loop fire triggers.
 
-### If something fails
-
-The bot's setup is idempotent. If a phase fails:
+**Check the delivery side.** This is the one people skip. A running poller that never delivers looks the same as a healthy one. After a `TRIGGER` line, watch the session: when it is idle the poller exits, the main session reads a `CRON soul-loop …` line, spawns `soul-loop-runner`, and re-arms the poller. Then:
 
 ```bash
-# Reality check: what's actually running vs. what setup-state.md claims?
-<KIT>/runtime/setup-status.sh
+ls -A "$V"/.cron-triggers/        # empty once delivered
+tail -3 "$V"/cron-prompts/job-log.md
 ```
 
-This probes every phase (docker container, systemd service, crontab entry, MCP registration) and prints a recommendation: "declared phase X, reality reached Y, run /setup to advance." Run it from any shell — it's read-only.
+If a trigger file sits there while the session is idle, go to [operating.md](operating.md), "Triggers are not delivered".
 
-Then watch the live session if needed:
+The first run of the `sb-mentions` gate records every existing mention as seen and wakes nothing. It needs SilverBullet's Runtime API, so do step 6 first.
+
+## 11. Snapshot timer
+
+SilverBullet commits page edits to git on its own, but skips dot-paths. A timer commits those (`.claude/`, state files) every 15 minutes:
 
 ```bash
-tmux attach -t claude
-tail -50 <VAULT>/journals/journal.md
+sudo cp "$R"/systemd/bot-vault-snapshot.service "$R"/systemd/bot-vault-snapshot.timer /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now bot-vault-snapshot.timer
 ```
 
-Common causes of phase failures are usually a missing prereq from bootstrap.md (docker group not active in this login, sudo NOPASSWD entry wrong or missing for the bot user — covered in [bootstrap.md](bootstrap.md) Step 5 and first-time-setup.md Step 4's final action). Fix the underlying issue, then either wait for the next soul-loop fire or run `/setup` manually from the tmux pane to force a retry. The bot's setup-runner re-reads `setup-status.sh` at the start of every dispatch and trusts reality over the state file, so re-running is always safe.
+## What done looks like
 
----
+- After a reboot, `tmux attach -t claude` shows a session that has armed its poller and read its orientation bundle without you typing anything.
+- `cron-prompts/job-log.md` gains a `shell-only rest` row every ten minutes while idle.
+- A task `- [ ] say hello in the journal #handoff @${BOT_NAME}` on a page under `handoffs/` is picked up within ten minutes.
+- The next morning there is a `journals/YYYY/MM/DD.md` for yesterday and `journals/journal.md` holds only today.
 
-## Reference: detailed Step 5–9 instructions (assisting-CC fallback)
+## First week
 
-The bot-driven flow above is the default. If you'd rather drive Steps 5–9 yourself or via the assisting CC instance (the `setup-orchestrator.md` flow before Step 4), the detailed instructions for each step follow.
-
-### Step 5 detail — Cron the heartbeat (first bot phase, intentionally)
-
-**Intentionally first.** Installing the heartbeat + journaling pipeline on minute one means soul-loop, secretary, wake-up, and midnight-maintenance all start running immediately. Every later phase becomes re-drivable from the heartbeat if it mid-fails; the journal silently auto-populates from minute one even if the rest of the install stalls.
-
-⚠ **Do this AFTER the verification reboot from Step 4 — not before.** If cron fires before the tmux session exists, `inject-prompt.sh` will silently noop.
-
-```bash
-mkdir -p $REPO_ROOT/cron-prompts
-cp $KIT/runtime/inject-prompt.sh $REPO_ROOT/cron-prompts/
-cp $KIT/runtime/cron-prompts/*.md $REPO_ROOT/cron-prompts/
-chmod +x $REPO_ROOT/cron-prompts/inject-prompt.sh
-```
-
-Then `crontab -e`:
-
-```cron
-*/10 7-23 * * * <REPO_ROOT>/cron-prompts/inject-prompt.sh /soul-loop
-*/30 * * * *   <REPO_ROOT>/cron-prompts/inject-prompt.sh /secretary
-30 7 * * 1-5   <REPO_ROOT>/cron-prompts/inject-prompt.sh /wake-up
-5 0 * * *      <REPO_ROOT>/cron-prompts/inject-prompt.sh /midnight-maintenance
-```
-
-Within 10 minutes you should see soul-loop fires in `job-log.md`, and the secretary fires every 30 minutes capturing journal-worthy moments from your conversations.
-
-### Step 6 detail — SilverBullet (the vault editor)
-
-This is your daily interface to the bot's brain. Walked through fully in [silverbullet-setup.md](silverbullet-setup.md). The condensed version:
-
-1. `sb-user-password` was already typed by the operator in Phase 0.5 (or pre-set via `BOT_PASSWORD`) and stored as a systemd-creds blob; nothing to do. Generate the machine-only `sb-auth-token`:
-   ```bash
-   bash $KIT/runtime/bot-secrets.sh generate sb-auth-token 24
-   ```
-   If you're doing the fully-manual fallback flow (no Phase 0.5 was run), `openssl rand -base64 24` for the password works too — just save it somewhere you can recover, since SB on a phone will ask for it.
-2. The kit's `docker-compose.yml` at `$KIT/docker-compose.yml` already references `${BOT_NAME}` / `${SB_USER_PASSWORD}` / `${SB_AUTH_TOKEN}` as env vars. Bring the stack up via `bash $KIT/runtime/silverbullet-up.sh`, which decrypts both blobs into process env before invoking `docker compose up -d silverbullet` — plaintext stays in memory only.
-3. `docker compose up -d` and visit `http://localhost:3001`. Log in with the SB_USER credentials. You should see your vault.
-4. Expose via Tailscale: `sudo tailscale serve --bg --https=443 http://127.0.0.1:3001`. Now reachable from your phone at `https://<host>.<tailnet>.ts.net`.
-5. Install the seeded plugs. `first-time-setup.sh` Step 2 already wrote `CONFIG.md` at the vault root with `config.set("plugs", {…})` declaring TreeView. In SilverBullet:
-   1. Open the command palette (Ctrl/Cmd-K).
-   2. Run `Plugs: Update`. SB reads `CONFIG.md`, downloads + compiles each plug, writes them to `_plug/`.
-   3. Reload (Ctrl/Cmd-R). The TreeView folder sidebar should appear on the left.
-
-   Want more plugs later? Edit the `config.set("plugs", {…})` table in `CONFIG.md` and re-run `Plugs: Update` — no `Plugs: Add` flow needed. Other config defaults (`taskStates`, `treeview.position`) live in the same file.
-
-6. The kit also seeded a daily-handoff template at `_templates/handoff.md`. To create a new handoff page from SilverBullet: `Page: From Template` → pick `handoff`. SB stamps out `handoffs/YYYY/MM/DD.md` with the canonical structure (tasks, context, done). The bot's soul-loop sees the new `- [ ] … #handoff` checkboxes within 10 minutes.
-
-When you first land on SilverBullet, [[index]] is the entry point (created from `templates/vault-pages/index.md` in Step 2) and [[dashboard]] shows live queries for open handoffs / tasks / recent activity. You can now read `journals/journal.md` from your phone and leave handoff tasks (`- [ ] do X #handoff`) for the bot.
-
-### Step 7 detail — Web shell
-
-The web shell is a small Node.js server that attaches to your `claude` tmux session and renders it through xterm.js in the browser, login-protected and Tailscale-only. Walked through end-to-end in [web-shell.md](web-shell.md). The condensed version:
-
-1. `cd $KIT/web-terminal && npm install` (the directory already exists in the kit; no copy needed).
-2. Create `$KIT/web-terminal/.env` with `PORT=3000`. The other values (`SESSION_SECRET`, `UI_USERNAME`, `UI_PASSWORD`) are loaded from systemd-creds blobs at service start:
-   - `web-ui-password` was typed by the operator in Phase 0.5 (or pre-set via `BOT_PASSWORD`) — nothing to do.
-   - `web-session-secret` is machine-only; generate via `bash $KIT/runtime/bot-secrets.sh generate web-session-secret 32`.
-   - `web-ui-username` defaults to `$BOT_NAME`; override via `echo "<name>" | bash $KIT/runtime/bot-secrets.sh store web-ui-username` if needed.
-3. Drop `/etc/systemd/system/<BOT_NAME>-web.service` (template at `$KIT/web-terminal/claude-web.service`; `WorkingDirectory=$KIT/web-terminal`). Enable and start.
-5. `sudo tailscale serve --bg --https=8443 http://127.0.0.1:3000`.
-6. Visit `https://<host>.<tailnet>.ts.net:8443`, log in, watch Claude type.
-
-On iOS, "Add to Home Screen" makes it behave like a native app (PWA manifest is included).
-
-### Step 8 detail — Vector memory (memorious-mcp baseline)
-
-Installed by default during bot-driven setup. Walked through in [memory.md](memory.md). The doc covers the secretary note-capture pattern (cron-driven background note-taker) — useful once your conversations get long enough that you'd appreciate Claude writing the journal for you. If you want to *skip* the memory layer entirely (grep-only), see the bottom of `memory.md`.
-
-### Step 9 detail — Telegram
-
-**Intentionally last** — every other piece of the bot is operational by now, so the BotFather handoff (the only mid-flow human BLOCKER in the whole setup) doesn't gate anything else. Walked through end-to-end in [telegram-integration.md](telegram-integration.md). The condensed version:
-
-1. In Telegram, message `@BotFather`, send `/newbot`, follow prompts, save the token.
-2. DM your new bot once. Then visit `https://api.telegram.org/bot<TOKEN>/getUpdates` and find your `chat.id`.
-3. Create `$REPO_ROOT/.telegram/config` with `BOT_TOKEN=`, `CHAT_ID=`, `BOT_USERNAME=`. `chmod 600` it. (Token + chat id are loaded from systemd-creds at service start; the config file is a fallback for older installs and a place to record the bot username.)
-4. Copy `tg-bot.py` and `tg-post.sh` from `$KIT/runtime/` into `$REPO_ROOT/.telegram/`. Make them executable (`chmod +x`).
-5. Drop `/etc/systemd/system/telegram-bot.service` (template at `$KIT/runtime/telegram-bot.service`; `WorkingDirectory=$REPO_ROOT`, `ExecStart=/usr/bin/python3 $REPO_ROOT/.telegram/tg-bot.py`). Enable and start.
-6. DM your bot something — anything. `journalctl -u telegram-bot -f` should show the message arrive. The file `$REPO_ROOT/.telegram/new-messages.txt` should appear.
-
-*Aware-of-but-recommended-against: [Portainer](portainer.md) is a popular browser Docker UI, but it doesn't play well with a Claude-managed bot — Claude edits `docker-compose.yml` directly via `docker compose up -d`, which causes Portainer's stack definition to drift from reality. See [portainer.md](portainer.md) for the full reasoning.*
-
-## What "done" looks like
-
-- You DM the bot, it replies within a minute.
-- `job-log.md` shows clean heartbeat fires every 10 minutes.
-- `journals/journal.md` has Claude's first morning entry.
-- You reboot the box; everything comes back up in under 30 seconds.
-
-If any of those fail, troubleshoot before adding more layers. A flaky persistent setup that you can't trust is worse than no setup at all.
-
-## What to do in week one
-
-- Talk to the bot conversationally on Telegram. Tell it about a project. See what it remembers.
-- Ask it to journal something. Read what it wrote. Edit the journal directly if you want.
-- Edit `user-profile.md` with what you've learned about how you want to work with it. The bot will read it on next wake-up.
-- Don't add features yet. Watch what it does. The default decision menu is well-tuned; understand it before you change it.
-
-## What to *not* do
-
-- Don't run two bots from the same vault. They'll fight over the journal.
-- Don't put secrets in the journal — it's plain Markdown, often committed to git.
-- Don't run the bot on a laptop that sleeps. Soul-loop misses break the rhythm.
-- Don't skip step 4's reboot test. You'll regret it.
-
-## When you get stuck
-
-- The persistent-Claude story across reboots is in [persistence-and-hardware.md](persistence-and-hardware.md). Most "it doesn't come back up" issues are answered there.
-- Memory and note-capture questions: [memory.md](memory.md).
-- Telegram weirdness: [telegram-integration.md](telegram-integration.md) has a troubleshooting section.
-- Anything else: ask Claude. It has access to its own kit and can explain its own setup back to you.
-
-That's it. ~30 minutes if everything goes smoothly, ~2 hours if it doesn't. Either way, by the end you have a thing that runs.
+- Leave the decision menu and the gates alone until you have watched them for a few days.
+- Don't run two sessions against the same vault.
+- Don't put the bot on a machine that sleeps.
+- Tokens and passwords in the vault are plaintext files. The `.gitignore` template keeps the known ones out of git. If you ever push the repo anywhere, check what is tracked first.

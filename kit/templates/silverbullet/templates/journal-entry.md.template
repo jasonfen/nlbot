@@ -1,0 +1,9 @@
+---
+tags: meta/template/page
+command: "${BOT_NAME}: New Journal Entry"
+suggestedName: "journals/${string.sub(date.today(), 1, 4)}/${string.sub(date.today(), 6, 7)}/${string.sub(date.today(), 9, 10)}"
+confirmName: true
+---
+# ${date.today()}
+
+|^|

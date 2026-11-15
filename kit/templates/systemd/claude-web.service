@@ -1,0 +1,16 @@
+[Unit]
+Description=Claude Web Terminal
+After=network.target claude-code.service
+
+[Service]
+Type=simple
+User=${UNIX_USER}
+WorkingDirectory=${VAULT_DIR}/web-terminal
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=10
+Environment=HOME=${HOME_DIR}
+Environment=LANG=C.utf8
+
+[Install]
+WantedBy=multi-user.target

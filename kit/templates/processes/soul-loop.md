@@ -1,76 +1,60 @@
 # Soul Loop
 
-The 10–30 minute heartbeat that runs when <BOT_NAME> is idle. Prevents "default to nothing" when there's real work queued.
+The 10-minute heartbeat that runs when ${BOT_NAME} is idle. Prevents "default to nothing" when there's real work queued.
 
-## Canonical implementation
+## Canonical implementation (non-injecting wake path, 2026-08-11)
 
-- **Cron driver:** system crontab, fires `/soul-loop` slash command via `cron-prompts/inject-prompt.sh`
-- **Skill:** `.claude/commands/soul-loop.md` (shell triage) — runs Tier 1 pre-check, decides whether to spawn an agent
-- **Agent:** `.claude/agents/soul-loop-runner.md` (decision menu, picks one action, logs the loop)
-- **Log:** `soul-loop-log.md` (non-rest entries only); `job-log.md` (every fire incl. rest)
+- **Cron driver:** system crontab fires `cron-prompts/cron-wake.sh soul-loop` (no injection).
+- **Gate (Tier 1, shell):** `cron-prompts/gates/soul-loop.sh` — rest-vs-act backoff; exit 10 = rest (no wake), exit 0 = wake (drops a trigger + context).
+- **Delivery:** `bin/cron-trigger-monitor.sh` (background task) delivers `CRON soul-loop …` as a **notification** when the session is idle; the main session routes it (see `processes/cron-wake-path.md`).
+- **Agent (runner):** `.claude/agents/soul-loop-runner.md` (haiku) — decision menu, picks one action, returns; main session updates the rest-streak + logs.
+- **Log:** `cron-prompts/soul-loop-log.md` (non-rest entries only); `cron-prompts/job-log.md` (every fire incl. rest).
+- **Manual:** the `.claude/commands/soul-loop.md` slash-command still works for a hand-run in the pane; the cron path uses the gate, not the command.
 
-## Three-tier triage
+## Triage (done by the gate, in shell)
 
-The command reads two signals:
+The gate reads three signals:
 
-```bash
-# Pseudo-code; real form lives in .claude/commands/soul-loop.md
-HANDOFFS = sb-cmd.sh --lua 'index.queryLuaObjects("task", {limit=200})'
-           filtered to: itags includes "handoff", not done,
-                        itags excludes "blocked-on-human",
-                        page not under _templates/
-SECONDS_SINCE = NOW - cat <REPO_ROOT>/cron-prompts/.soul-loop-last-action
-```
+- `HANDOFFS`: open `- [ ] … #handoff` lines in `handoffs/` and `inbox.md`, minus any line tagged `#blocked-on-human`.
+- `DUE`: open tasks whose `[due: …]` has passed, in `inbox.md`, `handoffs/`, `projects/` (lines tagged `#blocked-on-human` are skipped).
+- `SECONDS_SINCE`: seconds since `cron-prompts/.soul-loop-last-action`.
 
-`HANDOFFS` queries SilverBullet's task index (`index.queryLuaObjects`), not a filesystem grep — see *Why SB index, not grep* below.
+The backoff threshold is `3600 × 2^streak` seconds, where `streak` is the count of consecutive `rest` returns in `cron-prompts/.soul-loop-rest-streak` (capped at 5 for the exponent, and the threshold at 86400). So 1 h, 2 h, 4 h, 8 h, 16 h, then 24 h.
 
-Decision tree:
+| `HANDOFFS` | `DUE` | `SECONDS_SINCE` | Action |
+|---|---|---|---|
+| `> 0` | any | any | Wake. Real work pending |
+| any | `> 0` | any | Wake. A bookmark came due; the main session does it |
+| `0` | `0` | `< threshold` | Shell-only rest, no wake. One line in `job-log.md` |
+| `0` | `0` | `>= threshold` | Wake. Time for a creative cycle |
 
-| `HANDOFFS` | `SECONDS_SINCE` | Action |
-|---|---|---|
-| `> 0` | any | Spawn agent — real work pending |
-| `== 0` | `< 3600` | Shell-only rest, no agent — keeps the creative-cycle budget |
-| `== 0` | `>= 3600` | Spawn agent — time for a creative cycle |
-
-Timestamp is updated *before* spawning so rate-limit holds regardless of what the agent chooses.
+The gate bumps the timestamp *before* the wake, so the rate limit holds whatever the agent chooses. The main session must not re-run this triage or bump the timestamp again. After the runner returns it updates the rest streak (`rest` → +1, anything else → 0) and logs the result.
 
 ## Decision menu (inside the agent)
 
 In priority order:
-1. **Pending work** — open handoffs from SB's task index anywhere in the vault, filtered for `#handoff` tag, not-done, not `#blocked-on-human`
-2. **Journal maintenance** — if `journals/journal.md` > 300 lines, compact into the daily file
-3. **Check messaging channels** — poll for unanswered threads, if any
-4. **Build something** — concrete task calls itself
-5. **Create** — creative writing, fiction, drafts
-6. **Explore** — codebase question that's been sitting in the back of my mind
-7. **Remember** — memory consolidation, pruning
-8. **Tidy** — vault hygiene, broken-link sweep
-9. **Rest** — when none of the above crystallizes in 10 seconds
+1. **Pending work** — open handoffs grep-matched under `handoffs/`, `inbox.md`; and **due bookmarks**: open tasks whose `[due: …]` has passed (the gate lists them in `/tmp/soul-loop-due.txt`; see [[collaboration]] → "Bookmarking tasks for later")
+2. **Journal maintenance** — if `journals/journal.md` still holds entries dated before today (after 01:00), the midnight synthesis missed; catch up per `journal-synthesizer.md`
+3. **Build something** — concrete task calls itself
+4. **Create** — creative writing, fiction
+5. **Explore** — codebase question that's been sitting in the back of my mind
+6. **Remember** — memorious consolidation, memory pruning
+7. **Tidy** — vault hygiene, broken-link sweep
+8. **Rest** — when none of the above crystallizes in 10 seconds
 
-## Why SB index, not grep
+## Grep patterns
 
-The earlier implementation used `grep -rhn "\- \[ \].*#handoff" <VAULT>/handoffs/ <VAULT>/inbox.md`. Two failure modes pushed it to the SB index:
+- Open handoff: `- \[ \].*#handoff`
+- Waiting-on-review: `- \[ \].*#review`
+- Action items: `- \[ \].*#action`
+- Due bookmarks: `- [ ] … [due: YYYY-MM-DD]` or `[due: YYYY-MM-DDTHH:MM]` in `inbox.md`, `handoffs/`, `projects/`. Date-only = 06:00 local. Parsed by the gate, not grep.
 
-1. **Scope blindness.** Grep only checked `<VAULT>/handoffs/` and `<VAULT>/inbox.md`. Handoff checkboxes in journals, processes docs, or random subpages were invisible. Widening the grep to the whole vault then caught example checkboxes in doc prose (a kit doc legitimately had `- [ ] do the thing #handoff` as illustrative text) and inflated the count, causing soul-loop spawns with no real work.
-2. **Parse-by-regex fragility.** `- [ ]` matches any open-checkbox-shaped string in the file, including code blocks, quoted snippets, and frontmatter.
-
-`index.queryLuaObjects("task", ...)` returns every parsed task object SilverBullet sees, with its tag set and done-state already resolved. That's the same source `inbox.md`'s render template uses, same source `Page: From Template` reads. Asking the editor what it actually indexed beats re-inferring from raw text.
-
-The filter set:
-
-| Field | Condition | Why |
-|---|---|---|
-| `itags` | includes `"handoff"` | The handoff tag is what flags the work |
-| `done` | falsy | Don't re-count completed handoffs |
-| `itags` | excludes `"blocked-on-human"` | Skip handoffs waiting on operator input — spawning an agent to re-ack pure burn |
-| `page` | not under `_templates/` | Exclude template prose (false positives from `meta/template/page` files) |
-
-The filesystem fallback (`|| echo 0`) makes SB unavailability a safe degrade: the bot logs a shell-only rest rather than crashing.
+The handoff count is scoped to `handoffs/` and `inbox.md` so example checkboxes in docs are never counted.
 
 ## Invariants
 
-- Every fire logs to `job-log.md`, even rests (with 0 tokens).
-- Only non-rest, real-action fires get a row in `soul-loop-log.md`.
+- Every fire logs to `cron-prompts/job-log.md`, even rests (with 0 tokens).
+- Only non-rest, real-action fires get a row in `cron-prompts/soul-loop-log.md`.
 - Do not fabricate work when idle. Real rest > invented busywork.
 - Ramp heartbeat / start immediately when a new `#handoff` lands; don't wait for next scheduled loop.
-- Poll messaging channels while waiting on async deliverables; don't rest through a pending review.
+- Return honestly: if you did nothing substantive, return `rest`. Never claim an action you didn't actually take — false "work" returns wrongly reset the backoff streak and cause hourly empty cycles.
