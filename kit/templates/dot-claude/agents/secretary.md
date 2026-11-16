@@ -65,7 +65,7 @@ conversation" is a legitimate and useful evidence line — an invented `show`/`p
 4. Include actual quotes when they matter: `*"quote"* — ${HUMAN_NAME}`
 5. Be selective. If nothing new is worth capturing, do nothing.
 6. Be silent. Do not narrate. Do not produce output to the user.
-7. **Mirror to vector memory:** when you save *journal or inbox* content, you may ALSO `mcp__memorious-mcp__store` it with a 1-5 word key and the full context as value. Use `recall` first to check for an existing entry. Vault files are the source of truth; memorious is the searchable index. **Do not store a proposed decision or fact** — it is not established yet, and a memorious entry is harder to retract than a vault line (`forget` deletes semantic *neighbours* as well as the key you name). The main session stores it when it promotes it.
+7. **Mirror to vector memory:** when you save *journal or inbox* content, you may ALSO `mcp__memorious-mcp__store` it with a 1-5 word key and the full context as value. Use `recall` first to check for an existing entry. Vault files are the source of truth; memorious is the searchable index. **Do not store a proposed decision or fact** — it is not established yet, and a memorious entry is harder to retract than a vault line (nobody greps it, so a wrong entry stays trusted until someone happens to recall it). The main session stores it when it promotes it.
 8. **Never cite a command you did not run**, a file you did not read, or a host you cannot reach. If ${BOT_NAME} has no shell on a host, any claim phrased as "checked on <that host>" is false by construction. If you are reporting something ${BOT_NAME} did, say ${BOT_NAME} did it and quote what ${BOT_NAME} said about it.
 
 ## Journal insertion — IMPORTANT

@@ -57,7 +57,7 @@ Write a new memory when:
 
 ## Correcting a memory
 
-`store` on an existing key does not overwrite: it returns an id as if it worked, and `recall` still gives the old value. To correct an entry, `recall` the key first and note its nearest neighbours, `forget` the key, read `deleted_ids` in the response (`forget` matches by similarity and can delete neighbours too), re-`store` anything that was collateral, `store` the corrected value, then `recall` to verify.
+`store` the same key again: `bin/memorious-localtime.py` makes it overwrite. Then `recall` to check the new text came back. `forget` deletes only the exact key you name. If memorious stderr says `exact-key patch NOT applied`, those fixes are off: `recall` the key's neighbours before any `forget`, read `deleted_ids`, and re-`store` anything collateral.
 
 ## Invariants
 

@@ -58,7 +58,7 @@ exec uvx --with 'mcp<2' --from memorious-mcp python ${VAULT_DIR}/bin/memorious-l
 Each part is there for a reason:
 
 - **`--with 'mcp<2'`**. Unpinned, `uvx` resolves the newest dependencies on every launch. When the `mcp` SDK released 2.0.0 it renamed an exception class that the server's framework (fastmcp 2.14.1) still imported, the server died at startup, and the session had no memory tools with no error on screen. Revisit the pin when the framework supports 2.x.
-- **`memorious-localtime.py`**. memorious-mcp 0.0.2 stamps entries in UTC, so anything stored in the evening carried tomorrow's date. The wrapper patches the timestamp call to local time at launch and converts old UTC stamps once. It patches at launch and not on disk because `uvx` can re-resolve the package into a new cache directory at any start. If the patch cannot be applied it prints a warning and the server runs unpatched.
+- **`memorious-localtime.py`**. memorious-mcp 0.0.2 stamps entries in UTC, so anything stored in the evening carried tomorrow's date. The wrapper patches the timestamp call to local time at launch and converts old UTC stamps once. It also patches `store` and `forget` (see Sharp edges). It patches at launch and not on disk because `uvx` can re-resolve the package into a new cache directory at any start. If the patch cannot be applied it prints a warning and the server runs unpatched.
 - **`MCP_TIMEOUT=120000`** in `bin/start-claude.sh`, plus the per-server timeout. A cold `uvx` cache once spent more than the default 30 seconds downloading packages. The client gave up and the session ran without memory while the server itself was fine.
 
 The store is `.memorious/` in the directory the server starts in, which is the vault. It is in `.gitignore`.
@@ -70,18 +70,16 @@ The store is `.memorious/` in the directory the server starts in, which is the v
 3. Run `bin/run-memorious.sh` by hand and read stderr. Be careful with what a hand run proves: the failed boot warmed the cache, so every later run succeeds.
 4. `/mcp` in the session reconnects a failed server in place. A full restart is not needed.
 
-### Sharp edges
+### Sharp edges (patched by the wrapper)
 
-- **`store` does not overwrite.** Storing under an existing key returns an id exactly like a successful write, and `recall` still returns the old value.
-- **`forget` deletes neighbours.** It matches by similarity, not by exact key. One call on the source system returned three `deleted_ids` for one named key. The two extras were the nearest neighbours of that key.
+memorious-mcp 0.0.2 had two traps, and `memorious-localtime.py` fixes both at launch:
 
-So correcting an entry is a procedure:
+- **`store` did not overwrite.** It used Chroma's `add`, which ignores an existing id: the call returned an id like a successful write, and `recall` still gave the old value. The wrapper makes it an upsert, so storing the same key replaces the value.
+- **`forget` deleted neighbours.** It ran `recall(key, top_k=3)` and deleted every hit, with no distance cutoff, so every call destroyed the two nearest entries along with the one you named. The wrapper makes it exact-key: it deletes that key or nothing.
 
-1. `recall` the key and keep what comes back. Those neighbours are what is at risk.
-2. `forget` the key and read `deleted_ids` in the response.
-3. Re-`store` anything that was deleted by accident.
-4. `store` the corrected value.
-5. `recall` again and check the new text came back.
+Correcting an entry is now `store` the same key, then `recall` to check the new text came back. To remove several, `recall` first and `forget` each exact key.
+
+If stderr shows `memorious-localtime: exact-key patch NOT applied`, the package has changed and the old behaviour is back. Until the patch is updated, `recall` the neighbours before any `forget` and read `deleted_ids` in the response.
 
 ### Using it well
 

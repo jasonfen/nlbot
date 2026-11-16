@@ -60,6 +60,7 @@ answer, it's the directions to it.
 - Facts about people, places, projects
 - Anything you'd want to find in a month
 - Use `store` with 1-5 word keys, full context as value
+- To correct a memory, `store` the same key again (it overwrites) and `recall` to check. `forget` deletes only the exact key you name (see `processes/memorious.md`).
 - Also write to `decisions.md` and journal — memorious is the searchable index, vault files are the source of truth
 - **Write it during the session, not at the end.** Anything not written down
   within the session is lost.
